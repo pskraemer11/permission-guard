@@ -1,0 +1,15 @@
+{
+  "_comment": "Vorlage fuer die Laufzeitkonfiguration des Shell-Reviewers (Ebene 1). deploy.ps1 kopiert sie nur, wenn am Ziel noch keine shell-reviewer.config.json liegt. Der Key steht nie hier, sondern in der unter apiKeyEnv genannten Umgebungsvariable.",
+  "_backends": "Beide OpenAI-kompatibel. grammar wird von beiden akzeptiert (llama.cpp braucht sie, LM Studio ignoriert sie).",
+  "_backend_llamacpp": "baseUrl http://127.0.0.1:8080/v1, model gemma-4-12b-it-qat, apiKeyEnv leer",
+  "_backend_lmstudio": "baseUrl http://127.0.0.1:1234/v1, model jev-omni, apiKeyEnv LMS_OpenAI_AUTH_TOKEN",
+  "enabled": true,
+  "baseUrl": "http://127.0.0.1:8080/v1",
+  "model": "gemma-4-12b-it-qat",
+  "apiKeyEnv": "",
+  "timeoutMs": 2500,
+  "maxTokens": 8,
+  "temperature": 0,
+  "grammar": "root ::= \"Ja\" | \"Nein\"",
+  "extraRisky": []
+}

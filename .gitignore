@@ -1,0 +1,22 @@
+# Laufzeitkonfiguration: enthaelt Backend, Modell und Port der jeweiligen
+# Maschine und gehoert nicht ins Repository. Vorlage: shell-reviewer.config.example.json
+shell-reviewer.config.json
+
+# Node
+node_modules/
+npm-debug.log*
+package-lock.json
+
+# Logs und Messartefakte
+*.log
+*.log.*
+bench-results*.json
+guard.log
+
+# Lokale Modell- und Serverpfade, falls jemand Skripte kopiert
+*.local.ps1
+
+# Betriebssystem
+.DS_Store
+Thumbs.db
+desktop.ini
