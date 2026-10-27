@@ -22,7 +22,8 @@
     Port des Reviewers (Standard 8080).
 
 .PARAMETER Quiet
-    Keine Konsolenausgabe (fuer den Task).
+    Keine Konsolenausgabe (fuer den Task). Jede Entscheidung bleibt aber als
+    Zeile in %TEMP%\permission-guard-watchdog.log.
 
 .EXAMPLE
     pwsh -File .\watchdog-reviewer.ps1
@@ -36,6 +37,11 @@ param(
 $ErrorActionPreference = "Stop"
 
 function Write-Status([string]$message) {
+    try {
+        Add-Content -Path (Join-Path $env:TEMP "permission-guard-watchdog.log") `
+            -Value "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $message" -ErrorAction Stop
+    }
+    catch { }
     if (-not $Quiet) { Write-Host $message }
 }
 
