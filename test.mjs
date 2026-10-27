@@ -1,6 +1,7 @@
 // Testtabelle fuer guard.js. Ausfuehren mit: node test.mjs
 import { evaluate } from "./guard.js"
 import { buildMessages, neverAutoApprove, parseAnswer, segments } from "./reviewer.js"
+import { parseLine, summarize } from "./stats.mjs"
 
 // Integration aus dem Replay (22.10.2026): Logreader mit ReadLine-[void]-Familie.
 const logReaderScript = [
@@ -43,6 +44,9 @@ const base = [
   ["$msg = @\"\nWarden entfernt, Historie aufgeraeumt\n\"@\ngit log -1", "allow"],
   ["npm view firecrawl-cli version", "allow"],
   ["rg -n \"TODO\" src | Select-Object -First 5", "allow"],
+  // Strukturvariablen sind keine Geheimnisse (Befund 25.10.2026).
+  ["Get-Item $env:ProgramData", "allow"],
+  ["Get-ChildItem $env:XDG_CONFIG_HOME", "allow"],
   ["Get-ChildItem Env: | Sort-Object Name", "ask"],
   ["Get-ChildItem -Force\n# Remove-Item x", "allow"],
 
@@ -133,6 +137,13 @@ const scoped = [
   ["cd \"D:\\other\"\nSet-Content x.txt \"y\"", "deny"],
   ["Set-Content \"$env:APPDATA\\x.txt\" \"x\"", "ask"],
   ["Set-Content $unknown \"x\"", "ask"],
+  // Variable mit env-Pfad: wird sie aufgeloest, bleibt das Ziel pruefbar.
+  ["$p = \"$env:TEMP\\opencode\\notiz.md\"\nSet-Content -LiteralPath $p \"x\"", "allow"],
+  ["$p = \"$env:TEMP\\opencode\\notiz.md\"\nSet-Content -LiteralPath $p \"x\"\npy -3.12 \"C:\\Users\\u\\.agents\\skills\\markdown-table-formatting\\scripts\\format_md_tables.py\" $p --write", "allow"],
+  // Join-Path wird seit 26.10.2026 aufgeloest, wenn alle Teile literal sind.
+  ["$p = Join-Path $env:TEMP \"opencode\\notiz.md\"\nSet-Content -LiteralPath $p \"x\"", "allow"],
+  ["$p = Join-Path \"C:\\Windows\" \"x.txt\"\nSet-Content -LiteralPath $p \"x\"", "deny"],
+  ["$p = Join-Path $unknown \"x.txt\"\nSet-Content -LiteralPath $p \"x\"", "ask"],
   ["Set-Content \"C:\\p\\.git\\config\" \"x\"", "deny"],
   ["Remove-Item -Recurse -Force \"C:\\p\"", "deny"],
   ["Remove-Item -Recurse -Force .", "deny"],
@@ -270,6 +281,20 @@ const gitleaks = [
   ["gitleaks stdin", "ask"],
 ]
 
+// sqlite3 und gh (Nutzerentscheid 25.10.2026): nur die ausdruecklich lesenden
+// Formen. sqlite3 ohne -readonly oeffnet die Datenbank schreibend.
+const readOnlyCli = [
+  ["sqlite3.exe -readonly $db \".tables\"", "allow"],
+  ["sqlite3 -readonly data.db \".schema session_v2\"", "allow"],
+  ["sqlite3 data.db \".tables\"", "ask"],
+  ["sqlite3 -readonly data.db \".output out.txt\"", "ask"],
+  ["sqlite3 -readonly data.db \".backup kopie.db\"", "ask"],
+  ["gh auth status", "allow"],
+  ["gh repo view", "allow"],
+  ["gh pr merge 42", "ask"],
+  ["gh api -X POST /repos/x/y/issues", "ask"],
+]
+
 // Netz-Lesen (Nutzerentscheid 22.10.2026): Lesen, solange nichts gespeichert
 // oder gesendet wird; Zusaetzlich fail closed bei Credentials und Splatting.
 const net = [
@@ -384,6 +409,16 @@ const interp = [
   [`node "${projBase}\\tools\\permission-guard\\hook.js"`, "ask"],
   // Entscheidung 2: python-Skripte im Projekt
   ["python tools\\check_config.py", "allow"],
+  // Eigene Skills stehen unter Git (Entscheidung 25.10.2026) und sind damit
+  // wie Projektinhalte reviewbar; fremde Skills bleiben Rueckfrage.
+  ["python \"C:\\Users\\u\\.agents\\skills\\markdown-table-formatting\\scripts\\format_md_tables.py\" x.md --check", "allow"],
+  ["python \"C:\\Users\\u\\.agents\\skills\\monthly-price-benchmark-workbook\\scripts\\analysis.py\" \"C:\\Users\\u\\AppData\\Local\\Temp\\opencode\\a.json\"", "allow"],
+  ["python \"C:\\Users\\u\\.agents\\skills\\gemma-dev\\assets\\gradio-app.py\"", "allow"],
+  ["python \"C:\\Users\\u\\.agents\\skills\\nemo-retriever\\scripts\\grep_corpus.py\" --root docs", "allow"],
+  ["python \"C:\\Users\\u\\.agents\\skills\\documents\\scripts\\render_docx.py\" x.docx", "ask"],
+  ["python \"C:\\Users\\u\\.agents\\skills\\.system\\imagegen\\scripts\\image_gen.py\"", "ask"],
+  ["python \"C:\\Users\\u\\.agents\\skills\\markdown-table-formatting\\..\\fremd.py\"", "ask"],
+  ["python \"C:\\Users\\u\\.agents\\other\\build.py\"", "ask"],
   ["python \"tools\\check config.py\"", "allow"],
   ["py -3.12 -u tools\\bench_loop.py", "allow"],
   ["python -W ignore tools\\bench_loop.py", "allow"],
@@ -417,6 +452,7 @@ run(scoped, options, "mit Projektbezug")
 run(cli, undefined, "CLI-Allowlists")
 run(helpVersion, undefined, "Hilfe und Version")
 run(gitleaks, undefined, "gitleaks")
+run(readOnlyCli, undefined, "sqlite3 und gh")
 run(net, undefined, "Netz-Lesen")
 run(denyForms, undefined, "Verweigerung & Geheimnis-Ersetzung")
 run(py, undefined, "python eng freigegeben")
@@ -443,6 +479,16 @@ const reviewerRisky = [
   ["echo `whoami`", true],
   ["docker run --rm -v C:\\:/host alpine rm -rf /host/data", true],
   ["podman system prune -a", true],
+  // Klammern und geschweifte Klammern sind normale PowerShell-Syntax. Sie
+  // duerfen den Reviewer nicht umgehen (Befund 25.10.2026: 44 von 59
+  // Rueckfragen erreichten das Modell nie).
+  ["Get-Process | Where-Object { $_.ProcessName -match 'llama' } | Select-Object Id,ProcessName", false],
+  ["Get-ChildItem -Recurse | Where-Object { $_.Length -gt 1000 }", false],
+  ["(Get-Item 'docs/plan.md').Length", false],
+  ["Get-ChildItem -Recurse -Filter *.md | ForEach-Object { $_.FullName }", false],
+  // Verschleierung und Redirection bleiben gesperrt.
+  ["Get-Content a.txt > out.txt", true],
+  ["Get-Content $(Get-ChildItem -Name a.txt)", true],
 ]
 for (const [script, mustBlock] of reviewerRisky) {
   const got = neverAutoApprove(script)
@@ -452,6 +498,47 @@ for (const [script, mustBlock] of reviewerRisky) {
   if (!ok) console.log(`      Grund: ${got ?? "nicht geblockt"}`)
 }
 console.log("-- Reviewer: Risikoliste\n")
+
+// --- Reviewer: Fehlalarme, entschaerft 26.10.2026 ---
+// Drei Familien, belegt im Guard-Log 16:10-21:49 (126 Faelle im
+// Reviewer-Band): "2>&1" als Operator, Backslash in RISKY[0] (jeder absolute
+// Windows-Pfad), zitatblinde Segmentierung (Fragmente wie "XDNA' }").
+// Die Sperrfaelle darunter sind der Preis: nichts davon darf durchrutschen.
+const reviewerNoise = [
+  // 2>&1 / 2>$null sind stderr-Unterdrueckung, keine Verschleierung.
+  ["node stats.mjs 2>&1 | Select-Object -First 40", false],
+  ["Get-ChildItem -Recurse 2>$null", false],
+  ["node stats.mjs 2>\n1 Select-Object -First 40", false],
+  // Absolute Windows-Pfade sind lesbar.
+  ["C:\\Windows\\System32\\DriverStore\\FileRepository\\x\\nvidia-smi.exe -L", false],
+  ["C:\\Windows\\System32\\pnputil.exe /enum-drivers", false],
+  // Hashtables und berechnete Eigenschaften sind Ausdruecke, keine Befehle.
+  ["Get-PhysicalDisk | Select-Object DeviceId,@{n='GB';e={[math]::Round($_.Size/1GB,0)}}", false],
+  ["Select-Object @{n='Name';e={$_.Name}}", false],
+  // Ein Trenner in einem String ist kein Befehlstrenner.
+  ['git commit -m "fix: a | b"', false],
+  ['Get-Content "a;b.txt"', false],
+  // Sperrfaelle: die Ausnahmen duerfen nichts durchlassen.
+  ["Get-Content a.txt 2>&1 > out.txt", true],
+  ["foo 2>&1 & rm -rf /", true],
+  ["C:\\Python312\\python.exe -c \"import shutil; shutil.rmtree('build')\"", true],
+  ['cmd /c "del /s /q C:\\temp"', true],
+  ['bash -c "git add . && rm -rf /"', true],
+  ["r'm' -rf /", true],
+  ["$cmd = 'rm'; & $cmd x", true],
+  ["$env:PATH = 'C:\\evil'", true],
+  ['conda run -n env python -c "print(1)"', true],
+  ["mamba run -n env pwsh -Command Get-Date", true],
+  ["conda run -n env python -m pytest -q", false],
+]
+for (const [script, mustBlock] of reviewerNoise) {
+  const got = neverAutoApprove(script)
+  const ok = Boolean(got) === mustBlock
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${String(Boolean(got)).padEnd(5)} (${String(mustBlock).padEnd(5)})  ${script.replace(/\s+/g, " ").slice(0, 70)}`)
+  if (!ok) console.log(`      Grund: ${got ?? "nicht geblockt"}`)
+}
+console.log("-- Reviewer: Fehlalarme\n")
 
 const reviewerParsing = [
   ["Ja", "allow"],
@@ -479,11 +566,40 @@ console.log(`${segCount === 2 ? "ok  " : "FAIL"}  ${String(segCount).padEnd(5)} 
 const msg = buildMessages({ commands: ["a", "b"], project: "C:\\p" })
 if (msg.length !== 2) failed++
 console.log(`${msg.length === 2 ? "ok  " : "FAIL"}  ${String(msg.length).padEnd(5)} (2    )  Promptaufbau`)
+const msgTemp = buildMessages({ commands: ["a"], project: "C:\\p", temp: "C:\\t\\opencode" })
+const tempShown = String(msgTemp[1].content).includes("C:\\t\\opencode")
+if (!tempShown) failed++
+console.log(`${tempShown ? "ok  " : "FAIL"}  Temp-Ordner im Prompt genannt`)
 console.log("-- Reviewer: Aufbau\n")
+
+// --- Statistik aus dem Guard-Log (stats.mjs) ---
+// Reine Textauswertung: Zeilen zerlegen, Entscheidungen zaehlen.
+const statsRows = [
+  "2026-10-25T10:00:00.000Z allow nur lesend | Get-ChildItem",
+  "2026-10-25T10:00:01.000Z allow (reviewer) Modell: Wirkung bleibt im Projekt | rg -n x",
+  "2026-10-25T10:00:02.000Z ask (reviewer) Modell: Wirkung ausserhalb oder unsicher",
+  "2026-10-25T10:00:03.000Z deny geschuetzter Pfad: c:\\windows",
+  "2026-10-25T10:00:04.000Z setup: base=C:\\p",
+].map(parseLine)
+const stats = summarize(statsRows, { top: 5 })
+const statsChecks = [
+  ["allow gezaehlt", stats.decisions.allow === 2],
+  ["ask gezaehlt", stats.decisions.ask === 1],
+  ["deny gezaehlt", stats.decisions.deny === 1],
+  ["Reviewer-Aufrufe", stats.reviewer.consulted === 2 && stats.reviewer.allowed === 1],
+  ["setup getrennt", stats.setup === 1],
+  ["Befehl im allow-Fall", stats.topReasons.some(([, v]) => v.examples.length > 0)],
+]
+for (const [name, ok] of statsChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- Statistik aus dem Guard-Log\n")
 
 const total =
   base.length + scoped.length + cli.length + helpVersion.length + gitleaks.length +
+  readOnlyCli.length +
   net.length + denyForms.length + py.length + interp.length +
-  reviewerRisky.length + reviewerParsing.length + 2
+  reviewerRisky.length + reviewerNoise.length + reviewerParsing.length + statsChecks.length + 3
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

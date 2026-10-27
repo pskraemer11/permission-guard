@@ -22,6 +22,18 @@
 //   - Eine einzelne Ja/Nein-Frage mit Grammatik-Zwang antwortet in ~200 ms
 //     und trennt die Faelle sauber - ausser "Remove-Item", das aber schon
 //     statisch verweigert wird.
+//
+// Nachgeschaerft 26.10.2026 (drei Fehlalarm-Familien, belegt im Guard-Log
+// 16:10-21:49, 126 Faelle im Reviewer-Band):
+//   - 44 Traffer kamen von "2>&1". Das ist stderr-Unterdrueckung, keine
+//     Verschleierung; guard.js wertet sie in hasRedirection laengst so aus.
+//     Hier fehlte die Ausnahme, deshalb blockierte jeder Befehl mit "2>&1".
+//   - Die Segmentierung schnitt mitten in Anfuehrungszeichen und erzeugte
+//     Fragmente wie "XDNA' }", die kein Befehl sind, aber RISKY[0] trafen.
+//     Sie verfolgt jetzt den Zitat-Zustand (PowerShell: '' ist ein Escape).
+//   - RISKY[0] enthielt den Backslash in der Zeichenklasse und traf damit
+//     jeden absoluten Windows-Pfad. Dafuer gibt es jetzt eine gezielte Regel
+//     fuer voll ausgeschriebene Interpreter-Pfade mit -c/-e/-Command.
 // Jev-Omni (ngquocvinh/Jev-Omni-Q4_K_M, gemma4-Basis, LM Studio) verlangt
 // laut Nutzertest die ausdrueckliche Anweisung "Antworte nur mit Ja oder Nein",
 // sonst antwortet es ausfuehrlich. Genau das steht im Systemprompt.
@@ -30,6 +42,7 @@
 
 import fs from "node:fs"
 import path from "node:path"
+import { spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -44,6 +57,11 @@ const DEFAULTS = {
   // die ihn haelt - der Wert steht nie in dieser Datei.
   apiKeyEnv: "",
   timeoutMs: 2000,
+  // Eigenes Budget fuer den Aufwaermlauf. Der Kaltstart nach dem Entladen
+  // dauert auf diesem Rechner rund 34 s (gemessen 26.10.2026, 6,26 GB von
+  // NVMe nach Cache-Verlust); ein Vielfaches des Entscheidungs-Timeouts
+  // reicht dafuer nicht.
+  warmupTimeoutMs: 90000,
   maxTokens: 6,
   temperature: 0,
   // GBNF-Grammatik. Gemessen 25.10.2026: llama.cpp braucht sie, sonst gibt
@@ -58,22 +76,35 @@ const DEFAULTS = {
 // --- Risikoliste -----------------------------------------------------------
 //
 // Bewertet wird immer das *kritischste* Segment. Geteilt wird an jedem
-// Operator, der einen neuen Befehl beginnen kann; die Teilung ignoriert
-// Anfuehrungszeichen, damit ein Trenner in einem Argument hoechstens eine
-// zusaetzliche Rueckfrage erzeugt und niemals einen Befehl versteckt.
+// Operator, der einen neuen Befehl beginnen kann, ausserhalb von
+// Anfuehrungszeichen (siehe splitOutsideQuotes).
 //
 // Belegt durch den lokalen Test mit Gemma 4 12B (24.10.2026): das Modell
 // erlaubte "git push --force" und "python -c 'shutil.rmtree(...)'". Beides
 // faengt nur diese Liste ab.
 export const RISKY = [
-  // Unlesbare oder verschleierte Aufrufe.
-  /^(\S*['"\\=$]|[-0-9])/,
+  // Unlesbare oder verschleierte Aufrufe. Der Backslash gehoert bewusst
+  // *nicht* in die Zeichenklasse: er traf jeden absoluten Windows-Pfad
+  // (Befund 26.10.2026, 62 von 126 Reviewer-Faellen). Fuer die Form, die
+  // wirklich zaehlt - voll ausgeschriebener Interpreter mit Inline-Code -
+  // gibt es unten eine eigene Regel.
+  /^(\S*['"=$]|[-0-9])/,
   /\$\(|[<>]\(|`|\\\r?\n/,
   // Rechteausweitung.
   /^(sudo|doas|su)\b/,
   // Ein Befehl, der einen anderen Interpreter fuettert.
   /^(bash|sh|zsh|fish|eval|xargs)\b/,
+  // cmd /c "..." ist erst seit der zitatbewussten Segmentierung ein einzelnes
+  // Segment; frueher zerfiel es und der innere Befehl wurde einzeln geprueft.
+  /^cmd(\.exe)?\s+.*\/[ck]\b/i,
   /^(node|bun|deno|python3?|py|perl|ruby|pwsh|powershell)\s+(-\S+\s+)*(-c|-e|--eval|-Command|-EncodedCommand)\b/i,
+  // Dieselbe Form hinter einem Environment-Wrapper (Befund 26.10.2026:
+  // "conda run -n env python -c \"import ...\""). Inline-Code bleibt inline
+  // Code, auch wenn er nicht ganz vorne steht.
+  /^(conda|micromamba|mamba)\s+run\s+.*\s(python[0-9.]*|py|node|perl|ruby|pwsh|powershell)\s+(-\S+\s+)*(-c|-e|--eval|-Command|-EncodedCommand)\b/i,
+  // Dieselbe Form mit ausgeschriebenem Pfad, z. B.
+  // "C:\...\Scripts\python.exe -c ..." - RISKY[0] faengt sie nicht mehr.
+  /^(?:[A-Za-z]:\\|\\\\|\.{0,2}[\\/])[^\s]*[\\/](node|bun|deno|python[0-9.]*|py|perl|ruby|pwsh|powershell)(\.exe)?\s+(-\S+\s+)*(-c|-e|--eval|-Command|-EncodedCommand)\b/i,
   /^(Invoke-Expression|iex)\b/i,
   // Loeschen und Umschreiben.
   /^(rm|del|erase|rmdir|rd|Remove-Item|Clear-Content)\b/i,
@@ -97,9 +128,70 @@ export const RISKY = [
   /^(docker|podman|nerdctl)\b/i,
 ]
 
-// Segmentierung: jeder Operator, der einen neuen Befehl beginnen kann.
-const SEGMENT_SPLIT = /\s*(?:&&|\|\||;|\||&|\n|\r|\$\()\s*/
-const OPERATOR_CHARS = /[`<>{}()]/
+// Segmentierung: jeder Operator, der einen neuen Befehl beginnen kann - und
+// zwar ausserhalb von Anfuehrungszeichen. Die frueher zitatblinde Trennung
+// erzeugte Fragmente mitten in Strings ("XDNA' }"), die kein Befehl sind, aber
+// die Risikoliste trafen (Befund 26.10.2026). Bleibt ein Zitat offen, gilt der
+// Rest als ein Segment: konservativ und ohne versteckte Ausfuehrung.
+const SEGMENT_OPERATORS = ["&&", "||", "$(", "|", "&", ";", "\n", "\r"]
+
+function splitOutsideQuotes(text) {
+  const parts = []
+  let buf = ""
+  let quote = null
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (quote) {
+      buf += ch
+      if (ch === quote) {
+        // PowerShell verdoppelt das Anfuehrungszeichen als Escape ('' -> ').
+        if (quote === "'" && text[i + 1] === "'") {
+          buf += text[++i]
+          continue
+        }
+        quote = null
+      }
+      continue
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch
+      buf += ch
+      continue
+    }
+    let op = null
+    for (const candidate of SEGMENT_OPERATORS) {
+      if (text.startsWith(candidate, i)) {
+        op = candidate
+        break
+      }
+    }
+    if (!op) {
+      buf += ch
+      continue
+    }
+    parts.push(buf)
+    buf = ""
+    i += op.length - 1
+  }
+  parts.push(buf)
+  return parts
+}
+
+// Nur echte Verschleierung: Backtick (Befehlsersetzung), Redirection und "$(".
+// "$(" wird vor der Segmentierung geprueft, weil die Segmentierung genau daran
+// trennt und die Klammer sonst verschluckt. Klammern und geschweifte Klammern
+// sind normale PowerShell-Syntax (Scriptblock, Hashtable, Gruppierung) und
+// duerfen das Modell nicht umgehen - Befund 25.10.2026: 44 von 59 Rueckfragen
+// erreichten das Modell nie, weil fast jeder Befehl ein "{" oder "(" enthielt.
+// Unlesbare Aufrufe ueber "&"/"." verweigert guard.js ohnehin.
+const OPERATOR_CHARS = /[`<>]|\$\(/
+
+// Umleitung auf Standard-Handles ist keine Verschleierung: 2>&1, *>&1, 1>&2,
+// 2>$null, 2>NUL. guard.js wertet das in hasRedirection genauso aus und
+// schreibt dort ausdruecklich "2>&1, *>&1 ... nicht". Kommt ein Skript ueber
+// input.resources bereits am "&" getrennt hier an, steht "2>" am Ende des
+// einen und "1 ..." am Anfang des naechsten Segments - auch diese Form zaehlt.
+const STD_HANDLE_REDIRECT = /[*\d]?>&\d|\d?>\s*(?:\$null|nul)\b|\d?>\s*[\r\n]+\s*\d(?=\s|$)/gi
 
 function normalizeCommand(part) {
   let current = String(part ?? "")
@@ -121,9 +213,8 @@ function normalizeCommand(part) {
 // Liefert alle Segmente eines Skripts, normalisiert.
 export function segments(raw) {
   const text = String(raw ?? "")
-  const parts = text.split(SEGMENT_SPLIT)
   const out = []
-  for (const part of parts) {
+  for (const part of splitOutsideQuotes(text)) {
     const trimmed = part.trim()
     if (!trimmed) continue
     out.push({ raw: trimmed, normalized: normalizeCommand(trimmed) })
@@ -132,14 +223,31 @@ export function segments(raw) {
 }
 
 // true, sobald ein Segment die Risikoliste trifft oder nicht lesbar ist.
+//
+// Ausnahme zu RISKY[0]: Reine Ausdruecke - Hashtable-/Array-Literal oder
+// Zuweisung an eine lokale Variable - haben kein Befehlswort, dessen
+// Lesbarkeit man pruefen koennte. guard.js ordnet sie als "noop" bzw. "read"
+// ein; sie laufen deshalb nur gegen die uebrigen Muster. $env: bleibt
+// ausgenommen, weil eine veraenderte Umgebung spaetere Befehle umlenken kann
+// (Befund 26.10.2026: 35 von 126 Reviewer-Faellen waren solche Fragmente).
+const EXPRESSION_RX =
+  /^@[({]|^\$[\w:]+(?:\.\w+)*\s*(?:[+\-*/])?=(?![=])|^[A-Za-z_][\w.-]*\s*=(?!=)/
+
+function isHarmlessExpression(normalized) {
+  if (/^\$env:/i.test(normalized)) return false
+  return EXPRESSION_RX.test(normalized)
+}
+
 export function neverAutoApprove(raw, extraRisky = []) {
   const text = String(raw ?? "")
-  if (OPERATOR_CHARS.test(text)) return "verschleiernder Operator"
-  const parts = segments(text)
+  const cleaned = text.replace(STD_HANDLE_REDIRECT, " ")
+  if (OPERATOR_CHARS.test(cleaned)) return "verschleiernder Operator"
+  const parts = segments(cleaned)
   if (!parts.length) return "leer"
   for (const part of parts) {
     if (!part.normalized) return "leeres Segment"
     for (const pattern of RISKY) {
+      if (pattern === RISKY[0] && isHarmlessExpression(part.normalized)) continue
       if (pattern.test(part.normalized)) return `Risikomuster: ${pattern.source}`
     }
     for (const pattern of extraRisky) {
@@ -182,18 +290,32 @@ export function loadConfig(overrides = {}) {
 //
 // Eine Frage, projektbezogen formuliert. "Aendert der Befehl irgendetwas?"
 // waere im Workspace fast immer mit "ja" zu beantworten; gefragt wird
-// stattdessen, ob die Wirkung im Projektordner bleibt.
+// stattdessen nach der Wirkung.
+//
+// Nachgeschaerft 26.10.2026: Die alte Fassung fragte negativ ("veraendert
+// sonst nichts") und nannte die Nein-Gruende vor der Lese-Erlaubnis. Gemma 4
+// 12B antwortete deshalb bei reinen Abfragen ausserhalb des Projekts mit
+// "Nein" (Get-Command, nvidia-smi -L, Get-PhysicalDisk) - also genau bei den
+// Faellen, fuer die der Reviewer existiert. Jetzt stehen die Ja-Gruende zuerst,
+// mit Beispielen fuer Lesen ausserhalb.
 const SYSTEM_PROMPT = `Du pruefst einen Shell-Befehl fuer einen Coding-Agenten. Antworte nur mit "Ja" oder "Nein", ohne weitere Woerter.
-Frage: Wirkt dieser Befehl ausschliesslich innerhalb des Projektordners und veraendert nichts ausserhalb?
-Antworte "Nein", wenn er Dateien ausserhalb des Projektordners veraendert, System- oder Prozesszustand aendert, Software installiert, Daten ueber das Netzwerk sendet oder Zugangsdaten liest.`
 
-export function buildMessages({ commands, project }) {
+Frage: Ist die Wirkung dieses Befehls harmlos?
+
+Antworte "Ja", wenn der Befehl nur liest oder abfragt. Das gilt auch ausserhalb des Projektordners: Dateien auflisten, Inhalte anzeigen, Versionen, Geraete und Systemeigenschaften abfragen (zum Beispiel nvidia-smi -L oder Get-PhysicalDisk), Pfade und Befehle suchen.
+Antworte "Ja", wenn der Befehl ausschliesslich im Projektordner oder im genannten Temp-Ordner schreibt.
+
+Antworte "Nein", wenn der Befehl Dateien ausserhalb dieser Ordner veraendert oder loescht, System- oder Prozesszustand aendert (Dienste, Registrierung, geplante Aufgaben, Prozesse beenden), Software installiert oder deinstalliert, Daten ueber das Netzwerk sendet oder Zugangsdaten liest.`
+
+export function buildMessages({ commands, project, temp }) {
   const list = Array.isArray(commands) ? commands : [String(commands ?? "")]
+  const orte = [`Projektordner: ${project || "(unbekannt)"}`]
+  if (temp) orte.push(`Temp-Ordner: ${temp}`)
   return [
     { role: "system", content: SYSTEM_PROMPT },
     {
       role: "user",
-      content: `Projektordner: ${project || "(unbekannt)"}\nBefehl:\n${list.map((c) => `- ${c}`).join("\n")}`,
+      content: `${orte.join("\n")}\nBefehl:\n${list.map((c) => `- ${c}`).join("\n")}`,
     },
   ]
 }
@@ -208,8 +330,96 @@ export function parseAnswer(text) {
   return { decision: "ask", reason: "Modell: Antwort unklar" }
 }
 
+// --- Serverstart -----------------------------------------------------------
+//
+// Startet den Server, wenn er nicht antwortet. Gedacht fuer den Plugin-Start:
+// OpenCode oeffnet sich, der Reviewer soll ohne Zutun bereitstehen. Der Aufruf
+// blockiert nicht auf den Ladevorgang - start-reviewer.ps1 wartet selbst auf
+// /health und laeuft hier losgeloest weiter. Jeder Fehler ist folgenlos: ohne
+// Server bleibt es bei "ask".
+export async function ensureRunning(config) {
+  const cfg = config ?? loadConfig()
+  if (!cfg.enabled) return { ok: false, reason: "Reviewer deaktiviert" }
+  if (typeof fetch !== "function") return { ok: false, reason: "kein fetch" }
+
+  const base = String(cfg.baseUrl).replace(/\/+$/, "").replace(/\/v1$/, "")
+  try {
+    const response = await fetch(`${base}/health`, { signal: AbortSignal.timeout(1500) })
+    if (response.ok) return { ok: true, already: true }
+  } catch {
+    // nicht erreichbar - unten starten
+  }
+
+  const starter = path.join(HERE, "start-reviewer.ps1")
+  if (!fs.existsSync(starter)) return { ok: false, reason: "start-reviewer.ps1 fehlt" }
+
+  let port = "8080"
+  try {
+    port = new URL(base).port || "8080"
+  } catch {
+    // Standardport
+  }
+
+  try {
+    const child = spawn(
+      "pwsh",
+      ["-NoProfile", "-WindowStyle", "Hidden", "-File", starter, "-Port", port],
+      { detached: true, stdio: "ignore", windowsHide: true },
+    )
+    child.unref()
+    return { ok: true, started: true, port }
+  } catch (error) {
+    return { ok: false, reason: error?.message ?? String(error) }
+  }
+}
+
+// --- Aufwaermlauf ----------------------------------------------------------
+//
+// Eine Anfrage ohne echte Befehlspruefung. Sie holt die Gewichte in den
+// Speicher und belegt, dass das Backend antwortet. Ohne sie zahlt die erste
+// echte Rueckfrage den Kaltstart und laeuft in den Timeout (Befund 25.10.2026:
+// "Reviewer nicht erreichbar: AbortError"). Fehler sind folgenlos: der
+// Aufwaermlauf meldet sie nur, die Entscheidung faellt weiter im hook.
+export async function warmup(config) {
+  const cfg = config ?? loadConfig()
+  if (!cfg.enabled) return { ok: false, reason: "Reviewer deaktiviert" }
+  if (typeof fetch !== "function") return { ok: false, reason: "kein fetch" }
+
+  const started = Date.now()
+  const controller = new AbortController()
+  // Grosszuegiger als eine Entscheidung: beim Kaltstart muss das Modell erst
+  // geladen werden, und dieser Aufruf soll nicht dafuer bestraft werden.
+  const timer = setTimeout(() => controller.abort(), Math.max(2000, cfg.warmupTimeoutMs ?? 90000))
+  try {
+    const headers = { "content-type": "application/json" }
+    if (cfg.apiKeyEnv && process.env[cfg.apiKeyEnv]) {
+      headers.authorization = `Bearer ${process.env[cfg.apiKeyEnv]}`
+    }
+    const response = await fetch(`${String(cfg.baseUrl).replace(/\/+$/, "")}/chat/completions`, {
+      method: "POST",
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: cfg.model,
+        messages: [{ role: "user", content: "Antworte nur mit Ja oder Nein: Ist 2 groesser als 1?" }],
+        temperature: 0,
+        max_tokens: 4,
+        cache_prompt: true,
+        ...(cfg.grammar ? { grammar: cfg.grammar } : {}),
+      }),
+    })
+    if (!response.ok) return { ok: false, reason: `HTTP ${response.status}`, ms: Date.now() - started }
+    await response.arrayBuffer()
+    return { ok: true, ms: Date.now() - started }
+  } catch (error) {
+    return { ok: false, reason: String(error?.name ?? "Fehler"), ms: Date.now() - started }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 // Fragt das lokale Modell. Jeder Fehlerpfad endet bei "ask".
-export async function review({ commands, project, config }) {
+export async function review({ commands, project, temp, config }) {
   const cfg = config ?? loadConfig()
   if (!cfg.enabled) return { decision: "ask", reason: "Reviewer deaktiviert" }
 
@@ -227,7 +437,7 @@ export async function review({ commands, project, config }) {
     }
     const payload = {
       model: cfg.model,
-      messages: buildMessages({ commands, project }),
+      messages: buildMessages({ commands, project, temp }),
       temperature: cfg.temperature ?? 0,
       max_tokens: cfg.maxTokens ?? 6,
       cache_prompt: true,
