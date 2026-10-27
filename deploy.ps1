@@ -46,7 +46,8 @@ $files = @(
     "start-reviewer.ps1",
     "smoke-reviewer.mjs",
     "bench-reviewer.ps1",
-    "bench-quality.ps1"
+    "bench-quality.ps1",
+    "stats.mjs"
 )
 
 # Die Laufzeitkonfiguration ist ortsabhaengig (Backend, Modell, Port). Sie wird

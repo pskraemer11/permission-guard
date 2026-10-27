@@ -8,6 +8,7 @@
   "model": "gemma-4-12b-it-qat",
   "apiKeyEnv": "",
   "timeoutMs": 2500,
+  "warmupTimeoutMs": 90000,
   "maxTokens": 8,
   "temperature": 0,
   "grammar": "root ::= \"Ja\" | \"Nein\"",

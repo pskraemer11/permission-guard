@@ -265,7 +265,7 @@ Warum die Enge: Der Aufruf führt das Programm aus; die Freigabe gilt nur, weil
 ein Hilfewort nichts schreibt, sendet oder startet. Bei weiteren Argumenten ist
 diese Annahme nicht mehr belegbar.
 
-### Fremde CLIs: `opencode`, `firecrawl`, `gitleaks`
+### Fremde CLIs: `opencode`, `firecrawl`, `gitleaks`, `sqlite3`, `gh`
 
 Grundlage sind die Hilfe-Bäume der installierten Fassungen, nicht Annahmen.
 Erlaubt wird nur, was nachweislich liest und nichts speichert, sendet oder
@@ -276,10 +276,18 @@ startet. Unbekannte Unterbefehle bleiben `ask`.
 | `opencode` | `--help`, `--version`, `models`, `stats` (ohne `--standalone`/`--server`), `debug` | `run`, `serve`, `api`, `acp`, `auth`, `mcp`, `plugin`, `session`, `service`, `reload`, `pair`, `mini`, `upgrade`, `uninstall`, TUI ohne Argument |
 | `firecrawl` | `list`, `list-tools`, `find-tools`, `search`, `map`, `alexandria`, `developer`, `gov`, `research`, `status`, `version`, `doctor`, sowie `scrape` und `crawl` ohne Schreib-Flags | `agent`, `interact`, `monitor`, `batch-scrape`, `parse`, `feedback`, `search-feedback`, `env`, `config`, `login`, `logout`, `init`, `setup`, `make`, `launch`, `experimental`, `credits` |
 | `gitleaks` | `version`, `help`, `git`, `dir` (auch `file`/`directory`) — Scans nur mit voller Redaktion (`--redact` oder `--redact=100`) | `stdin`, `completion`, Scans ohne oder mit Teilredaktion (`--redact=20`), `-r`/`--report-path`, `--report-template`, `--log-opts`, `--diagnostics`, `--diagnostics-dir` |
+| `sqlite3` | nur mit `-readonly` | ohne das Flag (öffnet schreibend), `-cmd`, `-init`, `.output`, `.once`, `.save`, `.backup`, `.restore`, `.clone`, `.archive` |
+| `gh` | `auth status`, `repo view` | alles andere, insbesondere `gh api` (kann POSTen), `pr merge`, `release create` |
 
 Zusätzlich gesperrt, auch bei erlaubtem Unterbefehl: `-o`/`--output`,
 `-k`/`--api-key`, `--api-url`, `--screenshot`, `--full-page-screenshot`,
 `--profile`, `--cancel`, `--webhook`.
+
+Die sqlite3- und gh-Regeln (Entscheidung 25.10.2026) schließen die zwei
+häufigsten Leseaufrufe im Log: `sqlite3.exe -readonly <db> ".tables"` (zehnmal
+in sieben Tagen) und `gh auth status`. Beides ist ohne die Flag-Prüfung nicht
+tragfähig: `sqlite3` ohne `-readonly` schreibt in die Datenbank, und `gh api`
+kann jeden beliebigen Verb senden.
 
 Die gitleaks-Regel (Entscheidung 23.10.2026) hat zwei Gründe: Ein Scan ohne
 `--redact` druckt gefundene Geheimnisse — damit in den Verlauf und ins
@@ -347,14 +355,43 @@ Segmente aus dem Scanner (event.resources)
    vollständig. Gemessen: ohne diese Liste erlaubte ein 12B-Modell
    `git push --force` und `shutil.rmtree`.
 2. **Eine projektbezogene Ja/Nein-Frage.** Nicht „ändert der Befehl etwas?"
-   (im Workspace fast immer ja), sondern „wirkt er ausschließlich innerhalb des
-   Projektordners?". Nur ein klares `Ja` hebt `ask` auf `allow`; `Nein`,
-   Freitext, Timeout und Verbindungsfehler bleiben `ask`. Ein `deny` ist für
-   den Reviewer unerreichbar.
+   (im Workspace fast immer ja), sondern „wirkt er ausschließlich im
+   Projektordner oder in den genannten temporären Ordnern?". Der Prompt nennt
+   beide Pfade, damit das Modell nicht jede Ausgabe nach `%TEMP%` als
+   Grenzverletzung wertet (Befund 25.10.2026). Nur ein klares `Ja` hebt `ask`
+   auf `allow`; `Nein`, Freitext, Timeout und Verbindungsfehler bleiben `ask`.
+   Ein `deny` ist für den Reviewer unerreichbar.
 
 Segmentgrundlage sind die vom Scanner getrennten `resources`. Die Teilung
 ignoriert Anführungszeichen — ein Trenner in einem Argument erzeugt höchstens
 eine zusätzliche Rückfrage, nie eine versteckte Ausführung.
+
+**„Verschleiernd" ist eng gefasst.** Gesperrt sind Backtick, Redirection (`>`,
+`<`) und `$(`. Klammern und geschweifte Klammern sind dagegen normale
+PowerShell-Syntax (Scriptblock, Hashtable, Gruppierung) und dürfen das Modell
+nicht umgehen. Befund 25.10.2026: mit der weiteren Fassung
+`/[`<>{}()]/` erreichten 44 von 59 Rückfragen das Modell nie. Unlesbare
+`&`-/`.`-Aufrufe verweigert bereits der Guard.
+
+**Lebenszyklus und Aufwärmlauf.** Das Plugin hält den Server nicht dauerhaft am
+Leben, sondern bindet ihn an OpenCode:
+
+- **Start:** `reviewer.js → ensureRunning()` prüft beim Plugin-Setup `/health`
+  und startet andernfalls `start-reviewer.ps1` losgelöst. Der Aufruf wartet
+  nicht auf den Ladevorgang.
+- **Aufwärmlauf:** `warmup()` schickt danach einmal eine Anfrage ohne
+  Befehlsprüfung, damit die Gewichte wirklich im Speicher liegen. Ohne ihn zahlt
+  die erste echte Entscheidung den Kaltstart und lief am 25.10.2026 in den
+  Timeout (`AbortError`). Budget: `warmupTimeoutMs`, Standard 90 000 ms —
+  gemessen wurden 34 028 ms Kaltstart gegen 199–256 ms warm (26.10.2026).
+  Der Entscheidungs-Timeout bleibt davon unberührt.
+- **Ruhepause:** `sleep-idle-seconds` in `%APPDATA%\llama.cpp\config.ini` gibt
+  die Gewichte nach Untätigkeit frei (hier 900 s). Der Standardwert `-1`
+  deaktiviert das; `load-mode = auto` bedeutet mmap, `--no-mmap` macht den Start
+  laut Hilfe der Binärdatei **langsamer**.
+- **Ende:** `watchdog-reviewer.ps1` beendet den Server, sobald kein
+  `OpenCode`/`opencode-cli` mehr läuft. Fehler sind überall folgenlos — der
+  Reviewer bleibt zuständig, notfalls mit `ask`.
 
 ### Modellauswahl
 

@@ -20,11 +20,14 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { evaluate } from "./guard.js"
-import { loadConfig, review } from "./reviewer.js"
+import { ensureRunning, loadConfig, review, warmup } from "./reviewer.js"
 
 const BASE_DIR = path.join(os.tmpdir(), "opencode-permission-guard")
 const LOG_FILE = path.join(BASE_DIR, "guard.log")
-const LOG_MAX_BYTES = 256 * 1024
+// Eine Generation Historie: bei 1 MB wird guard.log zu guard.log.1 und neu
+// begonnen. Frueher wurde die Datei geloescht, damit war die Statistik nach
+// wenigen Tagen weg (stats.mjs liest beide Generationen).
+const LOG_MAX_BYTES = 1024 * 1024
 
 // Diagnose: Entscheidung und Grund. Bei "allow" zusaetzlich die ersten Zeichen
 // des Befehls (er hat den Geheimnis-Filter bereits passiert). Bei "ask"/"deny"
@@ -33,7 +36,9 @@ function debug(message) {
   try {
     fs.mkdirSync(BASE_DIR, { recursive: true })
     try {
-      if (fs.statSync(LOG_FILE).size > LOG_MAX_BYTES) fs.rmSync(LOG_FILE, { force: true })
+      if (fs.statSync(LOG_FILE).size > LOG_MAX_BYTES) {
+        fs.renameSync(LOG_FILE, `${LOG_FILE}.1`)
+      }
     } catch {
       // Logdatei existiert noch nicht
     }
@@ -121,7 +126,7 @@ export default Plugin.define({
             const commands = Array.isArray(input.resources) && input.resources.length
               ? input.resources
               : [script]
-            const reviewed = await review({ commands, project: options.base, config: reviewerConfig })
+            const reviewed = await review({ commands, project: options.base, temp: options.temp, config: reviewerConfig })
             if (reviewed.decision === "allow") {
               input.effect = "allow"
               input.message = `permission-guard: reviewer ${reviewed.reason}`
@@ -142,6 +147,18 @@ export default Plugin.define({
       console.log(
         `[permission-guard] aktiv - Lesen und Schreiben im Projekt laufen ohne Rueckfrage; Ebene 1 Reviewer ${reviewerConfig.enabled ? `an (${reviewerConfig.model} @ ${reviewerConfig.baseUrl})` : "aus"}`,
       )
+      // Serverstart und Aufwaermlauf im Hintergrund: OpenCode oeffnet sich, der
+      // Reviewer soll ohne Zutun bereitstehen, und die erste echte Entscheidung
+      // soll den Kaltstart nicht bezahlen. Bewusst nicht awaited, damit die
+      // Registrierung oben nicht auf ein langsames Backend wartet.
+      void ensureRunning(reviewerConfig)
+        .then((s) => {
+          const state = s.already ? "lief bereits" : s.started ? `gestartet (Port ${s.port})` : "nicht gestartet"
+          debug(`setup: Server ${state}${s.reason ? ` (${s.reason})` : ""}`)
+          return warmup(reviewerConfig)
+        })
+        .then((w) => debug(`setup: Aufwaermlauf ${w.ok ? "ok" : "fehlgeschlagen"} ${w.ms ?? 0} ms${w.reason ? ` (${w.reason})` : ""}`))
+        .catch(() => {})
     } catch (error) {
       debug(`setup: Registrierung fehlgeschlagen ${error?.message ?? error}`)
       console.error("[permission-guard] Registrierung fehlgeschlagen", error)

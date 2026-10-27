@@ -6,8 +6,10 @@
 #   .\start-reviewer.ps1 -Stop              # beendet den Prozess auf diesem Port
 #
 # Der Reviewer ist optional: laeuft er nicht, bleibt jede nicht einordenbare
-# Anfrage bei "ask" (fail closed). Der Start ist bewusst manuell - ein dauerhaft
-# laufender Server belegt VRAM.
+# Anfrage bei "ask" (fail closed). Gestartet wird er vom Plugin (ensureRunning
+# in reviewer.js) beim Oeffnen von OpenCode und vom Watchdog, wenn er fehlt;
+# beendet wird er vom Watchdog, sobald kein OpenCode mehr laeuft. Dieser Aufruf
+# bleibt der Weg von Hand.
 
 param(
   [int]$Port = 8080,

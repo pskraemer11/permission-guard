@@ -19,6 +19,10 @@ export const SAFE_ENV = new Set([
   "COMMONPROGRAMFILES", "COMSPEC", "PATHEXT", "PSMODULEPATH", "HOMEDRIVE",
   "HOMEPATH", "PWD", "SHELL", "LANG", "LC_ALL", "TERM", "TZ", "EDITOR",
   "DOTNET_ROOT", "PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV", "CONDA_PREFIX",
+  // Struktur- und Verzeichnisvariablen, keine Geheimnisse (Befund 25.10.2026:
+  // $env:ProgramData und $env:XDG_CONFIG_HOME loesten Rueckfragen aus).
+  "PROGRAMDATA", "ALLUSERSPROFILE", "PUBLIC", "SYSTEMDRIVE", "USERPROFILE",
+  "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME",
 ])
 
 // Pfade mit Geheimnissen. Lesen ist erlaubt, aber nur nach Rueckfrage.
@@ -479,6 +483,8 @@ function classifyCommand(s, lower, ctx) {
     return classifyFirecrawl(s)
   }
   if (base === "gitleaks" || base === "gitleaks.exe") return classifyGitleaks(s)
+  if (base === "sqlite3" || base === "sqlite3.exe") return classifySqlite(s)
+  if (base === "gh" || base === "gh.exe") return classifyGh(s)
 
   if (NET_CMD_NAMES.has(base)) return classifyNetwork(s)
   if (base === "python" || base === "python.exe" || base === "py" || base === "py.exe") return classifyPython(s, ctx)
@@ -650,11 +656,33 @@ function buildVarMap(statements) {
   const counts = new Map()
   const values = new Map()
   for (const statement of statements) {
-    const m = /^\$(\w+)\s*=\s*(?:"([^"]*)"|'([^']*)')\s*$/.exec(statement.trim())
-    if (!m) continue
-    const key = m[1].toLowerCase()
+    const text = statement.trim()
+    let name
+    let value
+    const literal = /^\$(\w+)\s*=\s*(?:"([^"]*)"|'([^']*)')\s*$/.exec(text)
+    if (literal) {
+      name = literal[1]
+      value = literal[2] ?? literal[3] ?? ""
+    } else {
+      // Nutzerentscheid 26.10.2026: Join-Path mit literalen Argumenten aufloesen.
+      // Ohne das bleibt "$p = Join-Path $env:TEMP \"x\"" unaufloesbar und jede
+      // Schreibpruefung endet in einer Rueckfrage, deren Inhalt niemand sieht.
+      const join = /^\$(\w+)\s*=\s*Join-Path\s+(.+)$/i.exec(text)
+      if (!join) continue
+      const parts = []
+      let ok = true
+      for (const raw of tokenizeCli(join[2])) {
+        const token = raw.replace(/^["']|["']$/g, "")
+        if (!token || token.startsWith("-")) { ok = false; break }
+        parts.push(token)
+      }
+      if (!ok || !parts.length) continue
+      name = join[1]
+      value = parts.join("\\").replace(/\\{2,}/g, "\\")
+    }
+    const key = name.toLowerCase()
     counts.set(key, (counts.get(key) ?? 0) + 1)
-    values.set(key, m[2] ?? m[3] ?? "")
+    values.set(key, value)
   }
   const out = new Map()
   for (const [key, count] of counts) {
@@ -917,14 +945,36 @@ function classifyPython(s, ctx) {
   }
   if (head.startsWith("-")) return "unknown" // -c, --version, unbekannte Flags
   // Entscheidung 2: Skript, das innerhalb des Projekts aufloesbar ist.
+  // Entscheidung 25.10.2026 (verengt): von den Skills sind nur die eigenen
+  // vertraut. `~/.agents/skills` enthaelt 82 Python-Dateien, davon 74 aus
+  // Fremdquellen (OpenAI `documents`, NVIDIA `accelerated-computing-cudf`,
+  // HuggingFace `huggingface-llm-trainer`, `.system`). Ein Git-Repo macht sie
+  // reviewbar, nicht geprueft - fremde Skripte bleiben deshalb Rueckfrage.
   if (!opts.base) return "unknown"
   const abs = resolveTarget(expandLeadVar(tokens[i], ctx?.vars), opts, ctx?.cwd ?? null, ctx?.vars)
   if (!abs) return "unknown"
-  if (!isUnder(abs, normPath(opts.base))) return "unknown"
-  if (isUnder(abs, normPath(`${opts.base}\\.git`))) return "unknown"
+  const roots = [normPath(opts.base)]
+  const gitDirs = [normPath(`${opts.base}\\.git`)]
+  if (opts.home) {
+    const skills = normPath(`${opts.home}\\.agents\\skills`)
+    for (const name of TRUSTED_SKILL_DIRS) roots.push(normPath(`${skills}\\${name}`))
+    gitDirs.push(normPath(`${opts.home}\\.agents\\.git`))
+  }
+  if (!roots.some((root) => isUnder(abs, root))) return "unknown"
+  if (gitDirs.some((dir) => isUnder(abs, dir))) return "unknown"
   if (!/\.py$/.test(abs)) return "unknown"
   return "read"
 }
+
+// Eigene Skills, deren Skripte als reviewbarer Inhalt gelten. Bewusst eine
+// Liste und keine Regel: neue Namen kosten eine Zeile, ein fremder Skill
+// kommt nicht versehentlich mit.
+const TRUSTED_SKILL_DIRS = new Set([
+  "markdown-table-formatting",
+  "monthly-price-benchmark-workbook",
+  "gemma-dev",
+  "nemo-retriever",
+])
 
 // Entscheidung 1 (22.10.2026): node nur fuer die drei Selbst-Skripte dieses
 // Guards (test.mjs, replay.mjs, analyze.mjs), pfadverankert unter
@@ -932,7 +982,7 @@ function classifyPython(s, ctx) {
 // verfolgten) Arbeitsordner. Alles andere - fremde Skripte, --eval,
 // --version, der nackte node-Aufruf - bleibt Rueckfrage. deno, ruby und
 // perl sind nicht bereitgestellt und bleiben Rueckfrage.
-const NODE_SELF_SCRIPTS = new Set(["test.mjs", "replay.mjs", "analyze.mjs"])
+const NODE_SELF_SCRIPTS = new Set(["test.mjs", "replay.mjs", "analyze.mjs", "stats.mjs"])
 
 // Ersetzt einen fuehrenden Variablenbezug ($dir bzw. ${dir}) durch den
 // eindeutig zugewiesenen Literalwert, falls vorhanden. Ohne Zuweisung
@@ -1014,6 +1064,38 @@ function classifyGitleaks(statement) {
     if (lowerArg === "--redact" || lowerArg === "--redact=100") redact = true
   }
   return redact ? "read" : "unknown"
+}
+
+// sqlite3 (Nutzerentscheid 25.10.2026): Nur mit -readonly gilt die Abfrage als
+// Lesen. Alles, was eine Ausgabe- oder Sicherungsdatei anlegen koennte, bleibt
+// Rueckfrage; ohne das Flag ist der Aufruf unbekannt (sqlite3 oeffnet sonst
+// schreibend).
+const SQLITE_WRITE_FLAGS = new Set([
+  "-cmd", "-init", ".output", ".once", ".save", ".backup", ".restore", ".clone", ".archive",
+])
+
+function classifySqlite(statement) {
+  const args = tokenizeCli(statement).slice(1)
+  if (!args.length) return "unknown"
+  const readonly = args.some((a) => /^-(?:readonly|read-only)$/i.test(a))
+  if (!readonly) return "unknown"
+  for (const arg of args) {
+    const lowerArg = arg.toLowerCase()
+    // Ein Punktbefehl steht oft in Anfuehrungszeichen und damit als ein Token
+    // mit Leerzeichen ("\".output out.txt\""). Deshalb das erste Wort pruefen.
+    const head = lowerArg.split(/\s+/)[0]
+    if (SQLITE_WRITE_FLAGS.has(head) || lowerArg.startsWith("--output")) return "unknown"
+  }
+  return "read"
+}
+
+// gh (Nutzerentscheid 25.10.2026): ausschliesslich die beiden lesenden
+// Aufrufe, die im Alltag vorkommen. `gh api` fehlt bewusst - es kann POSTen.
+function classifyGh(statement) {
+  const args = tokenizeCli(statement).slice(1).filter((a) => !a.startsWith("-"))
+  if (args.length < 2) return "unknown"
+  const sub = `${args[0].toLowerCase()} ${args[1].toLowerCase()}`
+  return sub === "auth status" || sub === "repo view" ? "read" : "unknown"
 }
 
 /**
