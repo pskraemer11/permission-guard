@@ -434,6 +434,29 @@ const interp = [
   ["python tools\\notes.txt", "ask"],
 ]
 
+// Exakte Ausnahme fuer Installation/Update dieses geprueften Ruff-Defaults.
+const ruffConfigOptions = {
+  ...interpOptions,
+  appData: "C:\\Users\\u\\AppData\\Roaming",
+}
+const ruffConfigBootstrap = [
+  ['New-Item -ItemType Directory -Path "$env:APPDATA\\ruff"', "allow"],
+  [
+    'Copy-Item -LiteralPath "staging\\ruff-global-baseline.toml" -Destination "$env:APPDATA\\ruff\\ruff.toml"',
+    "allow",
+  ],
+  ['New-Item -ItemType Directory -Path "$env:APPDATA\\ruff\\other"', "deny"],
+  [
+    'Copy-Item -LiteralPath "staging\\other.toml" -Destination "$env:APPDATA\\ruff\\ruff.toml"',
+    "deny",
+  ],
+  [
+    'Copy-Item -LiteralPath "staging\\ruff-global-baseline.toml" -Destination "$env:APPDATA\\ruff\\other.toml"',
+    "deny",
+  ],
+  ['Set-Content -LiteralPath "$env:APPDATA\\ruff\\ruff.toml" -Value "unreviewed"', "deny"],
+]
+
 let failed = 0
 function run(cases, opts, title) {
   for (const [script, expected] of cases) {
@@ -457,6 +480,7 @@ run(net, undefined, "Netz-Lesen")
 run(denyForms, undefined, "Verweigerung & Geheimnis-Ersetzung")
 run(py, undefined, "python eng freigegeben")
 run(interp, interpOptions, "Interpreters: node-Selbstskripte, python im Projekt")
+run(ruffConfigBootstrap, ruffConfigOptions, "Ruff-Konfigurationsbootstrap, exakt begrenzt")
 
 // --- Ebene 1: Reviewer, rein lokal und ohne Netz ---
 // Die Risikoliste ist die Sicherheitsgrenze: was hier trifft, erreicht das
@@ -600,6 +624,7 @@ const total =
   base.length + scoped.length + cli.length + helpVersion.length + gitleaks.length +
   readOnlyCli.length +
   net.length + denyForms.length + py.length + interp.length +
+  ruffConfigBootstrap.length +
   reviewerRisky.length + reviewerNoise.length + reviewerParsing.length + statsChecks.length + 3
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

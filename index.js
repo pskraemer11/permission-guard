@@ -76,6 +76,7 @@ function guardOptions(ctx) {
     roots: [base, path.join(os.tmpdir(), "opencode")],
     home: os.homedir(),
     temp: os.tmpdir(),
+    appData: process.env.APPDATA,
   }
 }
 

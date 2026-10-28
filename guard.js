@@ -633,6 +633,7 @@ function resolveTarget(token, opts, base, vars) {
     tmp: opts.temp,
     userprofile: opts.home,
     home: opts.home,
+    appdata: opts.appData,
     homedrive: null,
     homepath: null,
   }
@@ -730,6 +731,53 @@ function extractTargets(statement, vars) {
   return out
 }
 
+// One narrowly-scoped source-and-destination exception for the reviewed Ruff config.
+// It does not trust APPDATA as a root: only create APPDATA\ruff and copy this
+// exact project candidate to APPDATA\ruff\ruff.toml. Every other outside write
+// continues through the normal deny path.
+function approvedRuffBootstrapTargets(statement, resolved, opts, base) {
+  if (!opts.appData || !base) return new Set()
+
+  const tokens = tokenizeCli(statement).map((token) => token.toLowerCase())
+  const ruffDir = normPath(`${opts.appData}\\ruff`)
+  const ruffConfig = normPath(`${ruffDir}\\ruff.toml`)
+  const makeDirectory = [
+    "new-item",
+    "-itemtype",
+    "directory",
+    "-path",
+    "$env:appdata\\ruff",
+  ]
+  if (
+    tokens.length === makeDirectory.length
+    && tokens.every((token, index) => token === makeDirectory[index])
+    && resolved.length === 1
+    && resolved[0] === ruffDir
+  ) {
+    return new Set([ruffDir])
+  }
+
+  const copyCandidate = [
+    "copy-item",
+    "-literalpath",
+    "staging\\ruff-global-baseline.toml",
+    "-destination",
+    "$env:appdata\\ruff\\ruff.toml",
+  ]
+  const candidatePath = normPath(`${base}\\staging\\ruff-global-baseline.toml`)
+  if (
+    tokens.length === copyCandidate.length
+    && tokens.every((token, index) => token === copyCandidate[index])
+    && resolved.length === 2
+    && resolved[0] === candidatePath
+    && resolved[1] === ruffConfig
+  ) {
+    return new Set([ruffConfig])
+  }
+
+  return new Set()
+}
+
 function scopeWrites(statements, options) {
   const opts = options ?? {}
   const vars = buildVarMap(statements)
@@ -774,9 +822,12 @@ function scopeWrites(statements, options) {
       resolved.push(abs)
     }
 
+    const approvedRuffTargets = approvedRuffBootstrapTargets(statement, resolved, opts, base)
     for (const abs of resolved) {
       if (denied.some((root) => isUnder(abs, root))) return { ok: false, reason: `geschuetzter Pfad: ${abs}` }
-      if (!roots.some((root) => isUnder(abs, root))) return { ok: false, reason: `ausserhalb des Projekts: ${abs}` }
+      if (!roots.some((root) => isUnder(abs, root)) && !approvedRuffTargets.has(abs)) {
+        return { ok: false, reason: `ausserhalb des Projekts: ${abs}` }
+      }
     }
 
     if (/-Recurse\b/i.test(statement) || /\brm\s+-[a-z]*r/i.test(statement)) {
@@ -1101,11 +1152,12 @@ function classifyGh(statement) {
 /**
  * Bewertet ein Shell-Skript.
  * @param {string} script
- * @param {{base?: string, roots?: string[], home?: string, temp?: string}} [options]
+ * @param {{base?: string, roots?: string[], home?: string, temp?: string, appData?: string}} [options]
  *   base  - Arbeitsordner der Sitzung (Bezug fuer relative Pfade)
  *   roots - zusaetzlich vertraute Ordner (Schreiben erlaubt)
  *   home  - Benutzerprofil (fuer ~, $HOME, geschuetzte Pfade)
  *   temp  - temporaerer Ordner (fuer $env:TEMP)
+ *   appData - Windows-Roaming-Konfigurationsordner; nur fuer die enge Ruff-Ausnahme
  * @returns {{decision: "allow" | "ask" | "deny", reason: string}}
  */
 export function evaluate(script, options = {}) {

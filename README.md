@@ -100,6 +100,12 @@ Vertraut sind genau zwei Orte:
 - der Projektordner der Sitzung (`ctx.location.directory`)
 - `%TEMP%\opencode`
 
+Eine eng begrenzte Ausnahme erlaubt Installation und Aktualisierung der
+geprüften Ruff-Benutzerbasis: `APPDATA\ruff` anlegen und ausschließlich
+`staging/ruff-global-baseline.toml` nach `APPDATA\ruff\ruff.toml` kopieren.
+`APPDATA` wird dadurch **nicht** als vertrauter Root freigegeben; andere Dateien,
+Unterordner und Schreibbefehle bleiben verweigert.
+
 Relative Pfade werden gegen den Projektordner aufgelöst; ein `cd <absolut>` im
 Skript verschiebt den Bezugspunkt. Nur eindeutig zugewiesene Variablen
 (`$f = "C:\p\x.txt"`) werden aufgelöst, alles andere bleibt `ask`.
