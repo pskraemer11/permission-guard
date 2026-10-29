@@ -169,14 +169,20 @@ Nicht übernehmen: das Paket selbst (73 MB Repository, npm-Abhängigkeitsbaum, M
 
 Grundlage: die vier PreToolUse-Kriterien aus dem protect-mcp-Diagramm des Nutzers. Die Signatur lasse ich weg (besprochen): für einen Ein-Nutzer-Desktop reicht eine Hash-Kette.
 
-### Schritt A — Grundgerüst (technisch, ohne Entscheidungslogik)
+### Schritt A — Grundgerüst (technisch, ohne Entscheidungslogik) — umgesetzt 29.10.2026
 
 Der Guard bekommt eine MCP-Prüfstelle:
 
-1. `tool.hook("execute.before")` fängt Werkzeugname und Argumente ab — wie bei `bencrouse`, Z. 524–535.
-2. Bei `permission.ask` mit einer MCP-Aktion werden diese Argumente **mitgelesen**. Fehlen sie → keine Freigabe, sondern Rückfrage (Regel von `bencrouse`).
+1. ~~`tool.hook("execute.before")` fängt Werkzeugname und Argumente ab~~ — **entfällt**, siehe Abweichung unten.
+2. Bei `permission.ask` mit einer MCP-Aktion werden die Argumente **mitgelesen**. Fehlen sie → keine Freigabe, sondern Rückfrage (Regel von `bencrouse`).
 3. Der Freigabe-Schlüssel bekommt Werkzeug **plus Argument-Hash**, damit eine Freigabe nie ein anderes Werkzeug mitdeckt.
 4. Das bisherige Verhalten für Shell-Befehle bleibt **unverändert** erhalten.
+
+**Umsetzung (29.10.2026):** `mcpObservation()` in `guard.js` als reine Funktion; Verdrahtung in `index.js` vor dem `SHELL_ACTIONS`-Frühausstieg; Shadow-Log im Guard-Log (`mcp ask <action> agent=… key=… args=N felder=…`). **Es wird nichts geändert** — `input.effect` bleibt, was die statischen Regeln sagen. 23 neue Tests (12 Erkennung, 7 Schlüssel, 4 Geheimnisverdacht), Gesamtstand 416/416, deployt.
+
+**Bewusste Abweichung vom Plan: kein `execute.before`-Capture nötig.** Der Plan folgte bencrouse (Z. 524–535), der den Hook brauchte, weil bei ihm die Argumente im Berechtigungs-Event fehlten. Beweis aus dem installierten OpenCode: `mcp.ts` Z. 62 meldet `metadata: { input: input ?? {} }` — die Argumente stehen **im Event selbst** (durchgereicht in `permission.ts` Z. 173, Typ `PermissionEvaluation.metadata`). Ein Capture-Store wäre redundanter State mit Aufraeum- und Zuordnungsfrage. Was bencrouse Capture trotzdem bräuchte, ist für uns ohnehin späterer Schritt G (Ergebnis-Ebene).
+
+**Erkennung, beweisbasiert gewählt:** `metadata.input` ist das einzige Merkmal, das kein eingebautes Werkzeug mitbringt (Quelltext-Durchsicht aller Werkzeug-Plugins: edit→files, glob/grep→count, question→answers, todo→todos, shell→sessionID, mcp-resource→server/uri oder `{}`). `resources == ["*"]` allein reicht **nicht** — `question` und `todo` melden dasselbe; der Quelltext-Widerlegung folgte die Korrektur des Erkenners vor dem ersten Testlauf.
 
 ### Schritt B — Der Prüfkatalog (vier Kriterien)
 

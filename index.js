@@ -19,7 +19,7 @@ import { Plugin } from "@opencode/plugin"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { evaluate } from "./guard.js"
+import { evaluate, mcpObservation } from "./guard.js"
 import { ensureRunning, loadConfig, review, warmup } from "./reviewer.js"
 
 const BASE_DIR = path.join(os.tmpdir(), "opencode-permission-guard")
@@ -106,6 +106,23 @@ export default Plugin.define({
         try {
           if (!input) return
           if (String(input.effect ?? "").toLowerCase() !== "ask") return
+
+          // Schritt A (29.10.2026): MCP im Schattenmodus beobachten. Die
+          // Argumente stehen im Event selbst (metadata.input; Beweis:
+          // mcp.ts Z. 62 meldet sie, kein eingebautes Werkzeug). Hier wird
+          // nur protokolliert, nie geaendert - die statischen Regeln aus
+          // opencode.jsonc entscheiden weiterhin. Log faellt auf Argument-
+          // FELDNAMEN zurueck (Schema, keine Nutzerdaten); ein Verdacht auf
+          // Geheimnisse im Argument-Text wird gemeldet, der Text selbst nie.
+          const obs = mcpObservation(String(input.action ?? ""), input.metadata)
+          if (obs.isMcp) {
+            const agent = String(input.agent ?? "unbekannt")
+            const argsNote = obs.hasArgs ? `args=${obs.argCount} felder=${obs.fields.join(",") || "-"}` : "keine argumente"
+            const note = obs.secret ? " geheimnisverdacht" : ""
+            debug(`mcp ask ${obs.action} agent=${agent} key=${obs.key} ${argsNote}${note}`)
+            return
+          }
+
           if (!SHELL_ACTIONS.has(String(input.action ?? "").toLowerCase())) return
 
           const script = pickScript(input)

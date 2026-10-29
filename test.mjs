@@ -1,5 +1,5 @@
 // Testtabelle fuer guard.js. Ausfuehren mit: node test.mjs
-import { evaluate } from "./guard.js"
+import { evaluate, mcpObservation } from "./guard.js"
 import { buildMessages, neverAutoApprove, parseAnswer, segments } from "./reviewer.js"
 import { parseLine, summarize } from "./stats.mjs"
 
@@ -618,6 +618,76 @@ for (const [text, expected] of reviewerParsing) {
 }
 console.log("-- Reviewer: Antwortformat\n")
 
+// --- MCP-Beobachtung (Schritt A, 29.10.2026) ---
+// Schritt A entscheidet nichts - er beobachtet und protokolliert. Erkennung:
+// nur metadata.input ist das MCP-Merkmal (mcp.ts Z. 62); question/todo
+// melden ebenfalls resources ["*"] und bleiben ohne input "kein MCP".
+// mcp-resource meldet metadata: {} bzw. server/uri - ebenfalls kein MCP-Input.
+const mcpObs = [
+  ["exa_web_search_exa", { input: { query: "opencode plugin", numResults: 5 } }, true],
+  ["github_get_issue", { input: { owner: "a", repo: "b", issue_number: 1 } }, true],
+  ["firecrawl_firecrawl_scrape", { input: {} }, true],
+  ["opencode_read_mcp_resource", { server: "exa", uri: "file:///x" }, false],
+  ["opencode_list_mcp_resources", {}, false],
+  ["question", { question: "x?", multiple: false }, false],
+  ["todo", { todos: [] }, false],
+  ["edit", { files: [{ path: "a" }] }, false],
+  ["shell", { sessionID: "s" }, false],
+  ["exa_web_search_exa", undefined, false],
+  ["exa_web_search_exa", null, false],
+  ["exa_web_search_exa", "kein Objekt", false],
+]
+for (const [action, metadata, wantMcp] of mcpObs) {
+  const got = mcpObservation(action, metadata).isMcp
+  const ok = got === wantMcp
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${String(got).padEnd(5)} (${String(wantMcp).padEnd(5)})  ${action} ${JSON.stringify(metadata)?.slice(0, 40) ?? String(metadata)}`)
+}
+console.log("-- MCP: Erkennung\n")
+
+// Freigabe-Schluessel (bencrouse Z. 112-123): Werkzeug + SHA-256 der
+// Argumente. Gleiche Argumente -> gleicher Schluessel, andere Argumente ->
+// anderer, und eine Freigabe darf nie ein anderes Werkzeug mitdecken.
+// Ohne Argumente ist hasArgs=false; spaeter folgt daraus "keine Freigabe"
+// (bencrouse Z. 568-569). Im Log stehen nur Feldnamen, nie Werte.
+const m1 = mcpObservation("exa_web_search_exa", { input: { query: "x" } })
+const m2 = mcpObservation("exa_web_search_exa", { input: { query: "x" } })
+const m3 = mcpObservation("exa_web_search_exa", { input: { query: "y" } })
+const m4 = mcpObservation("exa_web_search_exa", { input: {} })
+const m5 = mcpObservation("github_get_issue", { input: { query: "x" } })
+const mcpKeys = [
+  ["gleiche Argumente -> gleicher Schluessel", m1.key === m2.key && m1.key.length > 0],
+  ["andere Argumente -> anderer Schluessel", m1.key !== m3.key],
+  ["Schluessel traegt das Werkzeug", m1.key.startsWith("exa_web_search_exa#")],
+  ["verschiedene Werkzeuge -> verschiedene Schluessel", m1.key !== m5.key],
+  ["leeres Objekt: hasArgs=false", m4.hasArgs === false && m4.argCount === 0],
+  ["Feldnamen gezahlt, Werte fehlen", m1.argCount === 1 && m1.fields.includes("query") && !m1.fields.includes("x")],
+  ["Hash-Laenge 16", m1.argHash.length === 16],
+]
+for (const [name, ok] of mcpKeys) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- MCP: Argumente und Schluessel\n")
+
+// Geheimnisverdacht: findSecrets auf dem serialisierten Argument-Text.
+// Der Verdacht wird nur gemeldet; der Argument-Text selbst landet nie im Log.
+const mcpSecCases = [
+  ["exa_web_search_exa", { input: { query: "opencode permissions" } }, false],
+  ["github_create_issue", { input: { title: "x", body: "token abc" } }, true],
+  ["firecrawl_scrape", { input: { url: "https://x/.env" } }, true],
+  ["opencode_read_mcp_resource", { input: { apiKey: "k" } }, true],
+]
+const mcpSecChecks = mcpSecCases.map(([action, metadata, want]) => {
+  const got = mcpObservation(action, metadata).secret
+  return [`${action}: secret=${want}`, got === want]
+})
+for (const [name, ok] of mcpSecChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- MCP: Geheimnisverdacht\n")
+
 const segCount = segments("Get-ChildItem\nRemove-Item x").length
 if (segCount !== 2) failed++
 console.log(`${segCount === 2 ? "ok  " : "FAIL"}  ${String(segCount).padEnd(5)} (2    )  Segmentierung nach Zeilenumbruch`)
@@ -659,6 +729,7 @@ const total =
   readOnlyCli.length +
   net.length + denyForms.length + py.length + interp.length +
   ruffConfigBootstrap.length +
+  mcpObs.length + mcpKeys.length + mcpSecChecks.length +
   reviewerRisky.length + reviewerNoise.length + reviewerParsing.length + statsChecks.length + 3
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

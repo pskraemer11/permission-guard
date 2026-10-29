@@ -8,6 +8,10 @@
 // Regeln wird nie angefasst.
 //
 // Reine Funktionen, keine Ein-/Ausgabe - dadurch ohne OpenCode testbar.
+// Der eine Import (node:crypto) ist eingebaut und rechnet nur; er liefert
+// den Argument-Hash fuer MCP-Freigabe-Schluessel (Schritt A, 29.10.2026).
+
+import { createHash } from "node:crypto"
 
 // Umgebungsvariablen, die kein Geheimnis sind. Alles andere ($env:TOKEN) gilt
 // als verdaechtig und bleibt bei "ask".
@@ -514,6 +518,62 @@ function findSecrets(script) {
   // Originaltext bleibt fuer alle uebrigen Treffer massgeblich.
   if (SECRET_TERMS.test(maskReplaceOperands(script))) hits.push("Geheimnisbegriff")
   return [...new Set(hits)]
+}
+
+// MCP-Beobachtung (Schritt A, 29.10.2026).
+//
+// Beweis, warum metadata.input das Erkennungsmerkmal ist: packages/core/src/
+// tool/mcp.ts Z. 58-70 meldet permission.assert mit metadata: { input: input
+// ?? {} }. Kein eingebautes Werkzeug setzt metadata.input (edit: files,
+// glob/grep: count, question: answers, todo: todos, shell: sessionID,
+// mcp-resource: server/uri oder {}). Allein "resources == ['*']" taugt
+// nicht - question und todo melden dasselbe.
+//
+// Die Argumente stehen damit im Berechtigungs-Event selbst; ein
+// execute.before-Capture (bencrouse Z. 524-535) ist hier nicht noetig -
+// kein Store, keine Aufraeumlogik, keine Zuordnungsfrage.
+//
+// Schritt A beobachtet nur: die Funktion liefert Beobachtung und
+// Freigabe-Schluessel, entscheidet aber nichts. Der Schluessel ist Werkzeug
+// + SHA-256 der Argumente (bencrouse Z. 112-123), damit eine Freigabe spaeter
+// nie ein anderes Argument-Set mitdeckt. Argumentwerte landen nie im Log,
+// nur Feldnamen (Schema, keine Nutzerdaten); ein Geheimnisverdacht im
+// Argument-Text wird zusaetzlich gemeldet.
+export function mcpObservation(action, metadata) {
+  const out = {
+    isMcp: false,
+    action: String(action ?? ""),
+    key: "",
+    argHash: "",
+    argCount: 0,
+    fields: /** @type {string[]} */ ([]),
+    hasArgs: false,
+    secret: false,
+  }
+  if (!metadata || typeof metadata !== "object") return out
+  if (!("input" in metadata)) return out
+  out.isMcp = true
+  const input = metadata.input
+  let argsJson = "{}"
+  try {
+    argsJson = JSON.stringify(input ?? {})
+  } catch {
+    // Nicht serialisierbar (kann bei JSON-Daten nicht vorkommen): als leere
+    // Argumente behandeln - fail closed, denn ohne lesbare Argumente gibt es
+    // spaeter keine Freigabe (bencrouse Z. 568-569).
+  }
+  if (input && typeof input === "object" && !Array.isArray(input)) {
+    out.fields = Object.keys(input).slice(0, 12)
+    out.argCount = out.fields.length
+    out.hasArgs = out.argCount > 0
+  } else if (Array.isArray(input)) {
+    out.argCount = input.length
+    out.hasArgs = input.length > 0
+  }
+  out.argHash = createHash("sha256").update(argsJson).digest("hex").slice(0, 16)
+  out.key = `${out.action}#${out.argHash}`
+  out.secret = findSecrets(argsJson).length > 0
+  return out
 }
 
 function hasWriteVerb(script) {
