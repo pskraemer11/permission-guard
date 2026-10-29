@@ -116,7 +116,19 @@ const scoped = [
   ["New-Item -ItemType Directory -Force -Path \"C:\\p\\build\"", "allow"],
   ["New-Item \"x.md\"", "allow"],
   ["mkdir build", "allow"],
-  ["Remove-Item -Recurse -Force \"C:\\p\\build\"", "allow"],
+  // Loeschen (Nutzerentscheid 29.10.2026): Rekursion, "-Force", Platzhalter
+  // und Verzeichnisziele werden rueckgefragt. Nur das einfache Loeschen
+  // einer benannten Datei im Projekt bleibt erlaubt.
+  ["Remove-Item -Recurse -Force \"C:\\p\\build\"", "ask"],
+  ["Remove-Item -Force \"C:\\p\\out.txt\"", "ask"],
+  ["Remove-Item \"C:\\p\\build\"", "ask"],
+  ["Remove-Item \"C:\\p\\*.tmp\"", "ask"],
+  // Das eigene .git des Projekts bleibt hart gesperrt (deny, seit 22.10.).
+  ["Remove-Item \"C:\\p\\.git\" -Recurse", "deny"],
+  // Ein .git in einem Unterordner ist nicht gesperrt - hier greift jetzt die
+  // Loesch-Regel und fragt nach (war bis 29.10. still "allow").
+  ["Remove-Item \"C:\\p\\staging\\vorlage\\.git\" -Recurse -Force", "ask"],
+  ["Remove-Item \"C:\\p\\CHANGELOG.md\"", "allow"],
   ["Remove-Item out.txt", "allow"],
   ["Copy-Item \"C:\\p\\a.txt\" \"C:\\p\\b.txt\"", "allow"],
   ["Move-Item a.txt b.txt", "allow"],
@@ -160,6 +172,10 @@ const scoped = [
   ["python -m ruff format --check .", "allow"],
   ["python -m ruff check .", "allow"],
   ["python -m pytest -q > result.txt", "allow"],
+  // pyright (Nutzerentscheid 29.10.2026): Typpruefung, schreibt nichts.
+  ["python -m pyright", "allow"],
+  ["py -3.12 -m pyright", "allow"],
+  ["python -m pyright pytest/unit/test_x.py", "allow"],
   ["py -3.12 -m ruff check .", "allow"],
   ["py -3.12 -m pytest -q", "allow"],
 
@@ -283,6 +299,9 @@ const gitleaks = [
 
 // sqlite3 und gh (Nutzerentscheid 25.10.2026): nur die ausdruecklich lesenden
 // Formen. sqlite3 ohne -readonly oeffnet die Datenbank schreibend.
+// `gh api` ist seit 29.10.2026 zulaessig, solange ein Senden nachweisbar
+// ausgeschlossen ist (kein -f/-F/--input, keine Methode ausser GET/HEAD/
+// OPTIONS, kein graphql-Endpunkt).
 const readOnlyCli = [
   ["sqlite3.exe -readonly $db \".tables\"", "allow"],
   ["sqlite3 -readonly data.db \".schema session_v2\"", "allow"],
@@ -293,6 +312,21 @@ const readOnlyCli = [
   ["gh repo view", "allow"],
   ["gh pr merge 42", "ask"],
   ["gh api -X POST /repos/x/y/issues", "ask"],
+  // lesende api-Aufrufe: Standardmethode ist GET.
+  ["gh api repos/x/y --jq .stargazers_count", "allow"],
+  ["gh api repos/x/y/contents --paginate", "allow"],
+  ["gh api -X GET repos/x/y", "allow"],
+  ["gh api --method=GET repos/x/y", "allow"],
+  ["gh api repos/x/y -H \"Accept: application/vnd.github+json\"", "allow"],
+  // Senden ist nachweisbar -> Rueckfrage.
+  ["gh api repos/x/y -f name=value", "ask"],
+  ["gh api repos/x/y -F state=open", "ask"],
+  ["gh api repos/x/y --input payload.json", "ask"],
+  ["gh api -X DELETE repos/x/y", "ask"],
+  ["gh api --method PUT repos/x/y", "ask"],
+  ["gh api repos/x/y --method=PATCH", "ask"],
+  // graphql ist immer POST, auch mit lesend klingendem Inhalt.
+  ["gh api graphql -f query=\"query { viewer { login } }\"", "ask"],
 ]
 
 // Netz-Lesen (Nutzerentscheid 22.10.2026): Lesen, solange nichts gespeichert

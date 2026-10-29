@@ -778,6 +778,41 @@ function approvedRuffBootstrapTargets(statement, resolved, opts, base) {
   return new Set()
 }
 
+// Loeschen (Nutzerentscheid 29.10.2026): Wegwerfen ist nicht wie Schreiben.
+// Ein Verzeichnis, "-Recurse" und "-Force" sind nachweislich nicht mehr
+// umkehrbar, und ein Ziel mit Platzhalter laesst nicht erkennen, was genau
+// verloren geht. Solche Aufrufe werden rueckgefragt statt freigegeben.
+// Bewusst ohne Dateisystemzugriff: guard.js bleibt reine Funktion, damit
+// node test.mjs den Klassifizierer ohne Umgebung testen kann. Statt `stat`
+// gilt deshalb "Ziel ohne Endung ist ein Verzeichnis" - ein Punkt an erster
+// Stelle (.git) zaehlt nicht als Endung.
+const DELETE_CMDLETS = new Set([
+  "remove-item", "del", "erase", "rd", "rmdir",
+  // Aliase
+  "ri", "rm",
+])
+
+function looksLikeDirectory(target) {
+  const trimmed = String(target).replace(/[\\/]+$/, "")
+  const last = trimmed.split(/[\\/]/).pop() ?? ""
+  return last.lastIndexOf(".") <= 0
+}
+
+/**
+ * Liefert den Grund, warum ein Loeschen rueckgefragt wird, sonst null.
+ * @param {string} statement
+ * @param {string[]} targets die unveraenderten Zielangaben aus extractTargets
+ */
+function deletionEscalation(statement, targets) {
+  if (/-recurse\b/i.test(statement)) return "Rekursion"
+  if (/-force\b/i.test(statement)) return "-Force"
+  for (const target of targets) {
+    if (/[*?[\]]/.test(target)) return `Platzhalter-Ziel: ${target}`
+    if (looksLikeDirectory(target)) return `Verzeichnis: ${target}`
+  }
+  return null
+}
+
 function scopeWrites(statements, options) {
   const opts = options ?? {}
   const vars = buildVarMap(statements)
@@ -834,6 +869,14 @@ function scopeWrites(statements, options) {
       for (const abs of resolved) {
         if (abs === cwd || isUnder(cwd, abs)) return { ok: false, reason: `rekursiv auf ${abs}` }
       }
+    }
+
+    // Loeschen nicht freigeben, sondern rueckfragen. Der Grund beginnt
+    // bewusst mit "Loeschen:" und traegt keines der Sperrpraefixe aus
+    // evaluate() - daraus folgt "ask", nicht "deny".
+    if (DELETE_CMDLETS.has((tokenizeCli(statement)[0] ?? "").toLowerCase().replace(/\.exe$/, ""))) {
+      const why = deletionEscalation(statement, targets)
+      if (why) return { ok: false, reason: `Loeschen: ${why}` }
     }
   }
 
@@ -986,6 +1029,11 @@ function classifyPython(s, ctx) {
   if (head === "-m") {
     const module = (tokens[i + 1] ?? "").toLowerCase()
     if (module === "pytest") return "read"
+    // pyright (Nutzerentscheid 29.10.2026): Typpruefung nach pyproject.toml.
+    // pyright schreibt weder Quelltext noch Bytecode; wie pytest gilt der
+    // Aufruf als vertrauenswuerdig. Nur der nackte `pyright` (Sprachebene
+    // ohne python -m) ist davon nicht erfasst.
+    if (module === "pyright") return "read"
     if (module !== "ruff") return "unknown"
     const rest = tokens.slice(i + 2)
     const sub = (rest[0] ?? "").toLowerCase()
@@ -1140,13 +1188,53 @@ function classifySqlite(statement) {
   return "read"
 }
 
-// gh (Nutzerentscheid 25.10.2026): ausschliesslich die beiden lesenden
-// Aufrufe, die im Alltag vorkommen. `gh api` fehlt bewusst - es kann POSTen.
+// gh (Nutzerentscheid 25.10.2026): ausschliesslich die lesenden Unterbefehle,
+// die im Alltag vorkommen. `gh api` fehlte bewusst - es kann POSTen.
+// Nachschlaerf (Nutzerentscheid 29.10.2026): `gh api` ist standardmaessig GET
+// und deshalb zulaessig, solange ein Senden nachweisbar ausgeschlossen ist.
+// Senden liegt vor bei -f/-F/--field/--raw-field/--input (schalten still auf
+// POST um), bei -X/--method ausser GET/HEAD/OPTIONS sowie bei `graphql`
+// (immer POST, daher auch Mutationen). Es wird kein Pfad interpretiert und
+// keine Variable aufgeloest - Mehrdeutiges bleibt "unknown" und damit Rueckfrage.
+const GH_SEND_FLAGS = new Set(["-f", "-F", "--field", "--raw-field", "--input"])
+const GH_READ_METHODS = new Set(["GET", "HEAD", "OPTIONS"])
+
+function ghApiIsReadOnly(tokens) {
+  const lower = tokens.map((t) => t.toLowerCase())
+  for (let i = 0; i < lower.length; i++) {
+    const token = lower[i]
+    // Form "--flag=Wert" (etwa --method=GET) als ein Token.
+    const eq = token.indexOf("=")
+    if (eq > 0) {
+      const name = token.slice(0, eq)
+      const value = token.slice(eq + 1)
+      if (name === "--method" || name === "-x") {
+        if (!GH_READ_METHODS.has(value.toUpperCase())) return false
+        continue
+      }
+      if (GH_SEND_FLAGS.has(name)) return false
+      continue
+    }
+    if (GH_SEND_FLAGS.has(token)) return false
+    if (token === "--method" || token === "-x") {
+      if (!GH_READ_METHODS.has((lower[i + 1] ?? "").toUpperCase())) return false
+      i++
+    }
+  }
+  return true
+}
+
 function classifyGh(statement) {
-  const args = tokenizeCli(statement).slice(1).filter((a) => !a.startsWith("-"))
+  const tokens = tokenizeCli(statement)
+  const args = tokens.slice(1).filter((a) => !a.startsWith("-"))
   if (args.length < 2) return "unknown"
   const sub = `${args[0].toLowerCase()} ${args[1].toLowerCase()}`
-  return sub === "auth status" || sub === "repo view" ? "read" : "unknown"
+  if (sub === "auth status" || sub === "repo view") return "read"
+  if (args[0].toLowerCase() !== "api") return "unknown"
+  // `gh api graphql` ist immer POST. args[1] ist der Endpunkt-Pfad, weil
+  // Flag-Werte bei der Argumentliste entfernt wurden.
+  if (args[1].toLowerCase() === "graphql") return "unknown"
+  return ghApiIsReadOnly(tokens) ? "read" : "unknown"
 }
 
 /**

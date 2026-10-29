@@ -138,15 +138,22 @@ innerhalb eines vertrauten Ordners liegt:
 |---|---|
 | `Set-Content`, `Add-Content`, `Out-File`, `Clear-Content` | `Set-Content CHANGELOG.md "..."` |
 | `New-Item`, `mkdir` | `New-Item -ItemType Directory build` |
-| `Remove-Item`, `del`, `rm` | `Remove-Item build -Recurse` |
+| `Remove-Item`, `del`, `rm` | `Remove-Item out.txt` — siehe Lösch-Regel unten |
 | `Copy-Item`, `Move-Item`, `Rename-Item` | `Move-Item a.md b.md` |
 | Umleitung in eine Datei | `git log > log.txt` |
 | `[System.IO.File]::WriteAllText` / `AppendAllText` / `WriteAllBytes` | `WriteAllText("CHANGELOG.md", $row)` |
 | `git add`, `git commit` (ohne `--amend`) | `git commit -m "..."` |
 | `python -m ruff check --fix`, `python -m ruff format` | `python -m ruff format .` |
 
-Ein `Remove-Item -Recurse` auf den Projektordner selbst (oder einen seiner
-Elternordner) bleibt `ask`.
+**Löschen ist nicht Schreiben** (Nutzerentscheid 29.10.2026): Ein `remove-item`,
+`rm`, `del`, `rd`, `rmdir`, `erase` oder `ri` wird zur Rückfrage geführt, sobald
+`-Recurse` oder `-Force` gesetzt ist, ein Ziel einen Platzhalter enthält oder
+ohne Datei-Namens-Endung auf ein Verzeichnis deutet (`.git` zählt ohne Endung).
+Erfasst auch den Fall, der zur Entscheidung führte: das Löschen eines `.git` in
+einem **Unterordner** des Projekts lief vorher als „Schreiben in vertrautem
+Ordner" durch. Nur das einfache Löschen einer benannten Datei im Projekt bleibt
+`allow`. Das eigene `.git` des Projektordners bleibt darüber hinaus hart
+gesperrt (`deny`, seit 22.10.).
 
 ### Netz-Lesen: `Invoke-WebRequest` / `Invoke-RestMethod`
 
@@ -171,6 +178,7 @@ Daten tragen; ohne Schreibziel führt aber nur die Anfrage selbst nach draußen.
 | Form | Bewertung |
 |---|---|
 | `python -m pytest …` (auch `py -3.12 -m pytest …`) | Lesen — die Freigabe deckt bewusst auch die Testcode-Ausführung ab (Entscheidung) |
+| `python -m pyright …` (auch `py -3.12 -m pyright …`) | Lesen — Typprüfung nach `pyproject.toml`, schreibt weder Quelltext noch Bytecode (Entscheidung 29.10.2026) |
 | `python -m ruff check …` ohne `--fix` | Lesen |
 | `python -m ruff format …`, `check … --fix …` | Schreibend → Zielpfadprüfung wie oben (`ruff format D:\…` bleibt `ask`, Wildcards bleiben `ask`) |
 | `python -m ruff format --check \|--diff` | Lesen |
@@ -283,17 +291,24 @@ startet. Unbekannte Unterbefehle bleiben `ask`.
 | `firecrawl` | `list`, `list-tools`, `find-tools`, `search`, `map`, `alexandria`, `developer`, `gov`, `research`, `status`, `version`, `doctor`, sowie `scrape` und `crawl` ohne Schreib-Flags | `agent`, `interact`, `monitor`, `batch-scrape`, `parse`, `feedback`, `search-feedback`, `env`, `config`, `login`, `logout`, `init`, `setup`, `make`, `launch`, `experimental`, `credits` |
 | `gitleaks` | `version`, `help`, `git`, `dir` (auch `file`/`directory`) — Scans nur mit voller Redaktion (`--redact` oder `--redact=100`) | `stdin`, `completion`, Scans ohne oder mit Teilredaktion (`--redact=20`), `-r`/`--report-path`, `--report-template`, `--log-opts`, `--diagnostics`, `--diagnostics-dir` |
 | `sqlite3` | nur mit `-readonly` | ohne das Flag (öffnet schreibend), `-cmd`, `-init`, `.output`, `.once`, `.save`, `.backup`, `.restore`, `.clone`, `.archive` |
-| `gh` | `auth status`, `repo view` | alles andere, insbesondere `gh api` (kann POSTen), `pr merge`, `release create` |
+| `gh` | `auth status`, `repo view`, `api` (nur nachweislich lesend, siehe unten) | alles andere, insbesondere `api` mit Senden-Verdacht, `pr merge`, `release create` |
 
 Zusätzlich gesperrt, auch bei erlaubtem Unterbefehl: `-o`/`--output`,
 `-k`/`--api-key`, `--api-url`, `--screenshot`, `--full-page-screenshot`,
 `--profile`, `--cancel`, `--webhook`.
 
-Die sqlite3- und gh-Regeln (Entscheidung 25.10.2026) schließen die zwei
-häufigsten Leseaufrufe im Log: `sqlite3.exe -readonly <db> ".tables"` (zehnmal
-in sieben Tagen) und `gh auth status`. Beides ist ohne die Flag-Prüfung nicht
-tragfähig: `sqlite3` ohne `-readonly` schreibt in die Datenbank, und `gh api`
-kann jeden beliebigen Verb senden.
+Die sqlite3- und gh-Regeln (Entscheidung 25.10.2026, `gh api` nachgeschärft
+29.10.2026) schließen die häufigsten Leseaufrufe im Log: `sqlite3.exe -readonly
+<db> ".tables"`, `gh auth status` und lesende `gh api`-Aufrufe. Ohne die
+Flag-Prüfung ist keines davon tragfähig: `sqlite3` ohne `-readonly` schreibt in
+die Datenbank, und `gh api` kann jeden beliebigen Verb senden. Deshalb gilt für
+`gh api` jetzt: standardmäßig GET, aber **nur wenn ein Senden nachweisbar
+ausgeschlossen ist** — `ghApiIsReadOnly()` lässt ausschließlich die Methoden
+`GET`, `HEAD`, `OPTIONS` zu (als `-X Wert` oder `--method=Wert`); die Flags
+`-f`, `-F`, `--field`, `--raw-field` und `--input` schalten bei `gh` still auf
+POST um und führen deshalb zur Rückfrage, ebenso der Endpunkt `graphql` (immer
+POST, trägt auch lesend klingende Mutationen). Mehrdeutiges wird nicht
+interpretiert und nicht aufgelöst — es bleibt `unknown` und damit Rückfrage.
 
 Die gitleaks-Regel (Entscheidung 23.10.2026) hat zwei Gründe: Ein Scan ohne
 `--redact` druckt gefundene Geheimnisse — damit in den Verlauf und ins
