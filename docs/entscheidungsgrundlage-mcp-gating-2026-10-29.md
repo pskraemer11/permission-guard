@@ -298,6 +298,17 @@ Kein Pfad wird interpretiert und keine Variable aufgelöst: Mehrdeutiges bleibt 
 3. **Behebungen aus 4.3 freigeben** — insbesondere das schärfere `-Recurse`-Verhalten, das im Alltag Rückfragen auslösen wird.
 4. **Reihenfolge Schritte D/F:** Protokoll (D) früher, weil es zum Auswerten der Monitor-Phase (F) gebraucht wird? **Empfehlung:** D vor F.
 
+### Entscheidungen des Nutzers — 01.11.2026
+
+| # | Frage | Entscheidung |
+|---|---|---|
+| 1 | Ablehnungs-Verhalten bei MCP | **Ja** — klare Verbote werden aktiv mit Begründung blockiert (keine sinnlose Rückfrage), alles Unklare wird wie bisher durchgefragt. Empfehlung umgesetzt; Schritt C ist damit freigegeben. |
+| 2 | Absichtsspeicher | **zurückgestellt**, nicht verworfen. Begründung Nutzer: Bei Zweifelsfragen hängt die Antwort stark vom Kontext ab — den Kontext mitzuführen wäre hoher Aufwand bei begrenztem Nutzen. Darf einzeln neu aufkommen, sobald B–C laufen. Ohne ihn bleibt der Kern abgedeckt, weil die klaren Verbote aus Entscheidung 1 die gefährlichsten Fälle ohnehin am Modell vorbei blockieren. |
+| 3 | Behebungen 4.3 freigeben | **erledigt** (29.10.2026, siehe 4.3a) — die Nummer der Liste ist nur noch historisch. |
+| 4 | Reihenfolge D vor F | **Ja** — das Protokoll mit Hash-Kette wird vor der Monitor-Phase gebaut, damit F auswertbare Daten liefert. |
+
+**Folge für die Planung:** Schritt C ist mit Entscheidung 1 entschieden; Reihenfolge D→F bestätigt; der Absichtsspeicher steht nicht mehr im kritischen Pfad. Nächster Arbeitsschritt: **Schritte B und C**.
+
 ### Vorgeschlagene Reihenfolge
 
 1. Behebungen 4.3 (klein, sofort spürbar) + Testlauf `node test.mjs` und `bench-quality.ps1`
