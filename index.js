@@ -105,24 +105,28 @@ export default Plugin.define({
       await hook("evaluate", async (input) => {
         try {
           if (!input) return
-          if (String(input.effect ?? "").toLowerCase() !== "ask") return
 
           // Schritt A (29.10.2026): MCP im Schattenmodus beobachten. Die
           // Argumente stehen im Event selbst (metadata.input; Beweis:
           // mcp.ts Z. 62 meldet sie, kein eingebautes Werkzeug). Hier wird
           // nur protokolliert, nie geaendert - die statischen Regeln aus
-          // opencode.jsonc entscheiden weiterhin. Log faellt auf Argument-
-          // FELDNAMEN zurueck (Schema, keine Nutzerdaten); ein Verdacht auf
-          // Geheimnisse im Argument-Text wird gemeldet, der Text selbst nie.
+          // opencode.jsonc entscheiden weiterhin. Der Zweig laeuft VOR der
+          // effect-Pruefung, weil auch "allow"-MCP-Aufrufe (Regel oder
+          // gespeicherte Freigabe) fuer die Monitor-Phase interessant sind.
+          // Log faellt auf Argument-FELDNAMEN zurueck (Schema, keine
+          // Nutzerdaten); ein Verdacht auf Geheimnisse im Argument-Text
+          // wird gemeldet, der Text selbst nie.
           const obs = mcpObservation(String(input.action ?? ""), input.metadata)
           if (obs.isMcp) {
+            const effect = String(input.effect ?? "unbekannt").toLowerCase()
             const agent = String(input.agent ?? "unbekannt")
             const argsNote = obs.hasArgs ? `args=${obs.argCount} felder=${obs.fields.join(",") || "-"}` : "keine argumente"
             const note = obs.secret ? " geheimnisverdacht" : ""
-            debug(`mcp ask ${obs.action} agent=${agent} key=${obs.key} ${argsNote}${note}`)
+            debug(`mcp ${effect} ${obs.action} agent=${agent} key=${obs.key} ${argsNote}${note}`)
             return
           }
 
+          if (String(input.effect ?? "").toLowerCase() !== "ask") return
           if (!SHELL_ACTIONS.has(String(input.action ?? "").toLowerCase())) return
 
           const script = pickScript(input)
