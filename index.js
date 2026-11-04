@@ -132,6 +132,8 @@ export default Plugin.define({
               `ziel=${crit.resource.kinds.join("+") || "keins"}`,
             ]
             if (crit.context.contentFields.length) notes.push(`inhalt=${crit.context.contentFields.join(",")}`)
+            if (crit.action.source === "arguments") notes.push("quelle=argumente")
+            if (crit.context.unresolved) notes.push(`unaufgeloest=${crit.context.unresolved}`)
             if (crit.context.oversized) notes.push("unanalysierbar")
             if (crit.secret) notes.push("geheimnisverdacht")
             const plan = mcpAction(effect, verdict)

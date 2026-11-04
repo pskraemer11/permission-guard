@@ -40,6 +40,8 @@ const SECRET_PATHS = [
   [/auth\.json\b/i, "Auth-Datei"],
   [/\.aws[\\/]credentials|\.azure[\\/]|\.kube[\\/]config|\.gnupg[\\/]/i, "Cloud-Credentials"],
   [/\bLogin Data\b|\bCookies\b/i, "Browser-Profil"],
+  [/\brecovery[-_ ]?codes?\b/i, "Wiederherstellungscodes"],
+  [/\bbackup[-_ ]?codes?\b/i, "Backup-Codes"],
 ]
 
 // Geheimnisbegriffe. Fuer den Check gilt eine eng gefasste Ausnahme
@@ -648,8 +650,9 @@ function mcpWords(action) {
 
 // Rangfolge unknown < read < write < destructive. Der schwerste Treffer
 // gewinnt, der zugehoerige Verb wird fuer die Begruendung mitgefuehrt.
+const MCP_INTENT_RANK = { unknown: 0, read: 1, write: 2, destructive: 3 }
+
 function mcpIntent(words) {
-  const rank = { unknown: 0, read: 1, write: 2, destructive: 3 }
   let intent = "unknown"
   let verb = ""
   for (const word of words) {
@@ -658,7 +661,7 @@ function mcpIntent(words) {
     else if (MCP_WRITE_VERBS.has(word)) kind = "write"
     else if (MCP_READ_VERBS.has(word)) kind = "read"
     if (!kind) continue
-    if (rank[kind] > rank[intent]) {
+    if (MCP_INTENT_RANK[kind] > MCP_INTENT_RANK[intent]) {
       intent = kind
       verb = word
     } else if (!verb) {
@@ -666,6 +669,58 @@ function mcpIntent(words) {
     }
   }
   return { intent, verb }
+}
+
+// Argumentwerte im Sinne von "diese Option ist gesetzt": true, von 0
+// verschiedene Zahlen, nicht-leere Strings/Listen/Objekte. Ausdrueckliche
+// Nein-Werte ("false", "0", "off") zaehlen nicht - sonst machte ein
+// ausgeschaltetes Flag die Absicht schwerer als sie ist.
+function mcpTruthy(value) {
+  if (value === true) return true
+  if (value === false || value === null || value === undefined) return false
+  if (typeof value === "number") return value !== 0
+  if (typeof value === "string") return !/^(?:|0|false|no|off|none|null)$/i.test(value.trim())
+  if (Array.isArray(value)) return value.length > 0
+  if (typeof value === "object") return Object.keys(value).length > 0
+  return false
+}
+
+// Absicht aus Argument-FELDNAMEN (Schema, kein Nutzerinhalt): `read_health`
+// mit `reset: true` ist kein Lesen. Nur schreibende und loeschende Feldnamen
+// duerfen die Absicht verschaerfen - ein Feldname darf sie nie entschaerfen,
+// sonst wuerde aus "unbekannt" durch ein `query`-Feld ein stilles "allow".
+export function mcpArgIntent(input) {
+  let best = null
+  const seen = new Set()
+  const visit = (value, key, depth) => {
+    if (value === null || value === undefined || depth > 3) return
+    if (typeof value === "object") {
+      if (seen.has(value)) return
+      seen.add(value)
+      if (Array.isArray(value)) {
+        for (const item of value) visit(item, key, depth + 1)
+        return
+      }
+      for (const [childKey, childValue] of Object.entries(value)) {
+        visit(childValue, childKey, depth + 1)
+      }
+      return
+    }
+    if (!mcpTruthy(value)) return
+    for (const word of mcpWords(key)) {
+      const kind = MCP_DESTRUCTIVE_VERBS.has(word)
+        ? "destructive"
+        : MCP_WRITE_VERBS.has(word)
+          ? "write"
+          : ""
+      if (!kind) continue
+      if (!best || MCP_INTENT_RANK[kind] > MCP_INTENT_RANK[best.intent]) {
+        best = { intent: kind, verb: word }
+      }
+    }
+  }
+  visit(input, "", 0)
+  return best
 }
 
 // Zielart eines Arguments. Die Form entscheidet zuerst (eine URL bleibt eine
@@ -747,7 +802,7 @@ export function mcpCriteria(action, metadata, agent, sessionID) {
     hasArgs: obs.hasArgs,
     secret: obs.secret,
     principal: { agent: label, session: Boolean(sessionID) },
-    action: { tool: obs.action, verb: "", intent: "unknown" },
+    action: { tool: obs.action, verb: "", intent: "unknown", source: "name" },
     resource: { kinds: [], count: 0 },
     context: {
       emptyArgs: !obs.hasArgs,
@@ -760,7 +815,10 @@ export function mcpCriteria(action, metadata, agent, sessionID) {
   if (!obs.isMcp) return criteria
 
   const input = metadata.input
-  const { intent, verb } = mcpIntent(mcpWords(obs.action))
+  const nameIntent = mcpIntent(mcpWords(obs.action))
+  const argIntent = mcpArgIntent(input)
+  // Ein Argument-Feld darf die Absicht nur verschaerfen, nie entschaerfen.
+  const fromArgs = Boolean(argIntent) && MCP_INTENT_RANK[argIntent.intent] > MCP_INTENT_RANK[nameIntent.intent]
   let oversized = false
   try {
     oversized = JSON.stringify(input ?? {}).length > 16384
@@ -768,7 +826,12 @@ export function mcpCriteria(action, metadata, agent, sessionID) {
     // Nicht serialisierbar: wie "zu gross" behandeln (unanalysierbar).
     oversized = true
   }
-  criteria.action = { tool: obs.action, verb, intent }
+  criteria.action = {
+    tool: obs.action,
+    verb: fromArgs ? argIntent.verb : nameIntent.verb,
+    intent: fromArgs ? argIntent.intent : nameIntent.intent,
+    source: fromArgs ? "arguments" : "name",
+  }
   criteria.resource = mcpResources(input)
   criteria.context = {
     emptyArgs: !obs.hasArgs,
@@ -776,6 +839,7 @@ export function mcpCriteria(action, metadata, agent, sessionID) {
     contentFields: mcpContentFields(input),
     secret: obs.secret,
     oversized,
+    unresolved: mcpUnresolved(input),
   }
   return criteria
 }
@@ -827,10 +891,61 @@ const MCP_BRAKE_ARGS = [
   ],
 ]
 
+// Werkzeuge, die Daten nach aussen tragen. Zusammen mit einem Geheimnis-Pfad
+// in den Argumenten ergibt das den Notbremsefall "Zugangsdaten exportiert".
+const MCP_OUTWARD_VERBS = new Set([
+  "send", "mail", "email", "post", "publish", "upload", "share", "transfer",
+  "export", "invite",
+])
+
+function mcpOutward(tool) {
+  return mcpWords(tool).some((word) => MCP_OUTWARD_VERBS.has(word))
+}
+
+// Felder, deren Wert ein Ziel benennt. Steht dort nur eine Variable, ist das
+// Ziel unbekannt - und damit kein Fall fuer das Modell, sondern Rueckfrage.
+const MCP_TARGET_FIELDS = new Set([
+  "target", "path", "file", "filename", "directory", "dir", "url", "uri",
+  "to", "recipient", "destination", "attachment", "source", "repo",
+  "repository", "project", "database", "org", "owner",
+])
+
+// $NAME, ${NAME}, %NAME% - nichts davon wird aufgeloest.
+const MCP_VARIABLE_RX = /^(?:\$[A-Za-z_][\w]*|\$\{[^}]+\}|%[A-Za-z_][\w]*%|%\{[^}]+\})$/
+
+function mcpUnresolved(input) {
+  let hit = ""
+  walkMcpValues(input, (key, value) => {
+    if (hit) return
+    const field = String(key).toLowerCase()
+    if (!MCP_TARGET_FIELDS.has(field)) return
+    if (MCP_VARIABLE_RX.test(value.trim())) hit = field
+  })
+  return hit
+}
+
 function mcpBrake(criteria, input) {
   const normalized = mcpWords(criteria.action.tool).join("_")
   for (const [rx, reason] of MCP_BRAKE_ACTIONS) {
     if (rx.test(normalized)) return reason
+  }
+  // Zugangsdaten nach aussen: der Plan nennt "Export von Zugangsdaten" als
+  // Notbremsefall. Bewusst eng - es braucht beides: ein nach aussen gerichtetes
+  // Werkzeug (senden/veroeffentlichen) UND einen Geheimnis-Pfad in den
+  // Argumenten. Ein bloßes Geheimniswort bleibt Rueckfrage, sonst wuerde jedes
+  // Issue mit dem Wort "token" hart blockiert.
+  if (mcpOutward(criteria.action.tool)) {
+    let label = ""
+    walkMcpValues(input, (key, value) => {
+      if (label) return
+      for (const [rx, name] of SECRET_PATHS) {
+        if (rx.test(value)) {
+          label = name
+          return
+        }
+      }
+    })
+    if (label) return `Zugangsdaten (${label}) werden nach aussen gesendet`
   }
   let hit = ""
   walkMcpValues(input, (key, value) => {
@@ -863,6 +978,9 @@ export function mcpVerdict(criteria, input) {
   const brake = mcpBrake(criteria, input)
   if (brake) return { decision: "deny", layer: 2, reason: `Notbremse: ${brake}` }
 
+  if (context.unresolved) {
+    return { decision: "ask", layer: 1, reason: `Ziel ist eine unaufgeloeste Variable (${context.unresolved})` }
+  }
   if (context.secret) {
     return { decision: "ask", layer: 1, reason: "Geheimnisverdacht in den Argumenten" }
   }
