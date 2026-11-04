@@ -534,7 +534,7 @@ Timeout stehen in `shell-reviewer.config.json` (beim Deploy aus
 Prüfen lässt sich das im Guard-Log: Zeitstempel der letzten `setup:`-Zeile
 gegen die Änderungszeit der Konfigurationsdatei halten.
 
-## MCP: Schattenmodus (Schritte A und B, 29.10. und 04.11.2026)
+## MCP: Schattenmodus und Drei-Schichten-Urteil (Schritte A–C, 29.10.–04.11.2026)
 
 MCP-Aufrufe werden seit Schritt A **nur protokolliert**, nie beeinflusst: Der
 Zweig läuft vor jeder Shell-Prüfung, ändert `input.effect` nicht, und die
@@ -567,9 +567,52 @@ Regeln des Katalogs:
 - Argumentwerte verlassen die Funktion nicht; im Log stehen nur Feldnamen,
   Zielarten und Zählungen.
 
-Der Katalog ist die Vorbereitung für Schritt C (feste Regeln, Notbremse,
-lokales Modell). Solange C nicht aktiv ist, gilt unverändert: MCP-Server ohne
-explizite `permissions`-Regel fragen nach.
+### Schritt C: Urteil in drei Schichten
+
+`mcpVerdict()` in `guard.js` fällt ein Urteil, `mcpAction()` entscheidet, ob es
+gilt. Beides ist rein und ohne Backend testbar.
+
+| Schicht                    | Prüft                                                   | Ergebnis                                            |
+| -------------------------- | ------------------------------------------------------- | --------------------------------------------------- |
+| 2 Notbremse (läuft zuerst) | Werkzeugname und Argumente gegen eine kurze, enge Liste | `deny`                                              |
+| 1 feste Regel              | Absicht aus Schritt B                                   | `allow` bei `read`, `ask` bei `write`/`destructive` |
+| 3 lokales Gemma            | nur bei `unknown`, mit drei getrennten Kanälen          | `allow` nur bei klarem „Ja", sonst `ask`            |
+
+Reihenfolge und Grenzen:
+
+- **`unanalysierbar` zuerst.** Argumente über 16 KB ergeben `ask`, auch wenn
+  Werkzeug oder Text destruktiv aussähen — ein Größenlimit ist kein Fund.
+  Danach Notbremse, dann Geheimnisverdacht, dann leere Argumente.
+- **Notbremse nur bei klaren Fällen:** `delete_repository`,
+  `delete_organization`, `wipe/destroy/purge/drop` auf Massenziele, `force` als
+  eigenes Wort im Werkzeugnamen, `rm -rf /` bzw. `~`, `Remove-Item -Recurse`
+  auf Laufwerk oder Home, `Format-Volume`/`Clear-Disk`/`diskpart clean`,
+  Fork-Bombe und `curl … | sh`. Alles andere bleibt Rückfrage, nie Verbot.
+- **Kein Pfad wird interpretiert.** Variablen, `Join-Path`, berechnete Ziele
+  bleiben `unknown` und damit Rückfrage (Regel der Notbremse: unanalysierbar
+  nie mit harmlos verwechseln).
+- **Ebene 3 kann nur `ask` zu `allow` heben.** „Nein", Freitext, Timeout und
+  jeder Fehler bleiben `ask`; ein `deny` entsteht dort nie. Geheimnisverdacht
+  und unanalysierbare Argumente erreichen das Modell gar nicht erst, damit
+  keine Werte in den lokalen Kontext wandern.
+- **Kanal-Trennung im Prompt** nach bencrouse: `<TRUSTED-USER-INTENT>`,
+  `<UNTRUSTED-PENDING-ACTION>`, `<UNTRUSTED-RECENT-TOOLS>`. Kanal-Tags in
+  Argumentwerten werden neutralisiert, und eine Aufforderung im
+  unzuverlässigen Teil ist allein ein Grund für „Nein". Ein Absichtsspeicher
+  existiert noch nicht (Entscheidung 2 vom 01.11., zurückgestellt).
+- **Der Schalter steht im Quelltext:** `MCP_GATING_MODE` in `guard.js` ist
+  `"shadow"`. Aktivieren heißt: dort `"active"` setzen, Tests laufen lassen,
+  deployen — dieselbe Kette wie jede andere Änderung. In `"active"` gilt das
+  Urteil nur für Aufrufe, die die statischen Regeln mit `ask` beantworten;
+  `allow`, `deny` und gespeicherte Freigaben bleiben unangetastet. Vor dem
+  Umschalten muss das Testregime aus Schritt E grün sein.
+
+Im Schattenmodus steht im Log `schatten=<entscheidung>/<schicht>`, aktiv
+`urteil=…` plus eine zweite Zeile mit dem angewandten Ergebnis:
+
+```text
+mcp ask github_delete_repository agent=build key=github_delete_repository#… args=2 felder=owner,repo absicht=destructive/delete ziel=repo schatten=deny/2
+```
 
 ## Grenzen
 
@@ -644,11 +687,12 @@ node replay.mjs                 # Messung: wie viele Befehle laufen ohne Rueckfr
 node analyze.mjs                # Punkt-8-Analyse: Woher genau kommt "nicht einordenbar"
 ```
 
-453 Fälle in den Gruppen ohne/mit Projektbezug, CLI-Allowlists, Hilfe und
+498 Fälle in den Gruppen ohne/mit Projektbezug, CLI-Allowlists, Hilfe und
 Version, gitleaks, sqlite3/gh, Netz-Lesen, Verweigerung & Geheimnis-Ersetzung,
 python, Interpreters, Ruff-Bootstrap, Reviewer (Risikoliste, Fehlalarme,
 Antwortformat, Aufbau), MCP (Erkennung, Schlüssel, Geheimnisverdacht,
-Kriterien) und Statistik. Exitcode 1 bei Abweichung.
+Kriterien, Drei-Schichten-Urteil inklusive Notbremse, Schalter, Prompt-Kanäle
+und Modellaufruf mit Ersatz-`fetch`) und Statistik. Exitcode 1 bei Abweichung.
 Der Klassifizierer (`guard.js`) ist eine reine Funktion und braucht weder
 OpenCode noch Netzwerk. `replay.mjs` und `analyze.mjs` bleiben im Projekt und
 werden nicht deployt.

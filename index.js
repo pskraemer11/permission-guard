@@ -19,8 +19,8 @@ import { Plugin } from "@opencode/plugin"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { evaluate, mcpCriteria } from "./guard.js"
-import { ensureRunning, loadConfig, review, warmup } from "./reviewer.js"
+import { evaluate, mcpAction, mcpCriteria, mcpVerdict } from "./guard.js"
+import { ensureRunning, loadConfig, review, reviewMcp, warmup } from "./reviewer.js"
 
 const BASE_DIR = path.join(os.tmpdir(), "opencode-permission-guard")
 const LOG_FILE = path.join(BASE_DIR, "guard.log")
@@ -106,16 +106,17 @@ export default Plugin.define({
         try {
           if (!input) return
 
-          // Schritte A und B (29.10. und 04.11.2026): MCP im Schattenmodus
-          // beobachten und nach den vier Kriterien einordnen (principal,
-          // action, resource, context). Die Argumente stehen im Event selbst
-          // (metadata.input; Beweis: mcp.ts Z. 62 meldet sie, kein eingebautes
-          // Werkzeug). Hier wird nur protokolliert, nie geaendert - die
-          // statischen Regeln aus opencode.jsonc entscheiden weiterhin. Der
-          // Zweig laeuft VOR der effect-Pruefung, weil auch "allow"-Aufrufe
-          // (Regel oder gespeicherte Freigabe) fuer die Monitor-Phase
-          // interessant sind. Im Log stehen Feldnamen und Zielarten, nie
-          // Argumentwerte; ein Geheimnisverdacht wird zusaetzlich gemeldet.
+          // Schritte A, B und C (29.10., 04.11.2026): MCP beobachten, nach den
+          // vier Kriterien einordnen (principal, action, resource, context) und
+          // in drei Schichten urteilen. Die Argumente stehen im Event selbst
+          // (metadata.input; Beweis: mcp.ts Z. 62 meldet sie). Ob das Urteil
+          // gilt, entscheidet MCP_GATING_MODE in guard.js - in "shadow" wird
+          // nur protokolliert, die statischen Regeln aus opencode.jsonc
+          // entscheiden weiterhin. Der Zweig laeuft VOR der effect-Pruefung,
+          // weil auch "allow"-Aufrufe (Regel oder gespeicherte Freigabe) fuer
+          // die Monitor-Phase interessant sind. Im Log stehen Feldnamen und
+          // Zielarten, nie Argumentwerte; ein Geheimnisverdacht wird
+          // zusaetzlich gemeldet.
           const crit = mcpCriteria(
             String(input.action ?? ""),
             input.metadata,
@@ -124,6 +125,7 @@ export default Plugin.define({
           )
           if (crit.isMcp) {
             const effect = String(input.effect ?? "unbekannt").toLowerCase()
+            const verdict = mcpVerdict(crit, input.metadata?.input ?? {})
             const argsNote = crit.hasArgs ? `args=${crit.argCount} felder=${crit.fields.join(",") || "-"}` : "keine argumente"
             const notes = [
               `absicht=${crit.action.intent}${crit.action.verb ? `/${crit.action.verb}` : ""}`,
@@ -132,7 +134,28 @@ export default Plugin.define({
             if (crit.context.contentFields.length) notes.push(`inhalt=${crit.context.contentFields.join(",")}`)
             if (crit.context.oversized) notes.push("unanalysierbar")
             if (crit.secret) notes.push("geheimnisverdacht")
+            const plan = mcpAction(effect, verdict)
+            notes.push(plan === "shadow" ? `schatten=${verdict.decision}/${verdict.layer}` : `urteil=${verdict.decision}/${verdict.layer}`)
             debug(`mcp ${effect} ${crit.action.tool} agent=${crit.principal.agent} key=${crit.key} ${argsNote} ${notes.join(" ")}`)
+            if (plan === "shadow" || plan === "keep") return
+
+            // Ebene 3 nur im Graubereich (Absicht unbekannt). Geheimnisverdacht
+            // und unanalysierbare Argumente erreichen das Modell nie.
+            const decided = plan === "model"
+              ? await reviewMcp({ criteria: crit, input: input.metadata?.input ?? {}, project: options.base, config: reviewerConfig })
+              : { decision: plan, reason: verdict.reason }
+
+            if (decided.decision === "allow") {
+              input.effect = "allow"
+              input.message = `permission-guard: MCP ${decided.reason}`
+              debug(`mcp allow (aktiv) ${decided.reason} ${crit.action.tool} key=${crit.key}`)
+            } else if (decided.decision === "deny") {
+              input.effect = "deny"
+              input.message = `permission-guard: MCP ${decided.reason}`
+              debug(`mcp deny (aktiv) ${decided.reason} ${crit.action.tool} key=${crit.key}`)
+            } else {
+              debug(`mcp ask (aktiv) ${decided.reason} ${crit.action.tool} key=${crit.key}`)
+            }
             return
           }
 

@@ -688,32 +688,34 @@ function mcpResourceKind(key, value) {
 // Sammelt Zielarten auch in verschachtelten Objekten (etwa files: [{path}]).
 // Tiefe und Zyklenschutz halten die Auswertung billig; gezaehlt werden nur
 // erkannte Ziele, nicht jeder String.
+function walkMcpValues(value, visit, key = "", depth = 0, seen = new Set()) {
+  if (value === null || value === undefined || depth > 3) return
+  if (typeof value === "string") {
+    visit(key, value)
+    return
+  }
+  if (typeof value !== "object") return
+  if (seen.has(value)) return
+  seen.add(value)
+  if (Array.isArray(value)) {
+    for (const item of value) walkMcpValues(item, visit, key, depth + 1, seen)
+    return
+  }
+  for (const [childKey, childValue] of Object.entries(value)) {
+    walkMcpValues(childValue, visit, childKey, depth + 1, seen)
+  }
+}
+
 function mcpResources(input) {
   const kinds = new Set()
   let count = 0
-  const seen = new Set()
-  const visit = (value, key, depth) => {
-    if (value === null || value === undefined || depth > 3) return
-    if (typeof value === "string") {
-      const kind = mcpResourceKind(key, value)
-      if (kind) {
-        kinds.add(kind)
-        count++
-      }
-      return
+  walkMcpValues(input, (key, value) => {
+    const kind = mcpResourceKind(key, value)
+    if (kind) {
+      kinds.add(kind)
+      count++
     }
-    if (typeof value !== "object") return
-    if (seen.has(value)) return
-    seen.add(value)
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item, key, depth + 1)
-      return
-    }
-    for (const [childKey, childValue] of Object.entries(value)) {
-      visit(childValue, childKey, depth + 1)
-    }
-  }
-  visit(input, "", 0)
+  })
   return { kinds: [...kinds].sort(), count }
 }
 
@@ -776,6 +778,132 @@ export function mcpCriteria(action, metadata, agent, sessionID) {
     oversized,
   }
   return criteria
+}
+
+// --- MCP-Entscheidung in drei Schichten (Schritt C, 04.11.2026) -----------
+//
+// Ebene 2 (Notbremse) laeuft VOR Ebene 1: ein klarer Fall von Zerstoerung
+// wird aktiv verweigert, nicht nur nachgefragt. Ebene 1 beantwortet die
+// eingeordneten Faelle (lesend -> allow, schreibend/loeschend -> ask);
+// bleibt die Absicht unklar, gibt sie "model" zurueck und Ebene 3 (lokales
+// Modell) entscheidet. "unanalysierbar" (zu grosse Argumente) wird bewusst
+// NICHT als destruktiv gewertet - ein Groessenlimit ist kein Fund.
+//
+// Autoritaet: Ebene 2 darf "deny", Ebene 1 "allow"/"ask", Ebene 3 nur
+// "ask" -> "allow" heben. Ein statisches "deny" der Konfiguration wird nie
+// angefasst. Argumentwerte erscheinen in keiner Begruendung.
+const MCP_BRAKE_ACTIONS = [
+  [
+    /(?:^|_)(?:delete|remove)_(?:repository|repo|organization|org|account|user|team|project)(?:_|$)/i,
+    "Loeschen von Repository, Konto oder Organisation",
+  ],
+  [
+    /(?:^|_)(?:wipe|destroy|purge|drop)_(?:all|database|db|repository|repo|organization|account|disk|volume)(?:_|$)/i,
+    "Massenloeschung",
+  ],
+  [/(?:^|_)force(?:_|$)/i, "erzwungene Aenderung"],
+]
+
+// Nur Muster mit hoher Treffsicherheit. Bewusst eng (Regel der Notbremse aus
+// der Recherche): keine Variablenaufloesung, keine Pfadnormalisierung, keine
+// mehrdeutigen Faelle. Alles andere bleibt Ebene 1 und damit Rueckfrage.
+const MCP_BRAKE_ARGS = [
+  [
+    /(?:^|[\s;&|])rm\s+-(?=[a-z]*r)(?=[a-z]*f)[a-z]*\s+(?:\/|~|\$HOME|\*)(?:\s|$|\/)/i,
+    "rekursives Loeschen im Wurzel- oder Home-Verzeichnis",
+  ],
+  [
+    /\bRemove-Item\b[^\n]*-(?:Recurse|Force)[^\n]*(?:[A-Za-z]:[\\/](?:\s|$|["'])|%USERPROFILE%|\$HOME|~(?:\s|$|["']))/i,
+    "rekursives Loeschen eines Laufwerks oder Home-Verzeichnisses",
+  ],
+  [
+    /\b(?:Format-Volume|Clear-Disk|Initialize-Disk)\b|diskpart[^\n]*\bclean\b/i,
+    "Datentraeger formatieren oder loeschen",
+  ],
+  [/:\(\)\s*\{\s*:\|:&\s*\}\s*;\s*:/, "Fork-Bombe"],
+  [
+    /\b(?:curl|wget|Invoke-WebRequest|iwr)\b[^\n|]*\|\s*(?:sh|bash|zsh|pwsh|powershell|iex|Invoke-Expression)\b/i,
+    "Netzinhalt direkt ausfuehren",
+  ],
+]
+
+function mcpBrake(criteria, input) {
+  const normalized = mcpWords(criteria.action.tool).join("_")
+  for (const [rx, reason] of MCP_BRAKE_ACTIONS) {
+    if (rx.test(normalized)) return reason
+  }
+  let hit = ""
+  walkMcpValues(input, (key, value) => {
+    if (hit) return
+    for (const [rx, reason] of MCP_BRAKE_ARGS) {
+      if (rx.test(value)) {
+        hit = reason
+        return
+      }
+    }
+  })
+  return hit
+}
+
+// Liefert { decision, layer, reason }. "model" ist keine Endentscheidung:
+// der Aufrufer befragt dann Ebene 3 und uebernimmt deren Ergebnis.
+export function mcpVerdict(criteria, input) {
+  if (!criteria || !criteria.isMcp) {
+    return { decision: "ask", layer: 1, reason: "kein MCP-Aufruf" }
+  }
+  const context = criteria.context ?? {}
+  const intent = criteria.action?.intent ?? "unknown"
+
+  // Unanalysierbar zuerst: die Notbremse darf aus einem Groessenlimit keinen
+  // "destruktiven" Fund machen (Trennung wie in der Recherche gefordert).
+  if (context.oversized) {
+    return { decision: "ask", layer: 1, reason: "unanalysierbar (zu grosse Argumente)" }
+  }
+
+  const brake = mcpBrake(criteria, input)
+  if (brake) return { decision: "deny", layer: 2, reason: `Notbremse: ${brake}` }
+
+  if (context.secret) {
+    return { decision: "ask", layer: 1, reason: "Geheimnisverdacht in den Argumenten" }
+  }
+  if (context.emptyArgs) {
+    return { decision: "ask", layer: 1, reason: "keine Argumente" }
+  }
+  if (intent === "read") {
+    return { decision: "allow", layer: 1, reason: `nur lesend (${criteria.action?.verb || "read"})` }
+  }
+  if (intent === "write") {
+    return { decision: "ask", layer: 1, reason: `schreibend oder oeffentlich (${criteria.action?.verb || "write"})` }
+  }
+  if (intent === "destructive") {
+    return { decision: "ask", layer: 1, reason: `loeschend (${criteria.action?.verb || "delete"})` }
+  }
+  return { decision: "model", layer: 3, reason: "Absicht nicht einordenbar" }
+}
+
+// Schalter fuer die MCP-Entscheidung (Schritt C, 04.11.2026).
+//
+// "shadow" (Vorgabe): urteilen, protokollieren, nichts aendern.
+// "active":           Urteil auf Aufrufe anwenden, die die statischen Regeln
+//                     mit "ask" beantworten. "allow"/"deny" der Konfiguration
+//                     und gespeicherte Freigaben werden nie angefasst.
+//
+// Bewusst ein Quelltext-Schalter statt einer Umgebungsvariablen: Aktivieren
+// ist ein eigener, pruefbarer Schritt (Testregime E vorher gruen), kein
+// Zustand, den ein Terminal vergisst. Umschalten heisst: hier aendern, Tests
+// laufen lassen, deployen - dieselbe Kette wie jede andere Plugin-Aenderung.
+export const MCP_GATING_MODE = "shadow"
+
+// Was mit einem Urteil geschehen soll. "shadow" und "keep" bedeuten "nichts
+// tun"; "model" bedeutet "Ebene 3 befragen, deren Ergebnis uebernehmen".
+export function mcpAction(effect, verdict, mode = MCP_GATING_MODE) {
+  if (mode !== "active") return "shadow"
+  if (String(effect ?? "").toLowerCase() !== "ask") return "keep"
+  const decision = verdict?.decision
+  if (decision === "allow") return "allow"
+  if (decision === "deny") return "deny"
+  if (decision === "model") return "model"
+  return "ask"
 }
 
 function hasWriteVerb(script) {
