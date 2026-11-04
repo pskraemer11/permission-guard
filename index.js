@@ -19,7 +19,7 @@ import { Plugin } from "@opencode/plugin"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { evaluate, mcpObservation } from "./guard.js"
+import { evaluate, mcpCriteria } from "./guard.js"
 import { ensureRunning, loadConfig, review, warmup } from "./reviewer.js"
 
 const BASE_DIR = path.join(os.tmpdir(), "opencode-permission-guard")
@@ -106,23 +106,33 @@ export default Plugin.define({
         try {
           if (!input) return
 
-          // Schritt A (29.10.2026): MCP im Schattenmodus beobachten. Die
-          // Argumente stehen im Event selbst (metadata.input; Beweis:
-          // mcp.ts Z. 62 meldet sie, kein eingebautes Werkzeug). Hier wird
-          // nur protokolliert, nie geaendert - die statischen Regeln aus
-          // opencode.jsonc entscheiden weiterhin. Der Zweig laeuft VOR der
-          // effect-Pruefung, weil auch "allow"-MCP-Aufrufe (Regel oder
-          // gespeicherte Freigabe) fuer die Monitor-Phase interessant sind.
-          // Log faellt auf Argument-FELDNAMEN zurueck (Schema, keine
-          // Nutzerdaten); ein Verdacht auf Geheimnisse im Argument-Text
-          // wird gemeldet, der Text selbst nie.
-          const obs = mcpObservation(String(input.action ?? ""), input.metadata)
-          if (obs.isMcp) {
+          // Schritte A und B (29.10. und 04.11.2026): MCP im Schattenmodus
+          // beobachten und nach den vier Kriterien einordnen (principal,
+          // action, resource, context). Die Argumente stehen im Event selbst
+          // (metadata.input; Beweis: mcp.ts Z. 62 meldet sie, kein eingebautes
+          // Werkzeug). Hier wird nur protokolliert, nie geaendert - die
+          // statischen Regeln aus opencode.jsonc entscheiden weiterhin. Der
+          // Zweig laeuft VOR der effect-Pruefung, weil auch "allow"-Aufrufe
+          // (Regel oder gespeicherte Freigabe) fuer die Monitor-Phase
+          // interessant sind. Im Log stehen Feldnamen und Zielarten, nie
+          // Argumentwerte; ein Geheimnisverdacht wird zusaetzlich gemeldet.
+          const crit = mcpCriteria(
+            String(input.action ?? ""),
+            input.metadata,
+            input.agent,
+            input.sessionID,
+          )
+          if (crit.isMcp) {
             const effect = String(input.effect ?? "unbekannt").toLowerCase()
-            const agent = String(input.agent ?? "unbekannt")
-            const argsNote = obs.hasArgs ? `args=${obs.argCount} felder=${obs.fields.join(",") || "-"}` : "keine argumente"
-            const note = obs.secret ? " geheimnisverdacht" : ""
-            debug(`mcp ${effect} ${obs.action} agent=${agent} key=${obs.key} ${argsNote}${note}`)
+            const argsNote = crit.hasArgs ? `args=${crit.argCount} felder=${crit.fields.join(",") || "-"}` : "keine argumente"
+            const notes = [
+              `absicht=${crit.action.intent}${crit.action.verb ? `/${crit.action.verb}` : ""}`,
+              `ziel=${crit.resource.kinds.join("+") || "keins"}`,
+            ]
+            if (crit.context.contentFields.length) notes.push(`inhalt=${crit.context.contentFields.join(",")}`)
+            if (crit.context.oversized) notes.push("unanalysierbar")
+            if (crit.secret) notes.push("geheimnisverdacht")
+            debug(`mcp ${effect} ${crit.action.tool} agent=${crit.principal.agent} key=${crit.key} ${argsNote} ${notes.join(" ")}`)
             return
           }
 

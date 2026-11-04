@@ -1,5 +1,5 @@
 // Testtabelle fuer guard.js. Ausfuehren mit: node test.mjs
-import { evaluate, mcpObservation } from "./guard.js"
+import { evaluate, mcpCriteria, mcpObservation } from "./guard.js"
 import { buildMessages, neverAutoApprove, parseAnswer, segments } from "./reviewer.js"
 import { parseLine, summarize } from "./stats.mjs"
 
@@ -688,6 +688,88 @@ for (const [name, ok] of mcpSecChecks) {
 }
 console.log("-- MCP: Geheimnisverdacht\n")
 
+// --- MCP-Kriterien (Schritt B, 04.11.2026) ---
+// Vier Kriterien nach dem Plan: principal (wer), action (Absicht aus dem
+// Werkzeugnamen), resource (Zielarten aus den Argumenten), context
+// (Argumentform: leer, Inhalt, Groesse, Geheimnisverdacht). Die Funktion
+// entscheidet weiterhin nichts; sie ordnet nur ein.
+const mcpCritIntents = [
+  ["exa_web_search_exa", "read", "search"],
+  ["exa_web_fetch_exa", "read", "fetch"],
+  ["exa_deep_researcher_start", "write", "start"],
+  ["github_get_issue", "read", "get"],
+  ["github_list_issues", "read", "list"],
+  ["github_create_issue", "write", "create"],
+  ["github_create_or_update_file", "write", "create"],
+  ["github_delete_repository", "destructive", "delete"],
+  ["firecrawl_scrape", "read", "scrape"],
+  ["firecrawl_monitor_run", "write", "run"],
+  ["firecrawl_monitor_delete", "destructive", "delete"],
+  ["gh_grep_searchGitHub", "read", "search"],
+  ["deepwiki_read_wiki_structure", "read", "read"],
+  ["irgendein_werkzeug", "unknown", ""],
+]
+const mcpCritIntentChecks = mcpCritIntents.map(([tool, intent, verb]) => {
+  const got = mcpCriteria(tool, { input: { x: 1 } }, "build").action
+  return [`${tool}: ${intent}/${verb || "-"}`, got.intent === intent && got.verb === verb]
+})
+
+// Zielarten: Form vor Feldname. Gezaehlt werden nur erkannte Ziele, und die
+// Arten sind sortiert, damit die Ausgabe stabil bleibt.
+const mcpCritResources = [
+  ["exa_web_search_exa", { input: { query: "x", objective: "y" } }, ["query"], 2],
+  ["exa_web_fetch_exa", { input: { urls: ["https://a", "https://b"] } }, ["url"], 2],
+  ["firecrawl_scrape", { input: { url: "https://x" } }, ["url"], 1],
+  ["github_get_issue", { input: { owner: "a", repo: "b", issue_number: 1 } }, ["repo"], 1],
+  ["custom_tool", { input: { path: "C:\\Projekt\\x.py" } }, ["path"], 1],
+  ["custom_tool", { input: { file: "~/x.txt" } }, ["path"], 1],
+  ["custom_tool", { input: { query: "x", path: "C:\\x" } }, ["path", "query"], 2],
+  ["custom_tool", { input: { unbekannt: "wert" } }, [], 0],
+  ["custom_tool", { input: {} }, [], 0],
+]
+const mcpCritResourceChecks = mcpCritResources.map(([tool, metadata, kinds, count]) => {
+  const got = mcpCriteria(tool, metadata).resource
+  return [
+    `${tool}: ziel=${kinds.join("+") || "keins"}`,
+    got.kinds.join(",") === kinds.join(",") && got.count === count,
+  ]
+})
+
+const cIssue = mcpCriteria(
+  "github_create_issue",
+  { input: { owner: "a", repo: "b", title: "GEHEIMWERT-T", body: "GEHEIMWERT-B" } },
+  "build",
+  "ses_1",
+)
+const cGet = mcpCriteria("github_get_issue", { input: { owner: "a", repo: "b", issue_number: 2 } }, "build")
+const cEmpty = mcpCriteria("firecrawl_scrape", { input: {} }, "build")
+const cBig = mcpCriteria("github_create_issue", { input: { title: "x", body: "y".repeat(20000) } }, "build")
+const cSecret = mcpCriteria("github_create_issue", { input: { title: "x", body: "token abc" } }, "build")
+const cNonMcp = mcpCriteria("question", { question: "x?" })
+const cIssueJson = JSON.stringify(cIssue)
+const mcpCritChecks = [
+  ["principal: Agent uebernommen", cIssue.principal.agent === "build"],
+  ["principal: Sitzung erkannt", cIssue.principal.session === true && cGet.principal.session === false],
+  ["principal: ohne Agent unbekannt", mcpCriteria("x_get", { input: {} }).principal.agent === "unbekannt"],
+  ["principal: Agent bereinigt", mcpCriteria("x_get", { input: {} }, "build\nX").principal.agent === "buildX"],
+  ["context: Inhaltsfelder erkannt", cIssue.context.contentFields.join(",") === "body,title"],
+  ["context: Lesen ohne Inhaltsfelder", cGet.context.contentFields.length === 0],
+  ["context: leere Argumente", cEmpty.context.emptyArgs === true && cEmpty.context.argCount === 0],
+  ["context: Argumentanzahl", cGet.context.argCount === 3],
+  ["context: grosse Argumente als unanalysierbar", cBig.context.oversized === true],
+  ["context: kleine Argumente nicht unanalysierbar", cGet.context.oversized === false],
+  ["context: Geheimnisverdacht", cSecret.context.secret === true && cSecret.secret === true],
+  ["keine Argumentwerte in den Kriterien", !cIssueJson.includes("GEHEIMWERT")],
+  ["Schluessel wie in der Beobachtung", cIssue.key === mcpObservation("github_create_issue", { input: { owner: "a", repo: "b", title: "GEHEIMWERT-T", body: "GEHEIMWERT-B" } }).key],
+  ["kein MCP: leere Kriterien", cNonMcp.isMcp === false && cNonMcp.resource.count === 0 && cNonMcp.action.intent === "unknown"],
+]
+for (const [name, ok] of [...mcpCritIntentChecks, ...mcpCritResourceChecks, ...mcpCritChecks]) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- MCP: Kriterien (Schritt B)\n")
+
+
 const segCount = segments("Get-ChildItem\nRemove-Item x").length
 if (segCount !== 2) failed++
 console.log(`${segCount === 2 ? "ok  " : "FAIL"}  ${String(segCount).padEnd(5)} (2    )  Segmentierung nach Zeilenumbruch`)
@@ -730,6 +812,7 @@ const total =
   net.length + denyForms.length + py.length + interp.length +
   ruffConfigBootstrap.length +
   mcpObs.length + mcpKeys.length + mcpSecChecks.length +
+  mcpCritIntentChecks.length + mcpCritResourceChecks.length + mcpCritChecks.length +
   reviewerRisky.length + reviewerNoise.length + reviewerParsing.length + statsChecks.length + 3
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

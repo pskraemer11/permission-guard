@@ -534,6 +534,43 @@ Timeout stehen in `shell-reviewer.config.json` (beim Deploy aus
 Prüfen lässt sich das im Guard-Log: Zeitstempel der letzten `setup:`-Zeile
 gegen die Änderungszeit der Konfigurationsdatei halten.
 
+## MCP: Schattenmodus (Schritte A und B, 29.10. und 04.11.2026)
+
+MCP-Aufrufe werden seit Schritt A **nur protokolliert**, nie beeinflusst: Der
+Zweig läuft vor jeder Shell-Prüfung, ändert `input.effect` nicht, und die
+statischen Regeln aus `opencode.jsonc` entscheiden weiterhin. Schritt B ordnet
+jede Anfrage zusätzlich nach den vier Kriterien des Plans ein:
+
+| Kriterium | Quelle | Ausgabe im Log (nie Werte) |
+| --- | --- | --- |
+| principal | `agent`, `sessionID` | `agent=build`, Sitzung nur als Ja/Nein |
+| action | Werkzeugname, in Wörter zerlegt | `absicht=read/write/destructive/unknown` plus Verb |
+| resource | Argumente, Form vor Feldname | `ziel=url/path/repo/query` (sortiert, gezählt) |
+| context | Argumentform | `inhalt=body,title`, `unanalysierbar`, `geheimnisverdacht` |
+
+Beispielzeile:
+
+```text
+mcp ask exa_web_search_exa agent=build key=exa_web_search_exa#1a2b3c4d5e6f7a8b args=3 felder=query,numResults,objective absicht=read/search ziel=query
+```
+
+Regeln des Katalogs:
+
+- Der **schwerste Treffer gewinnt**: `delete` schlägt `search`, `write` schlägt
+  `read`. Bleibt kein Verb übrig, ist die Absicht `unknown` — Schritt C macht
+  daraus eine Rückfrage, nie eine Freigabe (fail closed).
+- Zielarten kommen aus der **Form** (`https://…` → `url`, `C:\…` → `path`) und
+  erst danach aus dem Feldnamen. Verschachtelte Argumente (etwa
+  `files: [{ path }]`) werden bis Tiefe 3 mitgezählt.
+- Große Argumente (> 16 KB) gelten als `unanalysierbar` — getrennt von
+  „destruktiv", damit ein Größenlimit nie als Fund missverstanden wird.
+- Argumentwerte verlassen die Funktion nicht; im Log stehen nur Feldnamen,
+  Zielarten und Zählungen.
+
+Der Katalog ist die Vorbereitung für Schritt C (feste Regeln, Notbremse,
+lokales Modell). Solange C nicht aktiv ist, gilt unverändert: MCP-Server ohne
+explizite `permissions`-Regel fragen nach.
+
 ## Grenzen
 
 - **Kein Sandboxing.** Ein erlaubter Befehl läuft mit deinen Rechten. Das Plugin
@@ -607,9 +644,11 @@ node replay.mjs                 # Messung: wie viele Befehle laufen ohne Rueckfr
 node analyze.mjs                # Punkt-8-Analyse: Woher genau kommt "nicht einordenbar"
 ```
 
-275 Fälle in neun Gruppen (ohne/mit Projektbezug, CLI-Allowlists, Hilfe und
-Version, gitleaks, Netz-Lesen, Verweigerung & Geheimnis-Ersetzung, python,
-Interpreters), Exitcode 1 bei Abweichung.
+453 Fälle in den Gruppen ohne/mit Projektbezug, CLI-Allowlists, Hilfe und
+Version, gitleaks, sqlite3/gh, Netz-Lesen, Verweigerung & Geheimnis-Ersetzung,
+python, Interpreters, Ruff-Bootstrap, Reviewer (Risikoliste, Fehlalarme,
+Antwortformat, Aufbau), MCP (Erkennung, Schlüssel, Geheimnisverdacht,
+Kriterien) und Statistik. Exitcode 1 bei Abweichung.
 Der Klassifizierer (`guard.js`) ist eine reine Funktion und braucht weder
 OpenCode noch Netzwerk. `replay.mjs` und `analyze.mjs` bleiben im Projekt und
 werden nicht deployt.

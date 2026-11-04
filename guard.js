@@ -576,6 +576,208 @@ export function mcpObservation(action, metadata) {
   return out
 }
 
+// --- MCP-Kriterienkatalog (Schritt B, 04.11.2026) -------------------------
+//
+// Ordnet eine MCP-Anfrage nach den vier Kriterien principal / action /
+// resource / context ein und entscheidet weiterhin nichts (Schattenmodus wie
+// Schritt A). Grundlage sind ausschliesslich das Berechtigungs-Ereignis und
+// die Argument-FELDNAMEN; Werte werden nur auf ihre Form geprueft (URL, Pfad,
+// Repository, Suchtext) und nie ausgegeben.
+//
+// Fail closed: Laesst sich die Absicht nicht aus dem Werkzeugnamen ableiten,
+// bleibt sie "unknown". Erst Schritt C darf daraus eine Entscheidung machen;
+// "unknown" fuehrt dort zur Rueckfrage, nie zur Freigabe.
+const MCP_READ_VERBS = new Set([
+  "get", "list", "search", "fetch", "read", "find", "query", "view", "show",
+  "status", "structure", "contents", "content", "preview", "inspect",
+  "describe", "lookup", "download", "scrape", "map", "crawl", "extract",
+  "research", "check", "ask", "count", "stats", "info", "details", "history",
+  "log", "logs", "resolve",
+])
+
+const MCP_WRITE_VERBS = new Set([
+  "create", "update", "edit", "patch", "write", "add", "set", "move",
+  "rename", "copy", "fork", "star", "unstar", "lock", "unlock", "assign",
+  "unassign", "request", "approve", "submit", "comment", "reply", "send",
+  "post", "publish", "push", "upload", "install", "run", "execute", "invoke",
+  "call", "manage", "register", "enable", "disable", "configure", "start",
+  "stop", "restart", "cancel", "resume", "sleep", "terminate", "archive",
+  "unarchive", "grant", "revoke", "invite", "transfer", "pay", "purchase",
+  "buy", "tag", "release", "deploy",
+])
+
+// Loeschen und Zerstoeren steht ueber Schreiben: ein Name mit "search" und
+// "delete" ist eine Loeschung, nicht eine Suche.
+const MCP_DESTRUCTIVE_VERBS = new Set([
+  "delete", "remove", "drop", "purge", "wipe", "destroy", "erase",
+  "truncate", "clear", "reset", "kill", "uninstall", "force",
+])
+
+// Felder, deren Inhalt veroeffentlicht oder an ein Ziel geschickt wird. Nur
+// die Namen zaehlen; der Inhalt selbst wird nie gelesen oder geloggt.
+const MCP_CONTENT_FIELDS = new Set([
+  "body", "content", "message", "comment", "text", "title", "description",
+  "markdown",
+])
+
+const MCP_URL_FIELDS = new Set([
+  "url", "urls", "uri", "link", "href", "site", "website", "endpoint",
+  "webhook",
+])
+const MCP_PATH_FIELDS = new Set([
+  "path", "file", "filename", "filepath", "file_path", "directory", "dir",
+  "folder", "cwd", "workdir", "output",
+])
+const MCP_REPO_FIELDS = new Set([
+  "repo", "repository", "reponame", "repo_name", "full_name", "fullname",
+])
+const MCP_QUERY_FIELDS = new Set([
+  "query", "q", "search", "term", "prompt", "question", "keyword",
+  "keywords", "objective", "pattern", "regex", "topic",
+])
+
+// Zerlegt den Werkzeugnamen in Woerter: "gh_grep_searchGitHub" ->
+// ["gh", "grep", "search", "git", "hub"].
+function mcpWords(action) {
+  return String(action ?? "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((word) => word.toLowerCase())
+}
+
+// Rangfolge unknown < read < write < destructive. Der schwerste Treffer
+// gewinnt, der zugehoerige Verb wird fuer die Begruendung mitgefuehrt.
+function mcpIntent(words) {
+  const rank = { unknown: 0, read: 1, write: 2, destructive: 3 }
+  let intent = "unknown"
+  let verb = ""
+  for (const word of words) {
+    let kind = ""
+    if (MCP_DESTRUCTIVE_VERBS.has(word)) kind = "destructive"
+    else if (MCP_WRITE_VERBS.has(word)) kind = "write"
+    else if (MCP_READ_VERBS.has(word)) kind = "read"
+    if (!kind) continue
+    if (rank[kind] > rank[intent]) {
+      intent = kind
+      verb = word
+    } else if (!verb) {
+      verb = word
+    }
+  }
+  return { intent, verb }
+}
+
+// Zielart eines Arguments. Die Form entscheidet zuerst (eine URL bleibt eine
+// URL, auch wenn das Feld anders heisst), dann der Feldname.
+function mcpResourceKind(key, value) {
+  const field = String(key ?? "").toLowerCase()
+  const text = String(value)
+  if (/^(?:https?|ftp|wss?):\/\//i.test(text)) return "url"
+  if (/^[A-Za-z]:[\\/]/.test(text)) return "path"
+  if (/^\\\\/.test(text)) return "path"
+  if (/^~[\\/]/.test(text)) return "path"
+  if (/^\.{1,2}[\\/]/.test(text)) return "path"
+  if (MCP_URL_FIELDS.has(field)) return "url"
+  if (MCP_PATH_FIELDS.has(field)) return "path"
+  if (MCP_REPO_FIELDS.has(field)) return "repo"
+  if (MCP_QUERY_FIELDS.has(field)) return "query"
+  return ""
+}
+
+// Sammelt Zielarten auch in verschachtelten Objekten (etwa files: [{path}]).
+// Tiefe und Zyklenschutz halten die Auswertung billig; gezaehlt werden nur
+// erkannte Ziele, nicht jeder String.
+function mcpResources(input) {
+  const kinds = new Set()
+  let count = 0
+  const seen = new Set()
+  const visit = (value, key, depth) => {
+    if (value === null || value === undefined || depth > 3) return
+    if (typeof value === "string") {
+      const kind = mcpResourceKind(key, value)
+      if (kind) {
+        kinds.add(kind)
+        count++
+      }
+      return
+    }
+    if (typeof value !== "object") return
+    if (seen.has(value)) return
+    seen.add(value)
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, key, depth + 1)
+      return
+    }
+    for (const [childKey, childValue] of Object.entries(value)) {
+      visit(childValue, childKey, depth + 1)
+    }
+  }
+  visit(input, "", 0)
+  return { kinds: [...kinds].sort(), count }
+}
+
+// Inhaltsfelder mit tatsaechlichem Inhalt - nur Namen, keine Werte.
+function mcpContentFields(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return []
+  const fields = []
+  for (const [key, value] of Object.entries(input)) {
+    if (!MCP_CONTENT_FIELDS.has(key.toLowerCase())) continue
+    const filled =
+      (typeof value === "string" && value.trim().length > 0) ||
+      (Array.isArray(value) && value.length > 0)
+    if (filled) fields.push(key)
+  }
+  return fields.sort()
+}
+
+// Kriterienkatalog: principal (wer), action (was), resource (wohin),
+// context (unter welchen Bedingungen). Keine Entscheidung, keine Werte.
+export function mcpCriteria(action, metadata, agent, sessionID) {
+  const obs = mcpObservation(action, metadata)
+  const label = String(agent ?? "").replace(/[^\w.-]/g, "").slice(0, 40) || "unbekannt"
+  const criteria = {
+    isMcp: obs.isMcp,
+    key: obs.key,
+    argHash: obs.argHash,
+    argCount: obs.argCount,
+    fields: obs.fields,
+    hasArgs: obs.hasArgs,
+    secret: obs.secret,
+    principal: { agent: label, session: Boolean(sessionID) },
+    action: { tool: obs.action, verb: "", intent: "unknown" },
+    resource: { kinds: [], count: 0 },
+    context: {
+      emptyArgs: !obs.hasArgs,
+      argCount: obs.argCount,
+      contentFields: [],
+      secret: obs.secret,
+      oversized: false,
+    },
+  }
+  if (!obs.isMcp) return criteria
+
+  const input = metadata.input
+  const { intent, verb } = mcpIntent(mcpWords(obs.action))
+  let oversized = false
+  try {
+    oversized = JSON.stringify(input ?? {}).length > 16384
+  } catch {
+    // Nicht serialisierbar: wie "zu gross" behandeln (unanalysierbar).
+    oversized = true
+  }
+  criteria.action = { tool: obs.action, verb, intent }
+  criteria.resource = mcpResources(input)
+  criteria.context = {
+    emptyArgs: !obs.hasArgs,
+    argCount: obs.argCount,
+    contentFields: mcpContentFields(input),
+    secret: obs.secret,
+    oversized,
+  }
+  return criteria
+}
+
 function hasWriteVerb(script) {
   for (const rx of WRITE_VERBS) {
     const m = rx.exec(script)
