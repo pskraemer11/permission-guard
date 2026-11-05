@@ -13,6 +13,11 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Globale MCP-Beobachtung (05.11.2026):** Der globale Plugin-Kontext
+  (Basis = Benutzerprofil) registriert jetzt nur den MCP-Zweig. Shell-Regeln
+  bleiben auf den Projektkontext beschränkt; `contextScope()` kapselt die
+  Grenze, drei Tests decken Home, Projekt und ähnliche Namen ab. 521/521
+  bestanden, deployt. `MCP_GATING_MODE` bleibt `"shadow"`.
 - **S0 Sanitizing (05.11.2026):** Fixtures in `mcp-cases.jsonl` auf `team` und
   `lumen` umgestellt. Die Erwartungen (`want`, `layer`, `why`) blieben
   unverändert; `bench-mcp.mjs` meldet weiter 33/33.

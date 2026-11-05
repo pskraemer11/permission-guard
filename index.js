@@ -19,7 +19,7 @@ import { Plugin } from "@opencode/plugin"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { evaluate, mcpAction, mcpCriteria, mcpVerdict } from "./guard.js"
+import { MCP_GATING_MODE, contextScope, evaluate, mcpAction, mcpCriteria, mcpVerdict } from "./guard.js"
 import { ensureRunning, loadConfig, review, reviewMcp, warmup } from "./reviewer.js"
 
 const BASE_DIR = path.join(os.tmpdir(), "opencode-permission-guard")
@@ -93,13 +93,11 @@ export default Plugin.define({
     const options = guardOptions(ctx)
     const reviewerConfig = loadConfig()
     // OpenCode laedt globale Plugins zusaetzlich ohne Projektbezug (Basis ist
-    // dann das Benutzerprofil). Wuerde dieser Kontext mitregistrieren, waere
-    // das gesamte Profil vertraut - deshalb nur der Projektkontext.
-    if (path.resolve(options.base).toLowerCase() === path.resolve(os.homedir()).toLowerCase()) {
-      debug("setup: globaler Kontext ohne Projekt - keine Registrierung")
-      return
-    }
-    debug(`setup: base=${options.base}`)
+    // dann das Benutzerprofil). Dieser Kontext registriert nur den MCP-Zweig:
+    // Shell-Pfade im ganzen Profil als vertraut zu behandeln waere zu weit.
+    // Die MCP-Beobachtung ist davon unabhaengig und soll auch dort laufen.
+    const homeContext = contextScope(options.base, os.homedir()) === "mcp"
+    debug(homeContext ? "setup: globaler Kontext - nur MCP-Beobachtung" : `setup: base=${options.base}`)
 
     try {
       await hook("evaluate", async (input) => {
@@ -161,6 +159,10 @@ export default Plugin.define({
             return
           }
 
+          // Im globalen Kontext endet die Pruefung hier: Nur MCP wird
+          // beobachtet, Shell-Befehle bleiben bei den statischen Regeln.
+          if (homeContext) return
+
           if (String(input.effect ?? "").toLowerCase() !== "ask") return
           if (!SHELL_ACTIONS.has(String(input.action ?? "").toLowerCase())) return
 
@@ -202,13 +204,17 @@ export default Plugin.define({
         }
       })
       console.log(
-        `[permission-guard] aktiv - Lesen und Schreiben im Projekt laufen ohne Rueckfrage; Ebene 1 Reviewer ${reviewerConfig.enabled ? `an (${reviewerConfig.model} @ ${reviewerConfig.baseUrl})` : "aus"}`,
+        homeContext
+          ? "[permission-guard] aktiv - globaler Kontext: MCP-Beobachtung; Shell-Regeln nur im Projekt"
+          : `[permission-guard] aktiv - Lesen und Schreiben im Projekt laufen ohne Rueckfrage; Ebene 1 Reviewer ${reviewerConfig.enabled ? `an (${reviewerConfig.model} @ ${reviewerConfig.baseUrl})` : "aus"}`,
       )
       // Serverstart und Aufwaermlauf im Hintergrund: OpenCode oeffnet sich, der
       // Reviewer soll ohne Zutun bereitstehen, und die erste echte Entscheidung
       // soll den Kaltstart nicht bezahlen. Bewusst nicht awaited, damit die
-      // Registrierung oben nicht auf ein langsames Backend wartet.
-      void ensureRunning(reviewerConfig)
+      // Registrierung oben nicht auf ein langsames Backend wartet. Im globalen
+      // Kontext wird der Reviewer nur fuer den aktiven MCP-Modus gebraucht;
+      // im Schattenmodus waere ein 12B-Kaltstart ohne Nutzen.
+      if (!homeContext || MCP_GATING_MODE === "active") void ensureRunning(reviewerConfig)
         .then((s) => {
           const state = s.already ? "lief bereits" : s.started ? `gestartet (Port ${s.port})` : "nicht gestartet"
           debug(`setup: Server ${state}${s.reason ? ` (${s.reason})` : ""}`)

@@ -1,5 +1,5 @@
 // Testtabelle fuer guard.js. Ausfuehren mit: node test.mjs
-import { evaluate, mcpAction, mcpCriteria, mcpObservation, mcpVerdict } from "./guard.js"
+import { contextScope, evaluate, mcpAction, mcpCriteria, mcpObservation, mcpVerdict } from "./guard.js"
 import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMcpAnswer, reviewMcp, segments } from "./reviewer.js"
 import { parseLine, summarize } from "./stats.mjs"
 
@@ -983,6 +983,16 @@ const statsRows = [
   "2026-10-25T10:00:04.000Z setup: base=C:\\p",
 ].map(parseLine)
 const stats = summarize(statsRows, { top: 5 })
+const scopeChecks = [
+  ["Home-Kontext nur MCP", contextScope("C:\\Users\\x", "c:\\users\\x\\") === "mcp"],
+  ["Projektkontext voll", contextScope("C:\\Users\\x\\projekt", "C:\\Users\\x") === "full"],
+  ["aehnlicher Name bleibt Projekt", contextScope("C:\\Users\\x2", "C:\\Users\\x") === "full"],
+]
+for (const [name, ok] of scopeChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+
 const statsChecks = [
   ["allow gezaehlt", stats.decisions.allow === 2],
   ["ask gezaehlt", stats.decisions.ask === 1],
@@ -1007,6 +1017,6 @@ const total =
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
-  reviewerRisky.length + reviewerNoise.length + reviewerParsing.length + statsChecks.length + 3
+  reviewerRisky.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + 3
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

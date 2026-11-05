@@ -1012,6 +1012,15 @@ export function mcpVerdict(criteria, input) {
 // laufen lassen, deployen - dieselbe Kette wie jede andere Plugin-Aenderung.
 export const MCP_GATING_MODE = "shadow"
 
+// Welche Regeln darf ein Plugin-Kontext registrieren? Der globale Kontext
+// (Basis = Benutzerprofil) darf nur MCP beobachten. Wuerde er die Shell-
+// Regeln mitregistrieren, waere das gesamte Profil vertraut. Reine Funktion,
+// damit die Grenze ohne OpenCode testbar bleibt.
+export function contextScope(base, home) {
+  const norm = (value) => String(value ?? "").replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
+  return norm(base) === norm(home) ? "mcp" : "full"
+}
+
 // Was mit einem Urteil geschehen soll. "shadow" und "keep" bedeuten "nichts
 // tun"; "model" bedeutet "Ebene 3 befragen, deren Ergebnis uebernehmen".
 export function mcpAction(effect, verdict, mode = MCP_GATING_MODE) {
