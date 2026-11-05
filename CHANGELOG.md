@@ -32,6 +32,12 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   `--verify` nach, damit kein veralteter Stand hinausgeht, und `--refresh`
   meldet neue Skills als `neu aufgenommen (ohne Bericht): <name>`. Dreizehn
   Hook-Fälle und elf Werkzeugfälle in einem temporären Repo geprüft.
+- **Ebene 3 als Entscheidungsmodell (05.11.2026):** `mcpBackend: "systemone"`
+  befragt `/v1/systemone` statt Text zu erzeugen; `mcpThreshold` (0,7)
+  entscheidet über die Wahrscheinlichkeit für „reads". Gemessen mit Clef-Flash
+  (Q4_K_M, 6,3 GB): 14/14, Rückfrage ≤ 0,458 gegen Freigabe ≥ 0,884, 75 ms;
+  Gate 33/33 und 3/3. Laya (421M) verworfen (8/14). Das Audit speichert die
+  Wahrscheinlichkeit. 13 neue Tests (570/570).
 - **Ebene-3-Prompt (05.11.2026):** Kompakte Fassung mit vier Beispielen; das
   Modell sieht jetzt nur noch Regel, Werkzeug, Absicht, Zielarten und Argumente.
   Messreihe `bench-model.mjs` mit 14 Graubereich-Fällen (`mcp-model-cases.jsonl`):

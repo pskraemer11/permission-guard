@@ -776,6 +776,28 @@ verschob 12/14 auf 11/14 und das Graubereich-Gate von 3/3 auf 2/3. Die
 Formulierung ist deshalb festgeschrieben und durch Tests geschützt; Änderungen
 nur mit erneuter Messung.
 
+#### Zwei Backends für Ebene 3
+
+`mcpBackend` wählt den Weg:
+
+| Wert | Weg | Gemessen (14 Graubereich-Fälle) |
+| --- | --- | --- |
+| `chat` (Standard) | `chat/completions`, Antwortwort mit Grammatik | 12/14 bei 12B, 13/14 bei 26B |
+| `systemone` | `/v1/systemone`, Entscheidungsmodell liefert Wahrscheinlichkeit | **14/14** mit Clef-Flash, 75 ms |
+
+Im `systemone`-Modus entfällt der Prompt: Der Zustand ist `{tool, arguments}`,
+die Frage eine `choice` zwischen „reads" und „changes", und `mcpThreshold`
+(Standard 0,7) entscheidet. Gemessen mit Clef-Flash (`Q4_K_M`, 6,3 GB):
+Rückfrage-Fälle ≤ 0,458, Freigabe-Fälle ≥ 0,884 — die Trennung ist der Beleg,
+nicht die Trefferquote. Laya (421M) scheidet aus: 8/14, Wahrscheinlichkeiten
+0,09–0,60 ohne Ordnung. Das feste Gate bleibt in beiden Modi 33/33 und 3/3.
+
+```jsonc
+"mcpBackend": "systemone",
+"mcpThreshold": 0.7,
+"baseUrl": "http://127.0.0.1:8082/v1"
+```
+
 ### Schritt E: Testregime vor der Aktivierung
 
 `bench-mcp.mjs` prüft das Urteil gegen `mcp-cases.jsonl`: **33 Aufrufe mit

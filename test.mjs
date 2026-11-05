@@ -3,6 +3,7 @@ import { contextScope, evaluate, mcpAction, mcpCriteria, mcpObservation, mcpVerd
 import { appendRecord, canonicalJson, hashRecord, parseLines, verifyChain } from "./audit.js"
 import { summarizeAudit } from "./mcp-report.mjs"
 import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMcpAnswer, reviewMcp, segments } from "./reviewer.js"
+import { buildSystemoneRequest, systemoneVerdict } from "./reviewer.js"
 import { parseLine, summarize } from "./stats.mjs"
 import { createHash } from "node:crypto"
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
@@ -1172,6 +1173,32 @@ for (const [name, ok] of reportChecks) {
 }
 console.log("-- F: Auswertung\n")
 
+// --- Ebene 3 als Entscheidungsmodell (systemone) ---
+const systemoneChecks = []
+{
+  const criteria = mcpCriteria("acme_catalog", { input: { sku: "A-1" } }, "build")
+  const request = buildSystemoneRequest({ criteria, input: { sku: "A-1" }, model: "clef" })
+  systemoneChecks.push(["Request traegt Modell", request.model === "clef"])
+  systemoneChecks.push(["State nennt Werkzeug und Argumente", request.state.tool === "acme_catalog" && request.state.arguments.sku === "A-1"])
+  systemoneChecks.push(["eine choice-Frage mit zwei Optionen", request.questions.effect.type === "choice" && Object.keys(request.questions.effect.criteria).join(",") === "reads,changes"])
+
+  systemoneChecks.push(["p=0.9 -> allow", systemoneVerdict(0.9, 0.7).decision === "allow"])
+  systemoneChecks.push(["p=0.7 -> allow (Schwelle)", systemoneVerdict(0.7, 0.7).decision === "allow"])
+  systemoneChecks.push(["p=0.69 -> ask", systemoneVerdict(0.69, 0.7).decision === "ask"])
+  systemoneChecks.push(["p=0 -> ask", systemoneVerdict(0, 0.7).decision === "ask"])
+  systemoneChecks.push(["p=1 -> allow", systemoneVerdict(1, 0.7).decision === "allow"])
+  systemoneChecks.push(["fehlende Wahrscheinlichkeit -> ask", systemoneVerdict(undefined, 0.7).decision === "ask"])
+  systemoneChecks.push(["NaN -> ask", systemoneVerdict(Number.NaN, 0.7).decision === "ask"])
+  systemoneChecks.push(["Textwert wird gelesen", systemoneVerdict("0.8", 0.7).decision === "allow"])
+  systemoneChecks.push(["hoehere Schwelle greift", systemoneVerdict(0.85, 0.9).decision === "ask"])
+  systemoneChecks.push(["Grund nennt die Wahrscheinlichkeit", systemoneVerdict(0.9, 0.7).reason.includes("0.900")])
+}
+for (const [name, ok] of systemoneChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- Ebene 3: Entscheidungsmodell\n")
+
 const total =
   base.length + scoped.length + cli.length + helpVersion.length + gitleaks.length +
   readOnlyCli.length +
@@ -1182,6 +1209,6 @@ const total =
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
-  reviewerRisky.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + 3
+  reviewerRisky.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + 3
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

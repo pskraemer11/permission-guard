@@ -294,6 +294,12 @@ Empfehlung: Clef-Flash als Ebene-3-Backend über einen eigenen `systemone`-Modus
 die beste Chat-Option. Laya scheidet aus: zu klein für Werkzeugnamen ohne
 Semantik.
 
+**Umgesetzt 05.11.2026:** `mcpBackend: "chat" | "systemone"` und `mcpThreshold`
+in `reviewer.js`; im `systemone`-Modus geht `{tool, arguments}` als Zustand und
+eine `choice`-Frage („reads"/„changes") an `/v1/systemone`. Lebendtest mit
+Clef-Flash: 14/14, Gate 33/33 + 3/3, 75 ms je Anfrage; das Audit speichert `p`.
+13 neue Tests (570/570).
+
 **Bonsai-Modelle:** `prism-ml/bonsai-27b` und `ternary-bonsai-2-27b` sind
 Reasoning-Modelle. Bei `max_tokens: 8` geht das Budget für
 `reasoning_content` drauf, `finish_reason=length`, `content` leer. Mit 64 Tokens

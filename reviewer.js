@@ -69,6 +69,10 @@ const DEFAULTS = {
   // den Parameter und ignoriert ihn. Lehnt ein Backend ihn ab, wiederholt
   // reviewer.js die Anfrage einmal ohne Grammatik.
   grammar: 'root ::= "Ja" | "Nein"',
+  // Ebene 3 fuer MCP: "chat" erzeugt ein Wort, "systemone" laesst ein
+  // Entscheidungsmodell die Optionen bewerten (Wahrscheinlichkeit statt Text).
+  mcpBackend: "chat",
+  mcpThreshold: 0.7,
   // Zusaetzliche Risikomuster aus der Projektkonfiguration.
   extraRisky: [],
 }
@@ -283,6 +287,11 @@ export function loadConfig(overrides = {}) {
     const n = Number(env.PERMISSION_GUARD_REVIEWER_TIMEOUT_MS)
     if (Number.isFinite(n) && n > 0) config.timeoutMs = n
   }
+  if (env.PERMISSION_GUARD_REVIEWER_BACKEND) config.mcpBackend = env.PERMISSION_GUARD_REVIEWER_BACKEND
+  if (env.PERMISSION_GUARD_REVIEWER_THRESHOLD) {
+    const n = Number(env.PERMISSION_GUARD_REVIEWER_THRESHOLD)
+    if (Number.isFinite(n) && n > 0 && n < 1) config.mcpThreshold = n
+  }
   return config
 }
 
@@ -432,6 +441,67 @@ export function parseMcpAnswer(text) {
   if (first === "nein" || first === "no") return { decision: "ask", reason: "Modell: veraendert, veroeffentlicht oder unsicher" }
   if (first === "unbestimmt" || first === "unklar" || first === "unsure") return { decision: "ask", reason: "Modell: unbestimmt" }
   return { decision: "ask", reason: "Modell: Antwort unklar" }
+}
+
+// --- Ebene 3 als Entscheidungsmodell (05.11.2026) --------------------------
+//
+// llama.cpp bietet /v1/systemone fuer Entscheidungsmodelle (Laya, Clef).
+// Das Modell erzeugt keinen Text: es bewertet die Optionen in einem Durchlauf
+// und liefert eine Wahrscheinlichkeit je Option. Gemessen am 05.11.2026 mit
+// Clef-Flash: Rueckfrage-Faelle <= 0,46, Freigabe-Faelle >= 0,88 - damit
+// entscheidet eine Schwelle, nicht die Formulierung. Laya (421M) trennte die
+// Faelle nicht (8/14, Wahrscheinlichkeiten 0,09-0,60).
+export const MCP_DECISION_QUESTION = {
+  type: "choice",
+  instructions: "Does this MCP tool call read data, or does it change something?",
+  criteria: {
+    reads: "Fetches, searches, lists, or displays data. Read-only: nothing is created, changed, sent, or deleted.",
+    changes: "Creates, updates, deletes, publishes, sends, transfers, syncs, executes a command, or opens a session.",
+  },
+}
+
+export function buildSystemoneRequest({ criteria, input, model = "" }) {
+  return {
+    model,
+    state: { tool: criteria?.action?.tool ?? "", arguments: input ?? {} },
+    questions: { effect: MCP_DECISION_QUESTION },
+  }
+}
+
+// Nur eine klare Wahrscheinlichkeit ueber der Schwelle hebt auf allow.
+// Alles andere - NaN, fehlender Wert, unter der Schwelle - bleibt Rueckfrage.
+export function systemoneVerdict(probability, threshold = 0.7) {
+  const p = Number(probability)
+  if (!Number.isFinite(p) || p < 0 || p > 1) return { decision: "ask", reason: "Modell: keine Wahrscheinlichkeit", probability: null }
+  if (p >= threshold) return { decision: "allow", reason: `Modell: liest nur (p=${p.toFixed(3)})`, probability: p }
+  return { decision: "ask", reason: `Modell: veraendert oder unklar (p=${p.toFixed(3)})`, probability: p }
+}
+
+async function requestSystemone(criteria, input, cfg) {
+  if (typeof fetch !== "function") return { ok: false, reason: "kein fetch" }
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), Math.max(250, cfg.timeoutMs || 2000))
+  try {
+    const headers = { "content-type": "application/json" }
+    if (cfg.apiKeyEnv && process.env[cfg.apiKeyEnv]) {
+      headers.authorization = `Bearer ${process.env[cfg.apiKeyEnv]}`
+    }
+    const response = await fetch(`${String(cfg.baseUrl).replace(/\/+$/, "")}/systemone`, {
+      method: "POST",
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify(buildSystemoneRequest({ criteria, input, model: cfg.model })),
+    })
+    if (!response.ok) return { ok: false, reason: `HTTP ${response.status}` }
+    const data = await response.json()
+    const probability = data?.answers?.effect?.probabilities?.reads
+    if (typeof probability !== "number") return { ok: false, reason: "keine Wahrscheinlichkeit" }
+    return { ok: true, probability }
+  } catch (error) {
+    return { ok: false, reason: String(error?.name ?? "Fehler") }
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 // --- Serverstart -----------------------------------------------------------
@@ -594,6 +664,12 @@ export async function reviewMcp({ criteria, input, project, recent, config }) {
   if (!criteria?.isMcp) return { decision: "ask", reason: "kein MCP-Aufruf" }
   if (criteria.context?.secret) return { decision: "ask", reason: "Geheimnisverdacht: kein Modellaufruf" }
   if (criteria.context?.oversized) return { decision: "ask", reason: "unanalysierbar: kein Modellaufruf" }
+
+  if (cfg.mcpBackend === "systemone") {
+    const result = await requestSystemone(criteria, input, cfg)
+    if (!result.ok) return { decision: "ask", reason: result.reason }
+    return systemoneVerdict(result.probability, cfg.mcpThreshold)
+  }
 
   const three = cfg.mcpThreeWay === true
   const requestConfig = three ? { ...cfg, grammar: MCP_THREE_GRAMMAR } : cfg

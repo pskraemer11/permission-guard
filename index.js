@@ -160,7 +160,7 @@ export default Plugin.define({
             // execute-Block).
             seenMcpTools.add(crit.action.tool)
             const sessionHash = shortHash(input.sessionID)
-            const record = (decision, layer, reason, applied) =>
+            const record = (decision, layer, reason, applied, probability) =>
               audit({
                 kind: "decision",
                 sessionHash,
@@ -184,6 +184,7 @@ export default Plugin.define({
                 effect,
                 applied,
                 status: "open",
+                ...(probability == null ? {} : { probability }),
               })
 
             if (plan === "shadow" || plan === "keep") {
@@ -201,15 +202,15 @@ export default Plugin.define({
               input.effect = "allow"
               input.message = `permission-guard: MCP ${decided.reason}`
               debug(`mcp allow (aktiv) ${decided.reason} ${crit.action.tool} key=${crit.key}`)
-              record("allow", verdict.layer, decided.reason, true)
+              record("allow", verdict.layer, decided.reason, true, decided.probability)
             } else if (decided.decision === "deny") {
               input.effect = "deny"
               input.message = `permission-guard: MCP ${decided.reason}`
               debug(`mcp deny (aktiv) ${decided.reason} ${crit.action.tool} key=${crit.key}`)
-              record("deny", verdict.layer, decided.reason, true)
+              record("deny", verdict.layer, decided.reason, true, decided.probability)
             } else {
               debug(`mcp ask (aktiv) ${decided.reason} ${crit.action.tool} key=${crit.key}`)
-              record("ask", verdict.layer, decided.reason, false)
+              record("ask", verdict.layer, decided.reason, false, decided.probability)
             }
             return
           }
