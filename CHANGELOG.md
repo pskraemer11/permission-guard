@@ -6,6 +6,10 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ## [Unreleased]
 
+### Hinzugefügt
+
+- **actionlint-CI:** `.github/workflows/actionlint.yml` prüft bei Pushes und Pull Requests alle GitHub-Actions-Workflows mit dem festgelegten offiziellen Image `rhysd/actionlint:1.7.12`, einschließlich shellcheck und pyflakes.
+
 ### Geändert
 
 - **Backend auf Clef-Flash umgestellt (05.11.2026):** Der Reviewer lädt

@@ -1520,3 +1520,21 @@ messen, deployen, dokumentieren.
 - **Teststand:** 573/573, Deploy byte-identisch.
 - **Nachbar-Repo:** Die Hooks und die Urteilsdatei für Skills liegen in `~/.agents`; deren Änderungen gehören in dieses Repository, nicht hierher.
 
+=============== Compaction 05.11.2026 / 21:18 ================
+## Objective
+- **Current:** actionlint als automatische CI-Pruefung fuer die Workflow-Dateien dieses Sub-Repos ergaenzen.
+- **Completed:** `.github/workflows/actionlint.yml` hinzugefuegt; CHANGELOG aktualisiert.
+
+## Important Details
+- **Why:** Die Node-Tests pruefen das Verhalten des Guards, aber nicht, ob GitHub die Workflow-Beschreibung korrekt versteht. actionlint prueft YAML, GitHub-Ausdruecke und Action-Eingaben.
+- **Implementation:** Eigenstaendiger Check bei Push und Pull Request; offizielles, auf `rhysd/actionlint:1.7.12` festgelegtes Image. Es bringt shellcheck und pyflakes mit. Lokales Podman/Docker ist dafuer nicht erforderlich.
+- **Verification:** Lokaler actionlint-Lauf ueber den Workflow-Ordner: 0 Befunde; danach Node-Suite und MCP-Fallbestand separat geprueft.
+
+## Work State
+### Completed
+- Workflow + CHANGELOG + dieser Compaction-Block.
+### Blocked
+- Kein Push durch den Agenten; bleibt beim Nutzer.
+
+## Relevant Files
+- `.github/workflows/actionlint.yml`, `CHANGELOG.md`
