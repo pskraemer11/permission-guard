@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Fail-closed shell permission guard for OpenCode with an optional local reviewer model",
   "type": "module",
+  "private": true,
   "license": "MIT",
   "engines": {
     "node": ">=20"

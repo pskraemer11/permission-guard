@@ -32,6 +32,14 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   `--verify` nach, damit kein veralteter Stand hinausgeht, und `--refresh`
   meldet neue Skills als `neu aufgenommen (ohne Bericht): <name>`. Dreizehn
   Hook-Fälle und elf Werkzeugfälle in einem temporären Repo geprüft.
+- **D0 belegt (05.11.2026):** Der MCP-Pfad feuert im Code Mode. `permission.evaluate`
+  kommt mit `action=<server>_<tool>` und `metadata.input`; `source.id` ist
+  vorhanden und gleich der `id` aus `execute.after`, gilt aber je
+  `execute`-Block, nicht je Aufruf (zwei Aufrufe, dieselbe ID). `execute.after`
+  feuert für jedes MCP-Werkzeug und zusätzlich für `execute` selbst. Folge:
+  Korrelation über `sessionID` + Werkzeug + Argument-Hash + Zeitfenster (Fall B
+  im Plan), nicht über die ID allein. Sonde mit Feldnamen und ID-Hashes, keine
+  Werte; nach dem Versuch entfernt.
 - **Eine Freigabequelle (05.11.2026):** `TRUSTED_SKILL_DIRS` ist entfallen.
   Skills gelten nur noch über `verdicts.json` als lesbar; ohne passenden
   Hash bleibt jedes Skript Rückfrage. Grund: die Namensliste hätte eine

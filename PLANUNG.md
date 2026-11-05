@@ -197,6 +197,21 @@ Drei mögliche Ergebnisse:
 
 **Abnahme:** eine Evidenzzeile mit Ja/Nein pro Frage, keine Argumentwerte.
 
+**Ergebnis 05.11.2026 — Fall B.** Sonde mit Feldnamen und ID-Hashes (keine Werte),
+ein Code-Mode-Block mit zwei MCP-Aufrufen (`deepwiki_read_wiki_structure`,
+`exa_web_search_exa`):
+
+1. `permission.evaluate` feuert mit `action=<server>_<tool>` und `metadata.input` — **ja**.
+2. `source.id` ist vorhanden und gleich der `id` aus `execute.after` — **ja**, aber
+   nicht je Aufruf eindeutig: beide MCP-Aufrufe desselben `execute`-Blocks trugen
+   dieselbe ID. Sie identifiziert die auslösende Nachricht, nicht den einzelnen Aufruf.
+3. `execute.after` feuert auch aus Code Mode — **ja**, einmal je MCP-Werkzeug und
+   zusätzlich für `execute` selbst, jeweils mit `tool` und `status=completed`.
+
+Folge für D: Korrelation über `sessionID` + Werkzeugname + Argument-Hash + kurzes
+Zeitfenster; die ID ist der Anker, nicht der Schlüssel. Ein Eintrag ohne passendes
+`execute.after` bleibt „offen" und wird nach Ablauf als unbestätigt markiert.
+
 ### D — Protokoll mit Hash-Kette
 
 - Neues `audit.js` als reine Funktionen: `canonicalJson()`, `hashRecord()`,
@@ -234,14 +249,19 @@ Drei mögliche Ergebnisse:
     oder unaufgelösten Zielen;
   - Modellentscheidungen mit Begründung;
   - `--since`, `--days`, `--json`.
-- Vorgeschlagene Aktivierungskriterien (vom Nutzer zu bestätigen):
-  - mindestens 50 echte MCP-Aufrufe über 7 Tage und 3 Werkzeuge;
+- Aktivierungskriterien (Nutzerentscheid 05.11.2026):
+  - mindestens 50 echte MCP-Aufrufe an **7 verschiedenen Tagen**;
+  - mindestens 3 Werkzeuge, darunter **mindestens eines mit Schreibwirkung**
+    (firecrawl crawl/monitor, github create/update) — drei Lesesuchen an einem
+    Nachmittag erfüllen die Kriterien bewusst nicht;
   - jede Schatten-`deny`-Entscheidung gegen einen real genutzten Aufruf
     einzeln geprüft;
   - keine `allow`-Freigabe bei Geheimnisverdacht, unanalysierbaren Argumenten
     oder unaufgelösten Zielen (per Design);
   - eine Modellstichprobe vom Nutzer bewertet;
   - ausdrückliche Freigabe zum Umschalten.
+- F selbst muss zuerst existieren: ohne `mcp-report.mjs` ist keine der Zahlen
+  messbar. Stand 05.11.2026: 2 Aufrufe, 1 Werkzeug, beide `allow/1`.
 - Parallel die Prompt-Qualität verbessern: klares Ziel, Relevanz der Argumente,
   „Nein“-Kriterien, Beispiele. Messen mit `bench-mcp --model`: 3/3 halten,
   keine neuen Fehlfreigaben.
@@ -296,13 +316,13 @@ Festgelegt:
 | 3   | Historie       | neu schreiben mit neutraler Identität, Bundle als Sicherung      |
 | 4   | untracked Docs | nicht veröffentlichen, lokal behalten                            |
 | 5   | G              | zunächst nur annotieren                                          |
+| 6   | npm            | GitHub-only für v0.1.0, `"private": true` (05.11.2026)           |
+| 7   | Kriterien F    | 7 verschiedene Tage, ≥ 50 Aufrufe, ≥ 3 Werkzeuge, davon ≥ 1 schreibend (05.11.2026) |
 
 Offen:
 
 | Nr. | Frage                 | Empfehlung                                               |
 | --- | --------------------- | -------------------------------------------------------- |
-| 6   | npm                   | GitHub-only für v0.1.0, weil der Name belegt ist         |
-| 7   | Aktivierungskriterien | 50 Aufrufe / 7 Tage / 3 Werkzeuge bestätigen oder ändern |
 | 8   | Push                  | bleibt beim Nutzer; der Agent pusht nicht                |
 
 ## Grenzen
