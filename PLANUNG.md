@@ -278,6 +278,27 @@ Beispiele), Messreihe `bench-model.mjs` mit 14 Graubereich-Fällen. Vorher 8/14
 8/14, eine Kontextzeile auf 11/14. Feste Fälle 33/33 und 3/3. Das Modell streut
 bei `temperature 0`; die Messung läuft deshalb mit Seed und ohne Prompt-Cache.
 
+**Entscheidungsmodelle geprüft 05.11.2026:** Der lokale llama.cpp bietet
+`/v1/systemone` (auf dem Chat-Modell: `501 not a decision model`). Gemessen mit
+denselben 14 Fällen, Frage als `choice` „reads" gegen „changes":
+
+| Modell | Größe | Treffer | Trennung |
+| --- | --- | --- | --- |
+| Laya (`Laya-Q8_0`, 421M) | 0,4 GB | 8/14 (Trivialniveau) | p 0,09–0,60, Reihenfolge falsch |
+| Clef-Flash (`Q4_K_M`, 9B) | 6,3 GB | **14/14** ab Schwelle 0,5 | Rückfrage ≤ 0,458, Freigabe ≥ 0,884 |
+| gemma-4-26B-A4B + MTP (Chat) | 11 GB | 13/14, Gate 3/3 | — |
+| gemma-4-12B (Chat, Betrieb) | 4 GB | 12/14, Gate 3/3 | — |
+
+Empfehlung: Clef-Flash als Ebene-3-Backend über einen eigenen `systemone`-Modus
+(Schwelle 0,7), Gate danach mit den 33 festen Fällen. Bis dahin bleibt das 26B
+die beste Chat-Option. Laya scheidet aus: zu klein für Werkzeugnamen ohne
+Semantik.
+
+**Bonsai-Modelle:** `prism-ml/bonsai-27b` und `ternary-bonsai-2-27b` sind
+Reasoning-Modelle. Bei `max_tokens: 8` geht das Budget für
+`reasoning_content` drauf, `finish_reason=length`, `content` leer. Mit 64 Tokens
+antworten sie sauber („Ja"). Kein Modellfehler, sondern eine zu knappe Grenze.
+
 **Umgesetzt 05.11.2026:** `mcp-report.mjs` liest die Audit-Kette (beide
 Generationen), zählt nach Werkzeug, Absicht, Entscheidung, Schicht und Modus,
 zeigt die Matrix Effekt→Urteil, Auffälligkeiten, offene Aufrufe und
