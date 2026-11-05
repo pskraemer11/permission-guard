@@ -149,6 +149,20 @@ Der Inhalt bleibt unverändert; geändert werden nur Fixtures und Identitäten.
 - `AGENTS.md` im Sub-Repo: Testbefehl, Deploy nur über die Skripte, keine
   Geheimnisse, Quelltext ist die Wahrheit.
 
+**Umgesetzt 05.11.2026 (S1–S4):** `package.json` mit `exports`, vollständiger
+Dateiliste und Skripten (`bench`, `bench:model`, `report`, `verify-audit`,
+`verdicts`); `private: true` bleibt. `repository`/`bugs`/`homepage` fehlen
+bewusst — die URL enthält den Kontonamen, den die Privacy-Regel aus Dateien
+heraushält. CI `.github/workflows/ci.yml`: Matrix Node 20/22 × Ubuntu/Windows,
+Tests, `bench-mcp`, Fallbestand, `npm pack --dry-run`, Pfad- und Schlüssel-Scan;
+`actionlint` grün. Hooks aus `~/.agents/references/githooks/` byte-identisch
+übernommen, `test-gate.conf` mit `test=node test.mjs`, `.gitattributes` auf LF,
+`core.hooksPath=.githooks` gesetzt — der Commit lief durch das Gate (573/573).
+`SECURITY.md`, `CONTRIBUTING.md`, `AGENTS.md` angelegt; README-Testzahl auf 573
+korrigiert. `npm pack --dry-run`: 26 Dateien, keine lokale Konfiguration, keine
+Logs. Damit ist das Repo push-bereit; Tag und Parent-Aufräumen folgen nach dem
+ersten grünen CI-Lauf.
+
 ### S5 — Release (P2)
 
 - Tag `v0.1.0`, sobald S0–S4 erledigt sind.
