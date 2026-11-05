@@ -32,6 +32,13 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   `--verify` nach, damit kein veralteter Stand hinausgeht, und `--refresh`
   meldet neue Skills als `neu aufgenommen (ohne Bericht): <name>`. Dreizehn
   Hook-Fälle und elf Werkzeugfälle in einem temporären Repo geprüft.
+- **Ebene-3-Prompt (05.11.2026):** Kompakte Fassung mit vier Beispielen; das
+  Modell sieht jetzt nur noch Regel, Werkzeug, Absicht, Zielarten und Argumente.
+  Messreihe `bench-model.mjs` mit 14 Graubereich-Fällen (`mcp-model-cases.jsonl`):
+  vorher 8/14 (Trivialniveau), nachher 12/14, 14/14 einstimmig. Rollen- und
+  Felderklärung verschlechterte auf 8/14, eine einzelne Kontextzeile auf 11/14.
+  Feste Fälle unverändert 33/33 und 3/3. Wegen Streuung bei `temperature 0`
+  misst die Reihe mit Seed 42 und ohne Prompt-Cache (`deterministic`).
 - **F: Auswertung (05.11.2026):** `mcp-report.mjs` liest die Audit-Kette und
   zählt nach Werkzeug, Absicht, Entscheidung, Schicht und Modus, zeigt die
   Matrix Effekt→Urteil, Auffälligkeiten, offene Aufrufe und Ebene-3-Gründe;

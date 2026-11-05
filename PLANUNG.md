@@ -272,6 +272,12 @@ Kennung, Kette intakt. Ablage `%LOCALAPPDATA%\opencode\permission-guard\audit.js
   „Nein“-Kriterien, Beispiele. Messen mit `bench-mcp --model`: 3/3 halten,
   keine neuen Fehlfreigaben.
 
+**Ebene 3 umgesetzt 05.11.2026:** Prompt kompakt gefasst (Regel, vier
+Beispiele), Messreihe `bench-model.mjs` mit 14 Graubereich-Fällen. Vorher 8/14
+(Trivialniveau), nachher 12/14; Rollen- und Felderklärung verschlechterte auf
+8/14, eine Kontextzeile auf 11/14. Feste Fälle 33/33 und 3/3. Das Modell streut
+bei `temperature 0`; die Messung läuft deshalb mit Seed und ohne Prompt-Cache.
+
 **Umgesetzt 05.11.2026:** `mcp-report.mjs` liest die Audit-Kette (beide
 Generationen), zählt nach Werkzeug, Absicht, Entscheidung, Schicht und Modus,
 zeigt die Matrix Effekt→Urteil, Auffälligkeiten, offene Aufrufe und

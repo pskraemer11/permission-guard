@@ -122,7 +122,9 @@ if (withModel) {
       const reviewed = await reviewMcp({
         criteria: item.criteria,
         input: item.item.input ?? {},
-        config,
+        // Reproduzierbar messen: fester Seed, kein Prompt-Cache. Ohne das
+        // lieferte derselbe Prompt je nach Cache-Zustand 2/3 und 3/3.
+        config: { ...config, deterministic: true },
       })
       const acceptable = item.item.modelWant === "allow" ? "allow" : "ask"
       const ok = reviewed.decision === acceptable

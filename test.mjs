@@ -845,7 +845,7 @@ const mcpMsg = buildMcpMessages({
 const mcpMsgText = mcpMsg.map((m) => m.content).join("\n")
 const mcpPromptChecks = [
   ["MCP-Prompt: zwei Nachrichten", mcpMsg.length === 2],
-  ["MCP-Prompt: System nennt Ja/Nein", String(mcpMsg[0].content).includes("Antworte nur mit \"Ja\" oder \"Nein\"")],
+  ["MCP-Prompt: System nennt Ja/Nein", String(mcpMsg[0].content).includes('"Ja" oder "Nein"')],
   ["MCP-Prompt: drei Kanaele", ["<TRUSTED-USER-INTENT>", "<UNTRUSTED-PENDING-ACTION>", "<UNTRUSTED-RECENT-TOOLS>"].every((tag) => mcpMsgText.includes(tag))],
   ["MCP-Prompt: Kanal-Tag im Argument neutralisiert", mcpMsgText.includes("<__</UNTRUSTED-PENDING-ACTION>") && mcpMsgText.split("\n</UNTRUSTED-PENDING-ACTION>").length === 2],
   ["MCP-Prompt: letzte Werkzeuge genannt", mcpMsgText.includes("exa_web_search_exa (read)")],

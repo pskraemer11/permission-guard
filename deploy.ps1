@@ -44,6 +44,8 @@ $files = @(
     "audit.js",
     "verify-audit.mjs",
     "mcp-report.mjs",
+    "bench-model.mjs",
+    "mcp-model-cases.jsonl",
     "test.mjs",
     "README.md",
     "start-reviewer.ps1",

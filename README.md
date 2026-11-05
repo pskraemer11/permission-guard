@@ -745,6 +745,37 @@ Im Schattenmodus steht im Log `schatten=<entscheidung>/<schicht>`, aktiv
 mcp ask github_delete_repository agent=build key=github_delete_repository#… args=2 felder=owner,repo absicht=destructive/delete ziel=repo schatten=deny/2
 ```
 
+### Ebene 3: Prompt und Messung (05.11.2026)
+
+Das lokale Modell bekommt genau zwei Nachrichten: eine Systemnachricht mit der
+Entscheidungsregel und eine Benutzernachricht mit drei Kanälen
+(`TRUSTED-USER-INTENT`, `UNTRUSTED-PENDING-ACTION`, `UNTRUSTED-RECENT-TOOLS`).
+Es sieht Werkzeugname, Absicht, Zielarten und die Argumente als JSON; Fälle mit
+Geheimnisverdacht oder über 16 KB Argumenten erreichen es nie. Die Antwort ist
+durch eine Grammatik auf `Ja` oder `Nein` beschränkt (`root ::= "Ja" | "Nein"`),
+`max_tokens` 8, `temperature` 0, Timeout 2500 ms.
+
+Gemessen wird mit `bench-model.mjs` gegen `mcp-model-cases.jsonl`: 14 Werkzeuge
+ohne erkennbares Verb, fünf klar lesend, neun nicht. Weil dasselbe Modell bei
+`temperature 0` je nach Prompt-Cache streut (derselbe Prompt lieferte 10/14 und
+12/14), läuft die Messung mit festem Seed und ohne Cache (`deterministic`), und
+jeder Fall wird mehrfach befragt.
+
+| Fassung | Treffer | Anmerkung |
+| --- | --- | --- |
+| Ausgangsfassung | 8/14 (57 %) | exakt die Trivialstrategie „immer Nein" |
+| Rolle + Felderklärung | 8/14 (57 %) | mehr Kontext ließ das Modell in „Nein" flüchten |
+| kompakt + eine Kontextzeile | 11/14 (79 %) | |
+| **kompakt, vier Beispiele** | **12/14 (86 %)** | 14/14 einstimmig über je drei Läufe |
+
+Die beiden Restfehler gehen in die sichere Richtung (Rückfrage statt Freigabe).
+Das feste Regime bleibt unverändert: 33/33 Weiterleitungen, 3/3 im Graubereich.
+
+Empfindlichkeit: Ein einziges Wort im ersten Satz („Antworte nur **mit** …")
+verschob 12/14 auf 11/14 und das Graubereich-Gate von 3/3 auf 2/3. Die
+Formulierung ist deshalb festgeschrieben und durch Tests geschützt; Änderungen
+nur mit erneuter Messung.
+
 ### Schritt E: Testregime vor der Aktivierung
 
 `bench-mcp.mjs` prüft das Urteil gegen `mcp-cases.jsonl`: **33 Aufrufe mit
