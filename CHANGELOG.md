@@ -30,6 +30,15 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   unter `skills/` und unvollständig gestagte Python-Änderungen, weil die Datei
   sonst einen Stand beschriebe, der nicht im Commit ist. Acht Hook-Fälle und
   neun Werkzeugfälle in einem temporären Repo geprüft.
+- **Eine Freigabequelle (05.11.2026):** `TRUSTED_SKILL_DIRS` ist entfallen.
+  Skills gelten nur noch über `verdicts.json` als lesbar; ohne passenden
+  Hash bleibt jedes Skript Rückfrage. Grund: die Namensliste hätte eine
+  Freigabe auch dann gehalten, wenn das Prüfprotokoll zu `ask` kommt.
+- **Drei Prüfprotokolle (05.11.2026):** `markdown-table-formatting` (TRUST,
+  Scanner-71 stammt nur aus einem inzwischen entfernten `__pycache__`),
+  `monthly-price-benchmark-workbook` (TRUST, Skript liest nur und schreibt den
+  Bericht) und `gemma-dev` (ASK: Modell-Download, lokaler Webserver, Vertex AI
+  mit Cloud-Anmeldedaten). Stand: 3 `trust`, 7 `ask`.
 - `PLANUNG.md`: Weg zum eigenständigen Repository (S0–S6) und die noch
   offenen MCP-Schritte D–G.
 

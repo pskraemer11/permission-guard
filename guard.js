@@ -1565,36 +1565,22 @@ function classifyPython(s, ctx) {
   }
   if (head.startsWith("-")) return "unknown" // -c, --version, unbekannte Flags
   // Entscheidung 2: Skript, das innerhalb des Projekts aufloesbar ist.
-  // Entscheidung 25.10.2026 (verengt): von den Skills sind nur die eigenen
-  // vertraut. `~/.agents/skills` enthaelt 82 Python-Dateien, davon 74 aus
-  // Fremdquellen (OpenAI `documents`, NVIDIA `accelerated-computing-cudf`,
-  // HuggingFace `huggingface-llm-trainer`, `.system`). Ein Git-Repo macht sie
-  // reviewbar, nicht geprueft - fremde Skripte bleiben deshalb Rueckfrage.
+  // Fuer Skills gilt seit 05.11.2026 allein die Urteilsdatei: jedes Skript
+  // unter `~/.agents/skills` ist Rueckfrage, solange kein Eintrag mit
+  // `decision: "trust"` und passendem Hash vorliegt. Die frueher hier
+  // eingebaute Namensliste ist entfallen - sie haette eine Freigabe auch dann
+  // gehalten, wenn das Pruefprotokoll zu `ask` kommt.
   if (!opts.base) return "unknown"
   const abs = resolveTarget(expandLeadVar(tokens[i], ctx?.vars), opts, ctx?.cwd ?? null, ctx?.vars)
   if (!abs) return "unknown"
   const roots = [normPath(opts.base)]
   const gitDirs = [normPath(`${opts.base}\\.git`)]
-  if (opts.home) {
-    const skills = normPath(`${opts.home}\\.agents\\skills`)
-    for (const name of TRUSTED_SKILL_DIRS) roots.push(normPath(`${skills}\\${name}`))
-    gitDirs.push(normPath(`${opts.home}\\.agents\\.git`))
-  }
+  if (opts.home) gitDirs.push(normPath(`${opts.home}\\.agents\\.git`))
   if (!roots.some((root) => isUnder(abs, root)) && skillVerdict(abs, opts) !== true) return "unknown"
   if (gitDirs.some((dir) => isUnder(abs, dir))) return "unknown"
   if (!/\.py$/.test(abs)) return "unknown"
   return "read"
 }
-
-// Eigene Skills, deren Skripte als reviewbarer Inhalt gelten. Bewusst eine
-// Liste und keine Regel: neue Namen kosten eine Zeile, ein fremder Skill
-// kommt nicht versehentlich mit.
-const TRUSTED_SKILL_DIRS = new Set([
-  "markdown-table-formatting",
-  "monthly-price-benchmark-workbook",
-  "gemma-dev",
-  "nemo-retriever",
-])
 
 // Urteilsdatei (Nutzerentscheid 05.11.2026): SkillSpector-Berichte und
 // Pruefprotokolle werden vorab zu einer Datei verdichtet

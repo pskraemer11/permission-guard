@@ -230,8 +230,11 @@ closed).
 ### Skill-Skripte und Urteilsdatei (Nutzerentscheid 05.11.2026)
 
 `python <skript>` bleibt außerhalb des Projekts eine Rückfrage — auch für
-fremde Skills, deren Inhalt nicht versioniert ist. Zwei Ausnahmen gibt es: die
-vier Namen in `TRUSTED_SKILL_DIRS` und eine vorberechnete Urteilsdatei.
+fremde Skills, deren Inhalt nicht versioniert ist. Eine Ausnahme gibt es: eine
+vorberechnete Urteilsdatei. Sie ist seit dem 05.11.2026 die einzige
+Freigabequelle für Skill-Skripte; die frühere Namensliste im Code ist entfallen,
+weil sie eine Freigabe auch dann gehalten hätte, wenn das Prüfprotokoll zu
+`ask` kommt.
 
 Die Urteilsdatei verdichtet die SkillSpector-Berichte und die Prüfprotokolle:
 
@@ -252,8 +255,7 @@ Skriptdatei. Der Guard liest sie bei der Prüfung; ein Scanner läuft dabei nie.
 | `scripts/x.py` mit `decision: "trust"` und passendem SHA256 | Lesen — durch das Prüfprotokoll gedeckt           |
 | Datei geändert, neu hinzugekommen oder ohne Hash-Eintrag    | `ask` — die Freigabe gilt nur dem geprüften Stand |
 | `decision` ist `"ask"` oder `"reject"`                      | `ask` — Protokoll ohne Freigabe                   |
-| Skill fehlt in der Datei, Datei fehlt oder ist unlesbar     | `ask` — dann gilt allein die statische Liste      |
-| Name aus `TRUSTED_SKILL_DIRS`                               | Lesen — unabhängig von der Datei                  |
+| Skill fehlt in der Datei, Datei fehlt oder ist unlesbar     | `ask` — keine Grundlage, also Rückfrage           |
 
 Zwei Eigenschaften halten die Datei ungefährlich. Eine Freigabe wird nie
 erzeugt, nur übernommen: neue Einträge stehen auf `"ask"`, und ein geändertes
@@ -262,9 +264,13 @@ Hash, der beim Erzeugen gelesen wurde — ändert sich ein Skript, fragt der Gua
 wieder, ohne dass jemand die Datei neu erzeugen muss. Ein neu hinzugekommenes
 Skript ist ebenfalls nicht gedeckt, weil es in der Hashliste fehlt.
 
-Die Datei ersetzt die statische Liste nicht, sie erweitert sie. Zum Zurücknehmen
-einer Freigabe genügt `"decision": "ask"`; die vier eingebauten Namen bleiben,
-bis sie aus `TRUSTED_SKILL_DIRS` entfernt werden.
+Zum Zurücknehmen einer Freigabe genügt `"decision": "ask"`. Fehlt die Datei
+ganz, ist jedes Skill-Skript Rückfrage — der Fehlerfall öffnet nichts.
+
+Stand am 05.11.2026: drei Freigaben (`nemo-retriever`, `markdown-table-formatting`,
+`monthly-price-benchmark-workbook`), sieben `ask`. `gemma-dev` bleibt auf `ask`,
+weil beide Beispiele Netzwerk brauchen — eines lädt ein Modell und öffnet einen
+lokalen Webserver, das andere spricht mit Vertex AI.
 
 Drei Betriebsarten, ein Werkzeug:
 

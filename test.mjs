@@ -155,7 +155,7 @@ const scoped = [
   ["Set-Content $unknown \"x\"", "ask"],
   // Variable mit env-Pfad: wird sie aufgeloest, bleibt das Ziel pruefbar.
   ["$p = \"$env:TEMP\\opencode\\notiz.md\"\nSet-Content -LiteralPath $p \"x\"", "allow"],
-  ["$p = \"$env:TEMP\\opencode\\notiz.md\"\nSet-Content -LiteralPath $p \"x\"\npy -3.12 \"C:\\Users\\u\\.agents\\skills\\markdown-table-formatting\\scripts\\format_md_tables.py\" $p --write", "allow"],
+  ["$p = \"$env:TEMP\\opencode\\notiz.md\"\nSet-Content -LiteralPath $p \"x\"\npy -3.12 \"C:\\p\\tools\\format_md_tables.py\" $p --write", "allow"],
   // Join-Path wird seit 26.10.2026 aufgeloest, wenn alle Teile literal sind.
   ["$p = Join-Path $env:TEMP \"opencode\\notiz.md\"\nSet-Content -LiteralPath $p \"x\"", "allow"],
   ["$p = Join-Path \"C:\\Windows\" \"x.txt\"\nSet-Content -LiteralPath $p \"x\"", "deny"],
@@ -447,12 +447,13 @@ const interp = [
   [`node "${projBase}\\tools\\permission-guard\\hook.js"`, "ask"],
   // Entscheidung 2: python-Skripte im Projekt
   ["python tools\\check_config.py", "allow"],
-  // Eigene Skills stehen unter Git (Entscheidung 25.10.2026) und sind damit
-  // wie Projektinhalte reviewbar; fremde Skills bleiben Rueckfrage.
-  ["python \"C:\\Users\\u\\.agents\\skills\\markdown-table-formatting\\scripts\\format_md_tables.py\" x.md --check", "allow"],
-  ["python \"C:\\Users\\u\\.agents\\skills\\monthly-price-benchmark-workbook\\scripts\\analysis.py\" \"C:\\Users\\u\\AppData\\Local\\Temp\\opencode\\a.json\"", "allow"],
-  ["python \"C:\\Users\\u\\.agents\\skills\\gemma-dev\\assets\\gradio-app.py\"", "allow"],
-  ["python \"C:\\Users\\u\\.agents\\skills\\nemo-retriever\\scripts\\grep_corpus.py\" --root docs", "allow"],
+  // Skills (Nutzerentscheid 05.11.2026): allein die Urteilsdatei entscheidet.
+  // Ohne Datei - wie hier - ist jedes Skill-Skript Rueckfrage, auch die
+  // frueher fest eingetragenen Namen.
+  ["python \"C:\\Users\\u\\.agents\\skills\\markdown-table-formatting\\scripts\\format_md_tables.py\" x.md --check", "ask"],
+  ["python \"C:\\Users\\u\\.agents\\skills\\monthly-price-benchmark-workbook\\scripts\\analysis.py\" \"C:\\Users\\u\\AppData\\Local\\Temp\\opencode\\a.json\"", "ask"],
+  ["python \"C:\\Users\\u\\.agents\\skills\\gemma-dev\\assets\\gradio-app.py\"", "ask"],
+  ["python \"C:\\Users\\u\\.agents\\skills\\nemo-retriever\\scripts\\grep_corpus.py\" --root docs", "ask"],
   ["python \"C:\\Users\\u\\.agents\\skills\\documents\\scripts\\render_docx.py\" x.docx", "ask"],
   ["python \"C:\\Users\\u\\.agents\\skills\\.system\\imagegen\\scripts\\image_gen.py\"", "ask"],
   ["python \"C:\\Users\\u\\.agents\\skills\\markdown-table-formatting\\..\\fremd.py\"", "ask"],
@@ -1054,7 +1055,7 @@ if (process.platform === "win32") {
 
   rmSync(file)
   verdictChecks.push(["ohne Datei nur statische Liste", call(script) === "ask"])
-  verdictChecks.push(["statische Liste bleibt", call(join(skills, "nemo-retriever", "scripts", "x.py")) === "allow"])
+  verdictChecks.push(["ohne Datei fragt auch ein eigener Skill", call(join(skills, "nemo-retriever", "scripts", "x.py")) === "ask"])
 
   rmSync(root, { recursive: true, force: true })
 } else {
