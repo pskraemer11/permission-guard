@@ -21,6 +21,7 @@
     "index.js",
     "reviewer.js",
     "test.mjs",
+    "skill-verdicts.mjs",
     "shell-reviewer.config.example.json",
     "start-reviewer.ps1",
     "deploy.ps1",
@@ -30,6 +31,7 @@
   ],
   "scripts": {
     "test": "node test.mjs",
+    "verdicts": "node skill-verdicts.mjs",
     "smoke": "node smoke-reviewer.mjs"
   }
 }

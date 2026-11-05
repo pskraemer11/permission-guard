@@ -7,11 +7,15 @@
 // Alles Unbekannte bleibt "ask" (fail closed). Ein "deny" der statischen
 // Regeln wird nie angefasst.
 //
-// Reine Funktionen, keine Ein-/Ausgabe - dadurch ohne OpenCode testbar.
-// Der eine Import (node:crypto) ist eingebaut und rechnet nur; er liefert
-// den Argument-Hash fuer MCP-Freigabe-Schluessel (Schritt A, 29.10.2026).
+// Reine Funktionen bis auf eine Ausnahme: die Urteilsdatei fuer Skill-Skripte
+// (Nutzerentscheid 05.11.2026) wird gelesen, nie geschrieben. Fehlt sie oder
+// ist sie unlesbar, gilt die eingebaute Liste - der Fehlerfall oeffnet nichts.
+// Dadurch ohne OpenCode testbar. Der Import von node:crypto rechnet nur; er
+// liefert den Argument-Hash fuer MCP-Freigabe-Schluessel (Schritt A, 29.10.2026)
+// und den Datei-Hash fuer die Urteilsdatei.
 
 import { createHash } from "node:crypto"
+import { readFileSync } from "node:fs"
 
 // Umgebungsvariablen, die kein Geheimnis sind. Alles andere ($env:TOKEN) gilt
 // als verdaechtig und bleibt bei "ask".
@@ -1576,7 +1580,7 @@ function classifyPython(s, ctx) {
     for (const name of TRUSTED_SKILL_DIRS) roots.push(normPath(`${skills}\\${name}`))
     gitDirs.push(normPath(`${opts.home}\\.agents\\.git`))
   }
-  if (!roots.some((root) => isUnder(abs, root))) return "unknown"
+  if (!roots.some((root) => isUnder(abs, root)) && skillVerdict(abs, opts) !== true) return "unknown"
   if (gitDirs.some((dir) => isUnder(abs, dir))) return "unknown"
   if (!/\.py$/.test(abs)) return "unknown"
   return "read"
@@ -1591,6 +1595,54 @@ const TRUSTED_SKILL_DIRS = new Set([
   "gemma-dev",
   "nemo-retriever",
 ])
+
+// Urteilsdatei (Nutzerentscheid 05.11.2026): SkillSpector-Berichte und
+// Pruefprotokolle werden vorab zu einer Datei verdichtet
+// (~/.agents/skill-reviews/verdicts.json, erzeugt von skill-verdicts.mjs).
+// Der Guard liest sie nur. Vertraut wird ein Skript ausschliesslich bei
+// decision "trust" **und** passendem SHA256 der Datei: eine geaenderte oder
+// neu hinzugekommene Datei ist nicht gedeckt und bleibt Rueckfrage. Die
+// statische Liste bleibt die Untergrenze, die Datei kann sie nur erweitern.
+const VERDICT_SCHEMA = 1
+
+function loadSkillVerdicts(file) {
+  try {
+    const data = JSON.parse(readFileSync(file, "utf8"))
+    if (data?.schema !== VERDICT_SCHEMA || !data.skills || typeof data.skills !== "object") return null
+    const entries = new Map()
+    for (const [name, entry] of Object.entries(data.skills)) {
+      if (!entry || typeof entry !== "object") continue
+      if (entry.decision !== "trust") continue
+      if (!entry.sha256 || typeof entry.sha256 !== "object") continue
+      entries.set(name.toLowerCase(), entry)
+    }
+    return entries
+  } catch {
+    return null // fehlende oder unlesbare Datei: es gilt allein die statische Liste
+  }
+}
+
+// true = durch Urteilsdatei gedeckt, false = Datei vorhanden, Skript nicht
+// gedeckt, null = keine Urteilsdatei (oder Ziel ausserhalb der Skill-Ordner).
+function skillVerdict(abs, opts) {
+  if (!opts?.home) return null
+  const skills = normPath(`${opts.home}\\.agents\\skills`)
+  if (!isUnder(abs, skills)) return null
+  const rest = abs.slice(skills.length + 1)
+  const slash = rest.indexOf("\\")
+  if (slash <= 0) return null
+  const entries = loadSkillVerdicts(`${opts.home}\\.agents\\skill-reviews\\verdicts.json`)
+  if (!entries) return null
+  const entry = entries.get(rest.slice(0, slash))
+  if (!entry) return false
+  const want = entry.sha256[rest.slice(slash + 1).replace(/\\/g, "/")]
+  if (typeof want !== "string" || !/^[a-f0-9]{64}$/i.test(want)) return false
+  try {
+    return createHash("sha256").update(readFileSync(abs)).digest("hex") === want.toLowerCase()
+  } catch {
+    return false
+  }
+}
 
 // Entscheidung 1 (22.10.2026): node nur fuer die drei Selbst-Skripte dieses
 // Guards (test.mjs, replay.mjs, analyze.mjs), pfadverankert unter

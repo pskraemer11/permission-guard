@@ -2,6 +2,10 @@
 import { contextScope, evaluate, mcpAction, mcpCriteria, mcpObservation, mcpVerdict } from "./guard.js"
 import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMcpAnswer, reviewMcp, segments } from "./reviewer.js"
 import { parseLine, summarize } from "./stats.mjs"
+import { createHash } from "node:crypto"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
 // Integration aus dem Replay (22.10.2026): Logreader mit ReadLine-[void]-Familie.
 const logReaderScript = [
@@ -1007,6 +1011,61 @@ for (const [name, ok] of statsChecks) {
 }
 console.log("-- Statistik aus dem Guard-Log\n")
 
+// --- Urteilsdatei fuer Skill-Skripte (Nutzerentscheid 05.11.2026) ---
+// Der Test schreibt echte Dateien in einen eigenen Temp-Ordner und prueft den
+// Hash-Abgleich. Windows-Pfadmodell: auf anderen Plattformen gibt es den Guard
+// nicht, dort wird der Block uebersprungen statt scheinbar zu bestehen.
+const verdictChecks = []
+if (process.platform === "win32") {
+  const root = mkdtempSync(join(tmpdir(), "guard-verdict-"))
+  const skills = join(root, ".agents", "skills")
+  const reviews = join(root, ".agents", "skill-reviews")
+  mkdirSync(join(skills, "demo", "scripts"), { recursive: true })
+  mkdirSync(reviews, { recursive: true })
+  const script = join(skills, "demo", "scripts", "run.py")
+  const extra = join(skills, "demo", "scripts", "neu.py")
+  writeFileSync(script, "print(1)\n")
+  writeFileSync(extra, "print(2)\n")
+  const sha = createHash("sha256").update(readFileSync(script)).digest("hex")
+  const file = join(reviews, "verdicts.json")
+  const write = (payload) => writeFileSync(file, JSON.stringify(payload))
+  const opts = { base: "C:\\p", home: root }
+  const call = (target) => evaluate(`python "${target}"`, opts).decision
+
+  write({ schema: 1, skills: { demo: { decision: "trust", sha256: { "scripts/run.py": sha } } } })
+  verdictChecks.push(["Urteil trust + Hash", call(script) === "allow"])
+  verdictChecks.push(["Skript ohne Eintrag", call(extra) === "ask"])
+
+  writeFileSync(script, "print(1)\n# geaendert\n")
+  verdictChecks.push(["Hash passt nicht mehr", call(script) === "ask"])
+  writeFileSync(script, "print(1)\n")
+
+  write({ schema: 1, skills: { demo: { decision: "ask", sha256: { "scripts/run.py": sha } } } })
+  verdictChecks.push(["Urteil ask", call(script) === "ask"])
+
+  write({ schema: 1, skills: { demo: { decision: "trust" } } })
+  verdictChecks.push(["trust ohne Hashes", call(script) === "ask"])
+
+  writeFileSync(file, "{ kein json")
+  verdictChecks.push(["unlesbare Datei faellt zurueck", call(script) === "ask"])
+
+  write({ schema: 2, skills: { demo: { decision: "trust", sha256: { "scripts/run.py": sha } } } })
+  verdictChecks.push(["fremdes Schema", call(script) === "ask"])
+
+  rmSync(file)
+  verdictChecks.push(["ohne Datei nur statische Liste", call(script) === "ask"])
+  verdictChecks.push(["statische Liste bleibt", call(join(skills, "nemo-retriever", "scripts", "x.py")) === "allow"])
+
+  rmSync(root, { recursive: true, force: true })
+} else {
+  console.log("skip  Urteilsdatei (nur Windows-Pfadmodell)\n")
+}
+for (const [name, ok] of verdictChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- Urteilsdatei fuer Skill-Skripte\n")
+
 const total =
   base.length + scoped.length + cli.length + helpVersion.length + gitleaks.length +
   readOnlyCli.length +
@@ -1017,6 +1076,6 @@ const total =
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
-  reviewerRisky.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + 3
+  reviewerRisky.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + 3
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)
