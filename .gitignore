@@ -20,3 +20,8 @@ guard.log
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Lokale Notizen: bleiben auf der Platte, gehoeren nicht ins Repository
+# (Nutzerentscheidung 05.11.2026). Ein "git add -A" soll sie nicht erfassen.
+docs/Codex vs. OpenCode Vergleich bzgl Sicherheit.md
+docs/permission-guard Statistik 20261101.md
