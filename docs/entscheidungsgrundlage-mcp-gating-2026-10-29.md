@@ -57,7 +57,7 @@ rulesets.flat().findLast((rule) =>
 
 ### 1.5 Wie `Wildcard.match` vergleicht
 
-`packages/core/src/util/wildcard.ts`: Beide Seiten werden von `\` nach `/` normalisiert, `*` wird zu `.*`, `?` zu `.`; unter Windows wird Groß/Klein ignoriert. **Pfad-Trennzeichen sind also kein Problem** — `~/Python-Projekte/*` trifft auch `C:\Users\...\Python-Projekte\x`. Ein `~` in Pfad-Regeln wird für die Aktionen `edit`/`write` aufgelöst (`config/plugin/agent.ts`, `expandHome`, Zeile 152).
+`packages/core/src/util/wildcard.ts`: Beide Seiten werden von `\` nach `/` normalisiert, `*` wird zu `.*`, `?` zu `.`; unter Windows wird Groß/Klein ignoriert. **Pfad-Trennzeichen sind also kein Problem** — `~/Python-Projekte/*` trifft auch `C:\Users\<name>\Python-Projekte\x`. Ein `~` in Pfad-Regeln wird für die Aktionen `edit`/`write` aufgelöst (`config/plugin/agent.ts`, `expandHome`, Zeile 152).
 
 ### 1.6 Welches Werkzeug welche Aktion meldet
 

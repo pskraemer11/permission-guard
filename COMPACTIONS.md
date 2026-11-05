@@ -46,7 +46,7 @@ dateiweise geändert hat, steht in `CHANGELOG.md`.
 - **Zweitfund:** `resources[]` enthaelt die einzelnen Pipeline-Segmente. Vorher
   wurde nur das laengste geprueft, jetzt werden alle verkettet.
 - **Drittfund:** Das Plugin registrierte sich zweimal — einmal mit dem
-  Benutzerprofil als Basis. Damit war `C:\Users\pskra` vertraut. Der globale
+  Benutzerprofil als Basis. Damit war `$HOME` vertraut. Der globale
   Kontext ohne Projekt registriert sich jetzt nicht mehr.
 
 ### Schreibfreigabe
@@ -104,10 +104,10 @@ dateiweise geändert hat, steht in `CHANGELOG.md`.
 - Replay-Messung wiederholen, wenn im Alltag genug neue Befehle im Log liegen.
 
 ## Relevant Files
-- `C:\Users\pskra\.config\opencode\plugin\permission-guard\guard.js` - Klassifizierer
-- `C:\Users\pskra\.config\opencode\plugin\permission-guard\test.mjs` - Spezifikation
-- `C:\Users\pskra\.config\opencode\plugin\permission-guard\index.js` - Verdrahtung
-- `C:\Users\pskra\.config\opencode\opencode.jsonc` - statische Regeln
+- `$HOME\.config\opencode\plugin\permission-guard\guard.js` - Klassifizierer
+- `$HOME\.config\opencode\plugin\permission-guard\test.mjs` - Spezifikation
+- `$HOME\.config\opencode\plugin\permission-guard\index.js` - Verdrahtung
+- `$HOME\.config\opencode\opencode.jsonc` - statische Regeln
 ## Stand 22.10.2026 (Abend): Planung statt Ad-hoc-Liste
 
 - **Neu:** `PLANUNG.md` im Projekt. Der Ordner ist Werkstatt fuer handwerkliche
@@ -121,7 +121,7 @@ dateiweise geändert hat, steht in `CHANGELOG.md`.
 - **Damit sind die drei "Offen"-Punkte des vorigen Blocks entschieden.** Die
   Umsetzung steht in `PLANUNG.md` Abschnitte 1-3.
 - **Aufgeraeumt:** Das Firecrawl-Beispielprojekt "Open Lovable" war am 22.10.
-  11:46 direkt nach `C:\Users\pskra\` entladen worden (331 Dateien, 2,53 MB,
+  11:46 direkt nach `$HOME\` entladen worden (331 Dateien, 2,53 MB,
   kein `.git`, kein abweichender Zeitstempel - also unveraendert). Mit Freigabe
   entfernt: 11 Ordner und 10 Dateien.
 - **Aufgeraeumt:** npm-Reste im Home entfernt (`node_modules\`, 57,2 MB,
