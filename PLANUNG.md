@@ -313,3 +313,28 @@ Offen:
 - Eine Hash-Kette ist kein Beweis gegen Löschen am Dateiende.
 - Fremde Fälle (warc0s, hueyexe, defender) liefern Fälle, keine Erwartungen;
   Abweichungen stehen in `why`.
+
+## Nachtrag 05.11.2026: Historie umgeschrieben
+
+S0 hat alle Commits mit der neutralen Identität
+`permission-guard <noreply@example.invalid>` neu geschrieben. Damit sind alle
+vorher zitierten Hashes ungültig. Die Sicherung
+`permission-guard-pre-sanitize-2026-11-05.bundle` liegt außerhalb des
+Repositories und wurde mit `git bundle verify` geprüft.
+
+| Alt       | Neu       | Betreff                                      |
+| --------- | --------- | -------------------------------------------- |
+| `687517a` | `d12cebf` | initialer Stand aus dem Monorepo             |
+| `1090f9e` | `fabf2b7` | Lebenszyklus, Guard-Ausdrücke, Log-Statistik |
+| `19bdc97` | `acf2e8d` | Fehlalarme des Reviewers entschärft          |
+| `ce1a5ac` | `7271ade` | Watchdog-Diagnosezeilen                      |
+| `35e01c8` | `5daa7d2` | Ausnahme für die Ruff-Benutzerbasis          |
+| `3b2d2e3` | `854d8c0` | drei Lücken aus Rückmeldung F                |
+| `ff8d4c2` | `d0f5269` | MCP-Schritt A                                |
+| `e487348` | `2cb8c80` | Entscheidungen aus Teil 5                    |
+| `2d691c5` | `31c35c5` | Shadow-Log deckt alle Effekte ab             |
+| `ca33e05` | `ba05af5` | MCP-Schritt B                                |
+| `11b9f58` | `a860d19` | MCP-Schritt C                                |
+| `74751f2` | `c08329f` | MCP-Schritt E                                |
+| `6fe01da` | `3cb5231` | README-Tabellen ausgerichtet                 |
+| `5b4998e` | `42f0103` | S0, Planung, CHANGELOG                       |
