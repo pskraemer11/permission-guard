@@ -43,6 +43,13 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   Ergebnis zählt, der statische `neverAutoApprove`-Filter bleibt davor.
   Gemessen an 14 Shell-Befehlen: 14/14, Freigaben 0,94–0,97, Änderungen
   0,02–0,06. Drei Integrationstests (573/573).
+- **Betrieb (05.11.2026):** `start-reviewer.ps1` schreibt eine PID-Datei
+  (`-Stop` findet den Server zuverlässig), kennt `-DraftPath` für
+  Speculative-Decoding-Drafter und prüft die Belegung über `/health` statt über
+  `netstat`. `package.json` und `deploy.ps1` führen `audit.js`,
+  `verify-audit.mjs`, `mcp-report.mjs`, `bench-model.mjs` und
+  `mcp-model-cases.jsonl`; die Konfigurationsvorlage dokumentiert `mcpBackend`,
+  `mcpThreshold`, `shellBackend` und `shellThreshold`.
 - **Ebene-3-Prompt (05.11.2026):** Kompakte Fassung mit vier Beispielen; das
   Modell sieht jetzt nur noch Regel, Werkzeug, Absicht, Zielarten und Argumente.
   Messreihe `bench-model.mjs` mit 14 Graubereich-Fällen (`mcp-model-cases.jsonl`):
