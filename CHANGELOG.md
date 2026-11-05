@@ -6,12 +6,25 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ## [Unreleased]
 
-Noch keine Änderungen nach 0.1.0.
+### Geändert
+
+- **Backend auf Clef-Flash umgestellt (05.11.2026):** Der Reviewer lädt
+  `Clef-Flash-Q4_K_M.gguf` (ggml-org) und entscheidet über `/v1/systemone`;
+  `mcpBackend` und `shellBackend` stehen auf `systemone`, Schwelle 0,7. Die
+  kompaktere `IQ3_XS`-Fassung scheidet aus: ihre GGUF-Metadaten tragen
+  `general.architecture = qwen35`, keinen Decision-Head; `/v1/systemone`
+  antwortet mit 501.
+- **MCP-Aktivierung (05.11.2026):** `MCP_GATING_MODE = "active"`. Bewusste
+  Abweichung von den F-Kriterien (ein Aufruf statt sieben Tage und 50 Aufrufe),
+  weil die Kriterien für das Chat-Modell galten; Begründung in `PLANUNG.md`.
+  Rücknahme: eine Zeile plus Deploy.
+- **Aufwärmlauf folgt dem Backend (05.11.2026):** Bei `systemone` geht die
+  Aufwärm-Anfrage an `/v1/systemone` statt an `chat/completions`; zwei Tests
+  (575/575).
 
 ## [0.1.0] - 2026-11-05
 
 ### Hinzugefügt
-
 - **Urteilsdatei für Skill-Skripte (05.11.2026):** `skill-verdicts.mjs`
   verdichtet die SkillSpector-Berichte und die Prüfprotokolle zu
   `~/.agents/skill-reviews/verdicts.json`. Der Guard liest die Datei nur und

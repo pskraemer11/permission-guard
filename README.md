@@ -295,7 +295,7 @@ Skill als `neu aufgenommen (ohne Bericht): <name>`.
 
 ### Audit-Kette (Schritt D, 05.11.2026)
 
-Jede MCP-Entscheidung wird protokolliert, auch im Schattenmodus: ein Datensatz
+Jede MCP-Entscheidung wird protokolliert, auch im aktiven Modus: ein Datensatz
 beim `permission.evaluate`, einer beim `execute.after`. Verknüpft werden sie über
 einen Schlüssel aus Sitzung, Werkzeug und Argument-Hash. D0 hat gezeigt, dass
 `source.id` je `execute`-Block gilt — zwei Aufrufe darin tragen dieselbe ID und
@@ -648,12 +648,13 @@ Timeout stehen in `shell-reviewer.config.json` (beim Deploy aus
 Prüfen lässt sich das im Guard-Log: Zeitstempel der letzten `setup:`-Zeile
 gegen die Änderungszeit der Konfigurationsdatei halten.
 
-## MCP: Schattenmodus und Drei-Schichten-Urteil (Schritte A–C, 29.10.–04.11.2026)
+## MCP: Drei-Schichten-Urteil (Schritte A–C, 29.10.–04.11.2026; aktiv seit 05.11.2026)
 
-MCP-Aufrufe werden seit Schritt A **nur protokolliert**, nie beeinflusst: Der
-Zweig läuft vor jeder Shell-Prüfung, ändert `input.effect` nicht, und die
-statischen Regeln aus `opencode.jsonc` entscheiden weiterhin. Schritt B ordnet
-jede Anfrage zusätzlich nach den vier Kriterien des Plans ein:
+MCP-Aufrufe wurden ab Schritt A **nur protokolliert**. Seit dem 05.11.2026 gilt
+das Urteil (`MCP_GATING_MODE = "active"`): Der Zweig läuft vor jeder
+Shell-Prüfung und beeinflusst ausschließlich Aufrufe, die die statischen Regeln
+aus `opencode.jsonc` mit `ask` beantworten. Schritt B ordnet jede Anfrage
+zusätzlich nach den vier Kriterien des Plans ein:
 
 | Kriterium | Quelle                          | Ausgabe im Log (nie Werte)                                 |
 | --------- | ------------------------------- | ---------------------------------------------------------- |
@@ -731,18 +732,17 @@ Reihenfolge und Grenzen:
   Argumentwerten werden neutralisiert, und eine Aufforderung im
   unzuverlässigen Teil ist allein ein Grund für „Nein". Ein Absichtsspeicher
   existiert noch nicht (Entscheidung 2 vom 01.11., zurückgestellt).
-- **Der Schalter steht im Quelltext:** `MCP_GATING_MODE` in `guard.js` ist
-  `"shadow"`. Aktivieren heißt: dort `"active"` setzen, Tests laufen lassen,
-  deployen — dieselbe Kette wie jede andere Änderung. In `"active"` gilt das
-  Urteil nur für Aufrufe, die die statischen Regeln mit `ask` beantworten;
-  `allow`, `deny` und gespeicherte Freigaben bleiben unangetastet. Vor dem
-  Umschalten muss das Testregime aus Schritt E grün sein.
+- **Der Schalter steht im Quelltext:** `MCP_GATING_MODE` in `guard.js` steht
+  seit dem 05.11.2026 auf `"active"`. Das Urteil gilt nur für Aufrufe, die die
+  statischen Regeln mit `ask` beantworten; `allow`, `deny` und gespeicherte
+  Freigaben bleiben unangetastet. Zurücknehmen heißt: dort wieder `"shadow"`
+  setzen, Tests laufen lassen, deployen — eine Zeile plus Deploy.
 
-Im Schattenmodus steht im Log `schatten=<entscheidung>/<schicht>`, aktiv
-`urteil=…` plus eine zweite Zeile mit dem angewandten Ergebnis:
+Aktiv steht im Log `urteil=<entscheidung>/<schicht>`; im Schattenmodus wäre es
+`schatten=…`. Beispiel aus dem Betrieb:
 
 ```text
-mcp ask github_delete_repository agent=build key=github_delete_repository#… args=2 felder=owner,repo absicht=destructive/delete ziel=repo schatten=deny/2
+mcp allow (aktiv) nur lesend (read) deepwiki_read_wiki_structure key=deepwiki_read_wiki_structure#…
 ```
 
 ### Ebene 3: Prompt und Messung (05.11.2026)

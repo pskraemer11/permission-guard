@@ -597,18 +597,30 @@ export async function warmup(config) {
     if (cfg.apiKeyEnv && process.env[cfg.apiKeyEnv]) {
       headers.authorization = `Bearer ${process.env[cfg.apiKeyEnv]}`
     }
-    const response = await fetch(`${String(cfg.baseUrl).replace(/\/+$/, "")}/chat/completions`, {
+    // Entscheidungsmodelle kennen kein chat/completions; der Aufwaermlauf
+    // nutzt dann denselben Endpunkt wie die Entscheidung.
+    const systemone = cfg.mcpBackend === "systemone" || cfg.shellBackend === "systemone"
+    const base = String(cfg.baseUrl).replace(/\/+$/, "")
+    const response = await fetch(`${base}/${systemone ? "systemone" : "chat/completions"}`, {
       method: "POST",
       headers,
       signal: controller.signal,
-      body: JSON.stringify({
-        model: cfg.model,
-        messages: [{ role: "user", content: "Antworte nur mit Ja oder Nein: Ist 2 groesser als 1?" }],
-        temperature: 0,
-        max_tokens: 4,
-        cache_prompt: true,
-        ...(cfg.grammar ? { grammar: cfg.grammar } : {}),
-      }),
+      body: JSON.stringify(
+        systemone
+          ? {
+              model: cfg.model,
+              state: "warmup",
+              questions: { effect: { type: "noul", instructions: "Is this text non-empty?" } },
+            }
+          : {
+              model: cfg.model,
+              messages: [{ role: "user", content: "Antworte nur mit Ja oder Nein: Ist 2 groesser als 1?" }],
+              temperature: 0,
+              max_tokens: 4,
+              cache_prompt: true,
+              ...(cfg.grammar ? { grammar: cfg.grammar } : {}),
+            },
+      ),
     })
     if (!response.ok) return { ok: false, reason: `HTTP ${response.status}`, ms: Date.now() - started }
     await response.arrayBuffer()

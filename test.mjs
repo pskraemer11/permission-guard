@@ -2,7 +2,7 @@
 import { contextScope, evaluate, mcpAction, mcpCriteria, mcpObservation, mcpVerdict } from "./guard.js"
 import { appendRecord, canonicalJson, hashRecord, parseLines, verifyChain } from "./audit.js"
 import { summarizeAudit } from "./mcp-report.mjs"
-import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMcpAnswer, review, reviewMcp, segments } from "./reviewer.js"
+import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMcpAnswer, review, reviewMcp, segments, warmup } from "./reviewer.js"
 import { buildShellSystemoneRequest, buildSystemoneRequest, systemoneVerdict } from "./reviewer.js"
 import { parseLine, summarize } from "./stats.mjs"
 import { createHash } from "node:crypto"
@@ -1216,6 +1216,27 @@ for (const [name, ok] of systemoneChecks) {
 }
 console.log("-- Ebene 3: Entscheidungsmodell\n")
 
+// --- Aufwaermlauf: Endpunkt folgt dem Backend ---
+const warmupChecks = []
+{
+  const realFetch2 = globalThis.fetch
+  let seen = ""
+  globalThis.fetch = async (url) => {
+    seen = String(url)
+    return { ok: true, arrayBuffer: async () => new ArrayBuffer(0), json: async () => ({}) }
+  }
+  await warmup({ enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", mcpBackend: "systemone", warmupTimeoutMs: 1000 })
+  warmupChecks.push(["Aufwaermlauf nutzt systemone", seen.endsWith("/systemone")])
+  await warmup({ enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", warmupTimeoutMs: 1000 })
+  warmupChecks.push(["Aufwaermlauf nutzt chat/completions", seen.endsWith("/chat/completions")])
+  globalThis.fetch = realFetch2
+}
+for (const [name, ok] of warmupChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- Aufwaermlauf\n")
+
 const total =
   base.length + scoped.length + cli.length + helpVersion.length + gitleaks.length +
   readOnlyCli.length +
@@ -1226,6 +1247,6 @@ const total =
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
-  reviewerRisky.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + 3
+  reviewerRisky.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + 3
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

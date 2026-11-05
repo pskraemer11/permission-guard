@@ -38,10 +38,8 @@ Ablageort.
 
 | Prio | Punkt                                                                                     | Aufwand | Abhängigkeit                  |
 | ---- | ----------------------------------------------------------------------------------------- | ------- | ----------------------------- |
-| P1   | Push des Release-Commits und des Tags `v0.1.0`                                            | S       | Nutzer                        |
 | P1   | S6: Parent-Workflow entfernen, Verweise umstellen                                         | S       | CI grün (erfüllt), Zustimmung |
-| P2   | Aktivierung: F-Kriterien erfüllen (7 Tage / 50 Aufrufe / 3 Werkzeuge, davon 1 schreibend) | —       | echte Nutzung                 |
-| P2   | Clef-Umstellung: Config auf `systemone`, 24 h Schatten                                    | S       | Nutzerentscheid               |
+| P2   | Beobachtung nach Aktivierung: 24 h Log und `mcp-report` prüfen                            | S       | läuft seit 05.11.             |
 | P3   | Shell-Fälle als `shell-cases.jsonl` und `bench-shell` festschreiben                       | S       | —                             |
 | P3   | G0/G1: Ergebnis-Form prüfen, Grenz-Markierung                                             | M       | D                             |
 | P3   | G2/G3: statische Injection-Prüfung, optional lokales Modell                               | M–L     | G1                            |
@@ -335,6 +333,16 @@ die Kriterien sind damit messbar und offen.
 - Wirkung: nur statische `ask`-Fälle werden beeinflusst; `allow`, `deny` und
   gespeicherte Freigaben bleiben unangetastet.
 - 24 Stunden beobachten; Rollback ist eine Zeile plus Deploy.
+
+**Umgesetzt 05.11.2026 (bewusste Abweichung):** Aktiviert wurde mit **einem**
+beobachteten MCP-Aufruf, nicht mit den vereinbarten 7 Tagen / 50 Aufrufen. Grund
+ist der Backend-Wechsel: Die Kriterien entstanden für das Chat-Modell (12/14,
+streuend bei `temperature 0`). Mit Clef-Flash als Entscheidungsmodell liegt die
+Trennung bei 0,458 gegen 0,884 und die festen Fälle bei 14/14 plus Gate 3/3 —
+pro Aufruf aussagekräftiger als 50 Chat-Entscheidungen. Die Beobachtung läuft
+trotzdem weiter: `node mcp-report.mjs` zählt Tage, Aufrufe und Werkzeuge; die
+Zahlen dienen jetzt der Kontrolle nach der Aktivierung, nicht mehr als
+Vorbedingung. Rollback: `MCP_GATING_MODE = "shadow"`, Tests, Deploy.
 
 ### G — Ergebnis-Ebene
 

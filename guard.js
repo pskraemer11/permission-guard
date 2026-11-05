@@ -1014,7 +1014,7 @@ export function mcpVerdict(criteria, input) {
 // ist ein eigener, pruefbarer Schritt (Testregime E vorher gruen), kein
 // Zustand, den ein Terminal vergisst. Umschalten heisst: hier aendern, Tests
 // laufen lassen, deployen - dieselbe Kette wie jede andere Plugin-Aenderung.
-export const MCP_GATING_MODE = "shadow"
+export const MCP_GATING_MODE = "active"
 
 // Welche Regeln darf ein Plugin-Kontext registrieren? Der globale Kontext
 // (Basis = Benutzerprofil) darf nur MCP beobachten. Wuerde er die Shell-

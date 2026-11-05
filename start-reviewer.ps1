@@ -1,6 +1,6 @@
-# Startet den lokalen Entscheider fuer Ebene 1 (permission-guard/reviewer.js).
+# Startet den lokalen Entscheider fuer Ebene 1 und 3 (permission-guard/reviewer.js).
 #
-#   .\start-reviewer.ps1                    # Gemma 4 12B auf Port 8080
+#   .\start-reviewer.ps1                    # Clef-Flash (Entscheidungsmodell) auf Port 8080
 #   .\start-reviewer.ps1 -Port 8081         # anderer Port
 #   .\start-reviewer.ps1 -ModelPath <pfad>  # anderes GGUF
 #   .\start-reviewer.ps1 -Stop              # beendet den Prozess auf diesem Port
@@ -13,7 +13,7 @@
 
 param(
   [int]$Port = 8080,
-  [string]$ModelPath = "D:\LLM-Modelle\Llama-GGUF\unsloth\gemma-4-12B-it-qat-GGUF\gemma-4-12B-it-qat-UD-Q4_K_XL.gguf",
+  [string]$ModelPath = "D:\LLM-Modelle\Llama-GGUF\ggml-org\Clef-Flash-GGUF\Clef-Flash-Q4_K_M.gguf",
   [string]$Server = "C:\Program Files\llama.cpp\llama-server.exe",
   [string]$DraftPath = "",
   [switch]$Stop
