@@ -28,8 +28,10 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   stagt die Datei mit; die CI ruft `--verify`. Beide kommen ohne Scanner,
   Netz und Schlüssel aus. Der Hook blockiert nicht versionierte Python-Dateien
   unter `skills/` und unvollständig gestagte Python-Änderungen, weil die Datei
-  sonst einen Stand beschriebe, der nicht im Commit ist. Acht Hook-Fälle und
-  neun Werkzeugfälle in einem temporären Repo geprüft.
+  sonst einen Stand beschriebe, der nicht im Commit ist. `pre-push` prüft mit
+  `--verify` nach, damit kein veralteter Stand hinausgeht, und `--refresh`
+  meldet neue Skills als `neu aufgenommen (ohne Bericht): <name>`. Dreizehn
+  Hook-Fälle und elf Werkzeugfälle in einem temporären Repo geprüft.
 - **Eine Freigabequelle (05.11.2026):** `TRUSTED_SKILL_DIRS` ist entfallen.
   Skills gelten nur noch über `verdicts.json` als lesbar; ohne passenden
   Hash bleibt jedes Skript Rückfrage. Grund: die Namensliste hätte eine

@@ -182,6 +182,7 @@ function build(reportsDirs, skillsDir, reviewsDir, existing, drift) {
 function refresh(skillsDir, reviewsDir, existing, drift) {
   const skills = {}
   const removed = []
+  const added = []
   const known = existing?.skills ?? {}
 
   for (const name of skillDirs(skillsDir)) {
@@ -189,6 +190,7 @@ function refresh(skillsDir, reviewsDir, existing, drift) {
     const hashes = hashTree(dir)
     if (!Object.keys(hashes).length) continue
     const prev = known[name]
+    if (!prev) added.push(name)
     const verdict = decide(prev, hashes, name, drift)
     skills[name] = {
       ...verdict,
@@ -205,7 +207,7 @@ function refresh(skillsDir, reviewsDir, existing, drift) {
   for (const name of Object.keys(known)) {
     if (!(name in skills)) removed.push(name)
   }
-  return { skills, stats: { removed } }
+  return { skills, stats: { removed, added } }
 }
 
 function verify(dbFile, skillsDir) {
@@ -286,6 +288,7 @@ function main() {
     ;({ skills, stats } = refresh(skillsDir, reviewsDir, existing, drift))
     console.error(`Skills mit Python-Code: ${Object.keys(skills).length}  entfernt: ${stats.removed.length}`)
     for (const name of stats.removed) console.error(`  entfernt: ${name}`)
+    for (const name of stats.added) console.error(`  neu aufgenommen (ohne Bericht): ${name}`)
   } else {
     const reportsDirs = args("reports").map((value) => resolve(value))
     if (!reportsDirs.length) fail("--reports fehlt (Verzeichnis mit den SkillSpector-Berichten)")

@@ -282,15 +282,16 @@ Drei Betriebsarten, ein Werkzeug:
 
 Die Bring-Schuld liegt beim Skill-Repo, nicht beim Guard: `--refresh` läuft im
 `pre-commit`, sobald Skill-Dateien gestaged sind, und stagt die Datei mit.
-`--verify` läuft in der CI. Beide kommen ohne Scanner, Netz und Schlüssel aus;
-deshalb können die Rohberichte lokal bleiben, in denen der absolute Quellpfad
-steht.
+`--verify` läuft im `pre-push` und in der CI. Alle drei kommen ohne Scanner,
+Netz und Schlüssel aus; deshalb können die Rohberichte lokal bleiben, in denen
+der absolute Quellpfad steht.
 
 Der Hook lehnt zwei Fälle ab, weil die Datei sonst einen Stand beschriebe, der
 nicht im Commit ist: nicht versionierte Python-Dateien unter `skills/` und
 Python-Änderungen, die noch nicht gestaged sind. Andere Dateitypen gehen nicht
 in die Hashes ein und blockieren deshalb nicht. Ein zurückgenommener `trust`
-erscheint als Zeile `zurueckgesetzt (Skript geaendert): <name>`.
+erscheint als Zeile `zurueckgesetzt (Skript geaendert): <name>`, ein neuer
+Skill als `neu aufgenommen (ohne Bericht): <name>`.
 
 ### Verweigerung unlesbarer Formen (Entscheidung 3, 22.10.2026, Abend)
 

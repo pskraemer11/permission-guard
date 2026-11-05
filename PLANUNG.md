@@ -52,6 +52,7 @@ Ablageort.
 | P3   | G0/G1: Ergebnis-Form prüfen, Grenz-Markierung                            | M       | D                      |
 | P3   | G2/G3: statische Injection-Prüfung, optional lokales Modell              | M–L     | G1                     |
 | P3   | Warmup-`TypeError` diagnostizieren                                       | S       | —                      |
+| P3   | Suchmuster mit Befehlsnamen (`iex`) löst Verweigerung aus                | S       | —                      |
 | P3   | `package.json` vervollständigen (`exports`, `repository`, `files`)       | S       | S1                     |
 
 ## Plan 1: Eigenständiges Repository
@@ -313,6 +314,10 @@ Offen:
 - Eine Hash-Kette ist kein Beweis gegen Löschen am Dateiende.
 - Fremde Fälle (warc0s, hueyexe, defender) liefern Fälle, keine Erwartungen;
   Abweichungen stehen in `why`.
+- Ein Suchmuster ist für den Guard Code. `Select-String -Pattern 'iex'` wird
+  deshalb verweigert, obwohl nur gelesen wird. Bewusst offen gelassen: die
+  Unterscheidung „Zeichenkette als Daten" gegen „Zeichenkette als Befehl" ist
+  genau die Grenze, an der ein Klassifizierer falsch liegen kann.
 
 ## Nachtrag 05.11.2026: Historie umgeschrieben
 
