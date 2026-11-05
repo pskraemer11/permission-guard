@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# ---------------------------------------------------------------------------
+# commit-msg — Privacy-Guard fuer Commit-Nachricht und Git-Identitaet
+#
+# Vorlage:  ~/.agents/references/githooks/commit-msg
+# Notausstieg nur bei dokumentiertem Notfall: git commit --no-verify
+# ---------------------------------------------------------------------------
+set -u
+
+_msgfile="${1:-}"
+if [ -z "$_msgfile" ] || [ ! -f "$_msgfile" ]; then
+  echo "commit-msg: Nachrichtendatei fehlt." >&2
+  exit 1
+fi
+
+# Muster zur Laufzeit zusammengesetzt (kein Klartext in dieser Datei).
+_cc='de'
+_names='posteo|online|e-mail'
+_pat="[A-Za-z0-9._%+-]+@(${_names})[.]${_cc}"
+
+_block() {
+  echo "" >&2
+  echo "COMMIT BLOCKIERT - $1" >&2
+  echo "  Der Wert selbst wird absichtlich nicht ausgegeben." >&2
+  echo "  Git-Identitaet pruefen: git config user.name / user.email" >&2
+  exit 1
+}
+
+if grep -Eiq "$_pat" "$_msgfile"; then
+  _block "verbotene E-Mail-Domain in der Commit-Nachricht."
+fi
+
+_ident="$(git config user.name 2>/dev/null) <$(git config user.email 2>/dev/null)>"
+if printf '%s' "$_ident" | grep -Eiq "$_pat"; then
+  _block "verbotene E-Mail-Domain in der Autor-/Committer-Identitaet."
+fi
+
+exit 0

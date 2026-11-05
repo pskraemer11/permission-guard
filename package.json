@@ -17,6 +17,9 @@
     "llama.cpp",
     "local-llm"
   ],
+  "exports": {
+    ".": "./index.js"
+  },
   "files": [
     "guard.js",
     "index.js",
@@ -24,23 +27,33 @@
     "audit.js",
     "verify-audit.mjs",
     "mcp-report.mjs",
-    "bench-model.mjs",
-    "mcp-model-cases.jsonl",
-    "test.mjs",
     "skill-verdicts.mjs",
-    "shell-reviewer.config.example.json",
+    "test.mjs",
+    "bench-mcp.mjs",
+    "bench-model.mjs",
+    "mcp-cases.jsonl",
+    "mcp-model-cases.jsonl",
+    "stats.mjs",
+    "replay.mjs",
+    "analyze.mjs",
+    "smoke-reviewer.mjs",
+    "bench-reviewer.ps1",
+    "bench-quality.ps1",
+    "watchdog-reviewer.ps1",
     "start-reviewer.ps1",
     "deploy.ps1",
     "deploy.sh",
+    "shell-reviewer.config.example.json",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
     "test": "node test.mjs",
+    "bench": "node bench-mcp.mjs",
+    "bench:model": "node bench-model.mjs --repeat 3",
     "verdicts": "node skill-verdicts.mjs",
     "verify-audit": "node verify-audit.mjs",
     "report": "node mcp-report.mjs",
-    "bench:model": "node bench-model.mjs --repeat 3",
     "smoke": "node smoke-reviewer.mjs"
   }
 }

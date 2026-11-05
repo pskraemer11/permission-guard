@@ -1,0 +1,229 @@
+#!/usr/bin/env bash
+# ---------------------------------------------------------------------------
+# pre-push — Secret-Scan und Privacy-Guard fuer alle neuen Commits im
+# Zielbereich
+#
+# Vorlage:  ~/.agents/references/githooks/pre-push
+# Notausstieg nur bei dokumentiertem Notfall: git push --no-verify
+#
+# Hinweis: gitleaks prueft den Commit-Bereich; die Privacy-Pruefung deckt
+# Nachricht, Autor/Committer und hinzugefuegte Zeilen ab.
+# Wertszeilen mit stoerendem Zeilenende (CR) werden abgeklemt; unlesbare
+# Revisionswerte bremsen die Pruefung (fail closed), statt still durchzulaufen.
+# ---------------------------------------------------------------------------
+set -u
+
+_cc='de'
+_names='posteo|online|e-mail'
+_pat="[A-Za-z0-9._%+-]+@(${_names})[.]${_cc}"
+_zero=0000000000000000000000000000000000000000
+
+GITLEAKS_BIN="${GITLEAKS_BIN:-gitleaks}"
+# Adressen aus der Ausgabe entfernen (gitleaks zeigt sonst Autor-E-Mails an).
+_sanitize() {
+  sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]{2,}/<adresse-entfernt>/g'
+}
+if ! command -v "$GITLEAKS_BIN" >/dev/null 2>&1; then
+  for cand in \
+    "${LOCALAPPDATA:-$HOME/AppData/Local}/Microsoft/WinGet/Links/gitleaks.exe" \
+    "$HOME/AppData/Local/Microsoft/WinGet/Links/gitleaks.exe"
+  do
+    if [ -x "$cand" ]; then GITLEAKS_BIN="$cand"; break; fi
+  done
+fi
+
+_status=0
+
+while read -r _lref _lsha _rref _rsha; do
+  # Zeilenende-Stoerung abklemmen: Manche Pruefstrecken uebergeben die
+  # Wertszeile mit CR; ohne Abklemmung wuerde der Bereich leer dastehen.
+  _lsha=${_lsha%$'\r'}
+  _rsha=${_rsha%$'\r'}
+
+  [ "$_lsha" = "$_zero" ] && continue      # Branch-Loeschung
+  [ -z "$_lsha" ] && continue
+
+  # Fail closed: Liegt keine gueltige 40-stellige Hex-Revision vor, kann
+  # der Zielbereich nicht auswertbar sein - dann bremsen statt still
+  # laufen (unlesbar = blockieren, wie beim permission-guard).
+  _shax='^[0-9a-f]{40}$'
+  if ! [[ $_lsha =~ $_shax ]] || ! [[ $_rsha =~ $_shax ]]; then
+    echo "" >&2
+    echo "PUSH BLOCKIERT - Zielbereich nicht auswertbar (unlesbare Werte)." >&2
+    echo "  Die Pruefstrecke hat keine gueltige Revisionsangabe geliefert." >&2
+    _status=1
+    continue
+  fi
+
+  if [ "$_rsha" = "$_zero" ]; then
+    # Neuer Branch: alle Commits, die auf keinem Remote liegen. Die fuehrende
+    # Revision ist noetig - ohne sie schlaegt "git log --not --remotes" in
+    # Repositories ohne Remote still fehl und der Scan liefe ins Leere.
+    _logopts="${_lsha} --not --remotes"
+    _range="alle Commits, die auf keinem Remote liegen"
+  else
+    _logopts="${_rsha}..${_lsha}"
+    _range="${_rsha}..${_lsha}"
+  fi
+
+  # --- Secret-Scan --------------------------------------------------------
+  if command -v "$GITLEAKS_BIN" >/dev/null 2>&1; then
+    set +e
+    _out=$("$GITLEAKS_BIN" git --log-opts="$_logopts" --redact --no-banner \
+             --no-color --exit-code 1 -v 2>&1)
+    _rc=$?
+    set -e
+    if [ "$_rc" -ne 0 ]; then
+      echo "" >&2
+      echo "PUSH BLOCKIERT - gitleaks-Treffer im Bereich $_range" >&2
+      printf '%s\n' "$_out" | _sanitize | sed -n '1,40p' | sed 's/^/  /' >&2
+      echo "" >&2
+      echo "  Echter Treffer: Secret entfernen und rotieren." >&2
+      echo "  Fehlalarm: Fingerprint in .gitleaksignore oder 'gitleaks:allow'." >&2
+      _status=1
+    fi
+  else
+    echo "" >&2
+    echo "PUSH BLOCKIERT - gitleaks nicht gefunden." >&2
+    echo "  Der Secret-Scan ist ohne gitleaks nicht moeglich; der Push wird" >&2
+    echo "  deshalb verweigert (fail closed)." >&2
+    echo "  Abhilfe: gitleaks installieren oder GITLEAKS_BIN auf die Binary setzen." >&2
+    _status=1
+  fi
+
+  # --- Metadaten der neuen Commits ---------------------------------------
+  if git log --format='%an%n%ae%n%cn%n%ce%n%B' $_logopts 2>/dev/null \
+       | grep -Eiq "$_pat"; then
+    echo "" >&2
+    echo "PUSH BLOCKIERT - verbotene E-Mail-Domain in Nachricht oder Identitaet." >&2
+    echo "  Bereich: $_range" >&2
+    echo "  Der Wert selbst wird absichtlich nicht ausgegeben." >&2
+    _status=1
+  fi
+
+  # --- Hinzugefuegte Zeilen ----------------------------------------------
+  if git log -p --no-color --format='' $_logopts 2>/dev/null \
+       | grep -E '^\+' | grep -vE '^\+\+\+' | grep -Eiq "$_pat"; then
+    echo "" >&2
+    echo "PUSH BLOCKIERT - verbotene E-Mail-Domain in hinzugefuegten Zeilen." >&2
+    echo "  Bereich: $_range" >&2
+    echo "  Der Wert selbst wird absichtlich nicht ausgegeben." >&2
+    _status=1
+  fi
+done
+
+# --- Skill-Urteilsdatei (Bring-Schuld des Skill-Repos, 05.11.2026) ----------
+# Letzte lokale Pruefung vor dem Push. Der pre-commit schreibt die Datei fort;
+# hier wird nur verglichen, damit kein veralteter Stand hinausgeht. Der Schritt
+# laeuft nur, wo das Werkzeug liegt, und braucht weder Netz noch Scanner.
+_verdicts_tool="references/scripts/skill-verdicts.mjs"
+_verdicts_db="skill-reviews/verdicts.json"
+if [ -f "$_verdicts_tool" ] && [ -f "$_verdicts_db" ]; then
+  if ! command -v node >/dev/null 2>&1; then
+    echo "" >&2
+    echo "PUSH BLOCKIERT - node fehlt, Urteilsdatei kann nicht geprueft werden." >&2
+    _status=1
+  else
+    set +e
+    node "$_verdicts_tool" --verify --skills skills --out "$_verdicts_db"
+    _vrc=$?
+    set -e
+    if [ "$_vrc" -ne 0 ]; then
+      echo "" >&2
+      echo "PUSH BLOCKIERT - Urteilsdatei passt nicht zum Stand." >&2
+      echo "  Naechster Schritt: node $_verdicts_tool --refresh --skills skills --write" >&2
+      echo "  dann die Aenderung committen." >&2
+      _status=1
+    fi
+  fi
+fi
+
+# --- Test-Gate (optional, pro Repo konfiguriert) ----------------------------
+# Gesteuert ueber .githooks/test-gate.conf im Repo, ein Schluessel=Wert je
+# Zeile ('#' beginnt einen Kommentar):
+#
+#   prefixes=src/ tests/ contrib/ scripts/
+#   python=.venv/Scripts/python.exe
+#   lint=uvx ruff check .
+#   test={python} -m pytest -q
+#
+# Fehlt die Datei, ist das Gate aus; die Vorlage bleibt sprachneutral.
+# Beim Push laeuft es immer vollstaendig: es ist das Fangnetz fuer alles, was
+# das bedingte Gate in pre-commit uebersprungen hat (reine Doku-Commits).
+# Details: ~/.agents/references/githooks/README.md, Abschnitt "Test-Gate".
+_gate_mode="all"
+_gate_label="PUSH"
+_gate_conf=".githooks/test-gate.conf"
+if [ "${GITHOOKS_TEST_GATE:-1}" = "0" ]; then
+  echo "Test-Gate: GITHOOKS_TEST_GATE=0 - uebersprungen."
+elif [ -f "$_gate_conf" ]; then
+  set +e
+  _gate_prefixes=""
+  _gate_python=""
+  _gate_lint=""
+  _gate_test=""
+  while IFS= read -r _line; do
+    case "$_line" in ''|'#'*) continue ;; esac
+    _key=${_line%%=*}
+    _val=${_line#*=}
+    case "$_key" in
+      prefixes) _gate_prefixes="$_val" ;;
+      python)   _gate_python="$_val" ;;
+      lint)     _gate_lint="$_val" ;;
+      test)     _gate_test="$_val" ;;
+    esac
+  done < "$_gate_conf"
+
+  if [ -z "$_gate_python" ] || [ ! -x "$_gate_python" ]; then
+    _gate_python=$(command -v python || command -v python3 || true)
+  fi
+
+  case "$_gate_lint $_gate_test" in
+    *'{python}'*)
+      if [ -z "$_gate_python" ]; then
+        echo "" >&2
+        echo "${_gate_label} BLOCKIERT - kein Python-Interpreter gefunden." >&2
+        echo "  Erwartet: python im PATH oder python= in $_gate_conf." >&2
+        exit 1
+      fi
+      ;;
+  esac
+
+  _gate_lint=${_gate_lint//\{python\}/$_gate_python}
+  _gate_test=${_gate_test//\{python\}/$_gate_python}
+
+  _gate_needed=0
+  if [ "$_gate_mode" = "all" ]; then
+    _gate_needed=1
+  else
+    while IFS= read -r -d '' _file; do
+      for _p in $_gate_prefixes; do
+        case "$_file" in "$_p"*) _gate_needed=1; break ;; esac
+      done
+      [ "$_gate_needed" -eq 1 ] && break
+    done < <(git diff --cached --name-only -z --diff-filter=ACMR)
+  fi
+
+  if [ "$_gate_needed" -eq 0 ]; then
+    echo "Test-Gate: keine passenden Pfade gestaged - uebersprungen."
+  elif [ -z "$_gate_lint" ] && [ -z "$_gate_test" ]; then
+    echo "Test-Gate: weder lint noch test konfiguriert - uebersprungen." >&2
+  else
+    _gate_failed=0
+    for _cmd in "$_gate_lint" "$_gate_test"; do
+      [ -n "$_cmd" ] || continue
+      echo "Test-Gate: $_cmd"
+      sh -c "$_cmd"
+      [ $? -eq 0 ] || _gate_failed=1
+    done
+    if [ "$_gate_failed" -ne 0 ]; then
+      echo "" >&2
+      echo "${_gate_label} BLOCKIERT - Test-Gate fehlgeschlagen." >&2
+      echo "  Konfiguration: $_gate_conf" >&2
+      echo "  Notausstieg nur bei dokumentiertem Notfall: --no-verify" >&2
+      exit 1
+    fi
+  fi
+fi
+
+exit "$_status"

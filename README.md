@@ -918,13 +918,14 @@ node replay.mjs                 # Messung: wie viele Befehle laufen ohne Rueckfr
 node analyze.mjs                # Punkt-8-Analyse: Woher genau kommt "nicht einordenbar"
 ```
 
-518 Fälle in den Gruppen ohne/mit Projektbezug, CLI-Allowlists, Hilfe und
+573 Fälle in den Gruppen ohne/mit Projektbezug, CLI-Allowlists, Hilfe und
 Version, gitleaks, sqlite3/gh, Netz-Lesen, Verweigerung & Geheimnis-Ersetzung,
 python, Interpreters, Ruff-Bootstrap, Reviewer (Risikoliste, Fehlalarme,
 Antwortformat, Aufbau), MCP (Erkennung, Schlüssel, Geheimnisverdacht,
 Kriterien, Drei-Schichten-Urteil inklusive Notbremse, Absicht aus Argumenten,
 Datenabfluss, unaufgelöste Ziele, Schalter, Prompt-Kanäle und Modellaufruf mit
-Ersatz-`fetch`) und Statistik. Exitcode 1 bei Abweichung.
+Ersatz-`fetch`), Audit-Kette, Skill-Urteilsdatei, Auswertung, Entscheidungsmodell
+und Statistik. Exitcode 1 bei Abweichung.
 Der Klassifizierer (`guard.js`) ist eine reine Funktion und braucht weder
 OpenCode noch Netzwerk. `replay.mjs` und `analyze.mjs` bleiben im Projekt und
 werden nicht deployt.

@@ -12,6 +12,7 @@ package-lock.json
 *.log.*
 bench-results*.json
 guard.log
+*.tgz
 
 # Lokale Modell- und Serverpfade, falls jemand Skripte kopiert
 *.local.ps1

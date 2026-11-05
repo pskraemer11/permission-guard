@@ -1,0 +1,61 @@
+name: ci
+
+# Tests und Routing-Pruefung des permission-guard.
+#
+# Die Testfaelle bilden Windows-Pfad- und Cmdlet-Semantik ab; die Pruefungen
+# selbst sind reine Stringtests und laufen plattformunabhaengig. Die Matrix
+# belegt genau das. Node 20 ist die Untergrenze aus package.json, 22 der
+# aktuelle Stand.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests (Node ${{ matrix.node }} / ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: ["20", "22"]
+    steps:
+      - name: Auschecken
+        uses: actions/checkout@v4
+
+      - name: Node einrichten
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Klassifizierer-Tests
+        run: node test.mjs
+
+      - name: MCP-Weiterleitung (33 Faelle)
+        run: node bench-mcp.mjs
+
+      - name: Fallbestand unveraendert
+        run: node bench-mcp.mjs --change
+
+      - name: Paketinhalt
+        run: npm pack --dry-run
+
+      - name: Keine Benutzerpfade und keine Schluessel
+        if: runner.os == 'Linux'
+        run: |
+          if grep -RInE '(/Users/[A-Za-z0-9._-]{3,}/|[A-Za-z]:\\+Users\\+[A-Za-z0-9._-]{3,})' \
+               --include='*.js' --include='*.mjs' --include='*.json' --include='*.md' --include='*.ps1' .; then
+            echo "::error::Personenbezogener Pfad gefunden."
+            exit 1
+          fi
+          if grep -RInE '(sk-[A-Za-z0-9]{16,}|oc_sk_|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})' \
+               --include='*.js' --include='*.mjs' --include='*.json' --include='*.md' --include='*.ps1' .; then
+            echo "::error::Moeglicher Zugangsschluessel gefunden."
+            exit 1
+          fi
+          echo "Keine Benutzerpfade oder Schluessel gefunden."

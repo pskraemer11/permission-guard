@@ -1,0 +1,8 @@
+# Zeilenenden: Hooks laufen in der Bash und brauchen LF. Quelltext bleibt LF,
+# unabhaengig von core.autocrlf der jeweiligen Maschine.
+.githooks/* text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
