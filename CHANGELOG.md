@@ -38,6 +38,11 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   (Q4_K_M, 6,3 GB): 14/14, Rückfrage ≤ 0,458 gegen Freigabe ≥ 0,884, 75 ms;
   Gate 33/33 und 3/3. Laya (421M) verworfen (8/14). Das Audit speichert die
   Wahrscheinlichkeit. 13 neue Tests (570/570).
+- **Ebene 1 über das Entscheidungsmodell (05.11.2026):** `shellBackend:
+  "systemone"` und `shellThreshold`; je Segment eine Anfrage, das schwächste
+  Ergebnis zählt, der statische `neverAutoApprove`-Filter bleibt davor.
+  Gemessen an 14 Shell-Befehlen: 14/14, Freigaben 0,94–0,97, Änderungen
+  0,02–0,06. Drei Integrationstests (573/573).
 - **Ebene-3-Prompt (05.11.2026):** Kompakte Fassung mit vier Beispielen; das
   Modell sieht jetzt nur noch Regel, Werkzeug, Absicht, Zielarten und Argumente.
   Messreihe `bench-model.mjs` mit 14 Graubereich-Fällen (`mcp-model-cases.jsonl`):

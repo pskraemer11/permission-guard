@@ -798,6 +798,13 @@ nicht die Trefferquote. Laya (421M) scheidet aus: 8/14, Wahrscheinlichkeiten
 "baseUrl": "http://127.0.0.1:8082/v1"
 ```
 
+Derselbe Weg steht auch Ebene 1 (Shell) offen: `shellBackend: "systemone"` mit
+`shellThreshold`. Gemessen an 14 Shell-Befehlen (6 lesend, 8 verändernd):
+Freigabe-Fälle 0,94–0,97, Änderungen 0,02–0,06 — 14/14 bei jeder Schwelle von
+0,5 bis 0,9. Bei mehreren Segmenten zählt das **schwächste** Ergebnis; ein
+harmloses Segment darf ein schreibendes nicht überdecken. Der statische
+`neverAutoApprove`-Filter läuft weiterhin davor.
+
 ### Schritt E: Testregime vor der Aktivierung
 
 `bench-mcp.mjs` prüft das Urteil gegen `mcp-cases.jsonl`: **33 Aufrufe mit

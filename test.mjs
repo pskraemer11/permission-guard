@@ -2,8 +2,8 @@
 import { contextScope, evaluate, mcpAction, mcpCriteria, mcpObservation, mcpVerdict } from "./guard.js"
 import { appendRecord, canonicalJson, hashRecord, parseLines, verifyChain } from "./audit.js"
 import { summarizeAudit } from "./mcp-report.mjs"
-import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMcpAnswer, reviewMcp, segments } from "./reviewer.js"
-import { buildSystemoneRequest, systemoneVerdict } from "./reviewer.js"
+import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMcpAnswer, review, reviewMcp, segments } from "./reviewer.js"
+import { buildShellSystemoneRequest, buildSystemoneRequest, systemoneVerdict } from "./reviewer.js"
 import { parseLine, summarize } from "./stats.mjs"
 import { createHash } from "node:crypto"
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
@@ -872,8 +872,16 @@ const mcpAnswerChecks = mcpAnswerCases.map(([text, want]) => {
 // Ein Ersatz-fetch haelt den Test netzfrei.
 const realFetch = globalThis.fetch
 let fetchCalls = 0
-globalThis.fetch = async () => {
+globalThis.fetch = async (url, init) => {
   fetchCalls++
+  if (String(url).endsWith("/systemone")) {
+    // Entscheidungsmodell: Antwort haengt am Befehl, damit sich die
+    // Segment-Minimum-Regel pruefen laesst.
+    const body = JSON.parse(init?.body ?? "{}")
+    const command = String(body?.state?.command ?? "")
+    const reads = command.includes("Set-Content") ? 0.1 : 0.95
+    return { ok: true, json: async () => ({ answers: { effect: { probabilities: { reads } } } }) }
+  }
   return { ok: true, json: async () => ({ choices: [{ message: { content: "Ja" } }] }) }
 }
 const reviewDisabled = await reviewMcp({ criteria: mcpCriteria("x_get", { input: { a: 1 } }), input: { a: 1 }, config: { enabled: false } })
@@ -886,6 +894,12 @@ const reviewsBig = await reviewMcp({ criteria: bigCrit, input: { body: "x".repea
 const callsAfterBig = fetchCalls
 const reviewPlain = await reviewMcp({ criteria: mcpCriteria("voellig_unbekannt", { input: { ziel: "x" } }), input: { ziel: "x" }, config: { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m" } })
 const callsAfterPlain = fetchCalls
+
+// Ebene 1 (Shell) ueber dasselbe Entscheidungsmodell.
+const shellCfg = { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", shellBackend: "systemone", shellThreshold: 0.7 }
+const shellAllow = await review({ commands: ["Get-ChildItem -Force"], config: shellCfg })
+const shellRisk = await review({ commands: ['Set-Content out.txt "x"'], config: shellCfg })
+const shellMixed = await review({ commands: ["Get-ChildItem", 'Set-Content x.txt "y"'], config: shellCfg })
 globalThis.fetch = realFetch
 const mcpReviewChecks = [
   ["Ebene 3: deaktiviert bleibt ask", reviewDisabled.decision === "ask" && reviewDisabled.reason.includes("deaktiviert") && callsAfterDisabled === 0],
@@ -893,6 +907,9 @@ const mcpReviewChecks = [
   ["Ebene 3: unanalysierbar ohne Modellaufruf", reviewsBig.decision === "ask" && callsAfterBig === 0],
   ["Ebene 3: klare Ja-Antwort hebt auf allow", reviewPlain.decision === "allow" && callsAfterPlain === 1],
   ["Ebene 3: kein deny moeglich", parseMcpAnswer("Nein").decision === "ask"],
+  ["Ebene 1 systemone: Lesen -> allow", shellAllow.decision === "allow" && shellAllow.reason.includes("0.950")],
+  ["Ebene 1 systemone: Schreiben -> ask", shellRisk.decision === "ask" && shellRisk.reason.includes("0.100")],
+  ["Ebene 1 systemone: schwaechstes Segment zaehlt", shellMixed.decision === "ask"],
 ]
 for (const [name, ok] of [
   ...mcpLayer1Checks,

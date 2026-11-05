@@ -300,6 +300,11 @@ eine `choice`-Frage („reads"/„changes") an `/v1/systemone`. Lebendtest mit
 Clef-Flash: 14/14, Gate 33/33 + 3/3, 75 ms je Anfrage; das Audit speichert `p`.
 13 neue Tests (570/570).
 
+**Ebene 1 ebenso (05.11.2026):** `shellBackend: "systemone"` mit
+`shellThreshold`; je Segment eine Anfrage, das schwächste Ergebnis zählt.
+Gemessen an 14 Shell-Befehlen 14/14 (Freigaben 0,94–0,97, Änderungen
+0,02–0,06); Lebendtest durch `review()` 6/6. Drei Integrationstests (573/573).
+
 **Bonsai-Modelle:** `prism-ml/bonsai-27b` und `ternary-bonsai-2-27b` sind
 Reasoning-Modelle. Bei `max_tokens: 8` geht das Budget für
 `reasoning_content` drauf, `finish_reason=length`, `content` leer. Mit 64 Tokens

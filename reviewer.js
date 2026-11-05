@@ -73,6 +73,9 @@ const DEFAULTS = {
   // Entscheidungsmodell die Optionen bewerten (Wahrscheinlichkeit statt Text).
   mcpBackend: "chat",
   mcpThreshold: 0.7,
+  // Ebene 1 (Shell) kann denselben Weg nehmen.
+  shellBackend: "chat",
+  shellThreshold: 0.7,
   // Zusaetzliche Risikomuster aus der Projektkonfiguration.
   extraRisky: [],
 }
@@ -292,6 +295,11 @@ export function loadConfig(overrides = {}) {
     const n = Number(env.PERMISSION_GUARD_REVIEWER_THRESHOLD)
     if (Number.isFinite(n) && n > 0 && n < 1) config.mcpThreshold = n
   }
+  if (env.PERMISSION_GUARD_REVIEWER_SHELL_BACKEND) config.shellBackend = env.PERMISSION_GUARD_REVIEWER_SHELL_BACKEND
+  if (env.PERMISSION_GUARD_REVIEWER_SHELL_THRESHOLD) {
+    const n = Number(env.PERMISSION_GUARD_REVIEWER_SHELL_THRESHOLD)
+    if (Number.isFinite(n) && n > 0 && n < 1) config.shellThreshold = n
+  }
   return config
 }
 
@@ -460,6 +468,26 @@ export const MCP_DECISION_QUESTION = {
   },
 }
 
+// Dieselbe Idee fuer Shell-Befehle (Ebene 1). Gemessen 05.11.2026 mit
+// Clef-Flash: Freigabe-Faelle 0,94-0,97, Aenderungen 0,02-0,06 - 14/14 bei
+// jeder Schwelle von 0,5 bis 0,9.
+export const SHELL_DECISION_QUESTION = {
+  type: "choice",
+  instructions: "Does this shell command only read data, or does it change something?",
+  criteria: {
+    reads: "Lists, reads, searches, or displays files, logs, or repository state. It creates, changes, deletes, installs, or sends nothing.",
+    changes: "Creates, modifies, deletes or moves files, installs packages, changes git state, sends data over the network, or executes arbitrary code.",
+  },
+}
+
+export function buildShellSystemoneRequest({ command, model = "" }) {
+  return {
+    model,
+    state: { command: String(command ?? "") },
+    questions: { effect: SHELL_DECISION_QUESTION },
+  }
+}
+
 export function buildSystemoneRequest({ criteria, input, model = "" }) {
   return {
     model,
@@ -477,7 +505,7 @@ export function systemoneVerdict(probability, threshold = 0.7) {
   return { decision: "ask", reason: `Modell: veraendert oder unklar (p=${p.toFixed(3)})`, probability: p }
 }
 
-async function requestSystemone(criteria, input, cfg) {
+async function requestSystemone(payload, cfg) {
   if (typeof fetch !== "function") return { ok: false, reason: "kein fetch" }
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), Math.max(250, cfg.timeoutMs || 2000))
@@ -490,7 +518,7 @@ async function requestSystemone(criteria, input, cfg) {
       method: "POST",
       headers,
       signal: controller.signal,
-      body: JSON.stringify(buildSystemoneRequest({ criteria, input, model: cfg.model })),
+      body: JSON.stringify({ ...payload, model: cfg.model || payload.model }),
     })
     if (!response.ok) return { ok: false, reason: `HTTP ${response.status}` }
     const data = await response.json()
@@ -649,6 +677,20 @@ export async function review({ commands, project, temp, config }) {
   const risky = neverAutoApprove((commands ?? []).join("\n"), cfg.extraRisky)
   if (risky) return { decision: "ask", reason: `statisch: ${risky}` }
 
+  if (cfg.shellBackend === "systemone") {
+    // Jedes Segment einzeln bewerten; das schwaechste Ergebnis zaehlt. Ein
+    // harmloses Segment darf ein schreibendes nicht ueberdecken.
+    const segments = (commands ?? []).map((command) => String(command).trim()).filter(Boolean)
+    if (!segments.length) return { decision: "ask", reason: "leer" }
+    let lowest = 1
+    for (const command of segments) {
+      const result = await requestSystemone(buildShellSystemoneRequest({ command, model: cfg.model }), cfg)
+      if (!result.ok) return { decision: "ask", reason: result.reason }
+      lowest = Math.min(lowest, result.probability)
+    }
+    return systemoneVerdict(lowest, cfg.shellThreshold)
+  }
+
   const result = await requestCompletion(buildMessages({ commands, project, temp }), cfg)
   if (!result.ok) return { decision: "ask", reason: result.reason }
   return parseAnswer(result.text)
@@ -666,7 +708,7 @@ export async function reviewMcp({ criteria, input, project, recent, config }) {
   if (criteria.context?.oversized) return { decision: "ask", reason: "unanalysierbar: kein Modellaufruf" }
 
   if (cfg.mcpBackend === "systemone") {
-    const result = await requestSystemone(criteria, input, cfg)
+    const result = await requestSystemone(buildSystemoneRequest({ criteria, input, model: cfg.model }), cfg)
     if (!result.ok) return { decision: "ask", reason: result.reason }
     return systemoneVerdict(result.probability, cfg.mcpThreshold)
   }
