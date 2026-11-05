@@ -787,7 +787,8 @@ nur mit erneuter Messung.
 
 Im `systemone`-Modus entfällt der Prompt: Der Zustand ist `{tool, arguments}`,
 die Frage eine `choice` zwischen „reads" und „changes", und `mcpThreshold`
-(Standard 0,7) entscheidet. Gemessen mit Clef-Flash (`Q4_K_M`, 6,3 GB):
+(Standard 0,7) entscheidet. Gemessen mit Clef-Flash (`Q4_K_M`, 6,3 GB;
+Modellkarte: <https://huggingface.co/Cloudflare/clef-flash>):
 Rückfrage-Fälle ≤ 0,458, Freigabe-Fälle ≥ 0,884 — die Trennung ist der Beleg,
 nicht die Trefferquote. Laya (421M) scheidet aus: 8/14, Wahrscheinlichkeiten
 0,09–0,60 ohne Ordnung. Das feste Gate bleibt in beiden Modi 33/33 und 3/3.
