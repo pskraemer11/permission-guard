@@ -41,6 +41,8 @@ $files = @(
     "guard.js",
     "index.js",
     "reviewer.js",
+    "audit.js",
+    "verify-audit.mjs",
     "test.mjs",
     "README.md",
     "start-reviewer.ps1",

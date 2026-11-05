@@ -240,6 +240,12 @@ Zeitfenster; die ID ist der Anker, nicht der Schlüssel. Ein Eintrag ohne passen
 - Grenze dokumentieren: Eine Hash-Kette erkennt Veränderung und Umordnung,
   aber kein Abschneiden am Ende ohne externen Anker; sie ist keine Signatur.
 
+**Umgesetzt 05.11.2026:** `audit.js` (kanonisches JSON, Hash, Append, Rotation,
+`verifyChain`), `verify-audit.mjs`, Verdrahtung in `index.js` (Entscheidung im
+MCP-Zweig, Ergebnis über `ctx.tool.hook("execute.after")`). 13 Tests, deployt,
+Lebendtest: `deepwiki_read_wiki_structure` erzeugte decision+result mit gleicher
+Kennung, Kette intakt. Ablage `%LOCALAPPDATA%\opencode\permission-guard\audit.jsonl`.
+
 ### F — Monitor-Phase
 
 - Neues `mcp-report.mjs` oder Erweiterung von `stats.mjs`:

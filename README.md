@@ -293,6 +293,30 @@ in die Hashes ein und blockieren deshalb nicht. Ein zurückgenommener `trust`
 erscheint als Zeile `zurueckgesetzt (Skript geaendert): <name>`, ein neuer
 Skill als `neu aufgenommen (ohne Bericht): <name>`.
 
+### Audit-Kette (Schritt D, 05.11.2026)
+
+Jede MCP-Entscheidung wird protokolliert, auch im Schattenmodus: ein Datensatz
+beim `permission.evaluate`, einer beim `execute.after`. Verknüpft werden sie über
+einen Schlüssel aus Sitzung, Werkzeug und Argument-Hash. D0 hat gezeigt, dass
+`source.id` je `execute`-Block gilt — zwei Aufrufe darin tragen dieselbe ID und
+taugen nicht als Schlüssel.
+
+Der Datensatz enthält **keine Argumentwerte, Resultatinhalte, URLs oder Pfade**:
+nur Zeitpunkt, Modus, gehashte Sitzung, Werkzeug, Absicht, Zielarten, Flags,
+Entscheidung, Schicht und einen gekürzten Grund.
+
+Ablage: `%LOCALAPPDATA%\opencode\permission-guard\audit.jsonl`, überschreibbar
+mit `PERMISSION_GUARD_AUDIT` (`off` schaltet ab). Rotation bei 5 MB nach
+`audit.jsonl.1`; die Kette läuft über die Generationen weiter.
+
+```powershell
+node verify-audit.mjs          # prüft beide Generationen
+node verify-audit.mjs --last   # nur die aktuelle
+```
+
+Exit 1 beim ersten Bruch. Grenze: die Kette erkennt Veränderung und Umordnung,
+aber kein Abschneiden am Ende ohne externen Anker; sie ist keine Signatur.
+
 ### Verweigerung unlesbarer Formen (Entscheidung 3, 22.10.2026, Abend)
 
 Statt einer Rückfrage, die niemand begründet beantworten kann, wird verweigert,

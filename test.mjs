@@ -1,5 +1,6 @@
 // Testtabelle fuer guard.js. Ausfuehren mit: node test.mjs
 import { contextScope, evaluate, mcpAction, mcpCriteria, mcpObservation, mcpVerdict } from "./guard.js"
+import { appendRecord, canonicalJson, hashRecord, parseLines, verifyChain } from "./audit.js"
 import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMcpAnswer, reviewMcp, segments } from "./reviewer.js"
 import { parseLine, summarize } from "./stats.mjs"
 import { createHash } from "node:crypto"
@@ -1067,6 +1068,73 @@ for (const [name, ok] of verdictChecks) {
 }
 console.log("-- Urteilsdatei fuer Skill-Skripte\n")
 
+// --- Audit-Kette (Schritt D) ---
+const auditChecks = []
+{
+  const dir = mkdtempSync(join(tmpdir(), "guard-audit-"))
+  const file = join(dir, "audit.jsonl")
+  const base = {
+    kind: "decision",
+    ts: "2026-11-05T00:00:00.000Z",
+    mode: "shadow",
+    sessionHash: "s1",
+    callID: "k1",
+    agent: "build",
+    tool: "exa_web_search_exa",
+    intent: "read",
+    resourceKinds: ["query"],
+    contextFlags: [],
+    decision: "allow",
+    layer: 1,
+    reason: "nur lesend (search)",
+    effect: "ask",
+    status: "open",
+  }
+  let state = { prev: "genesis", seq: 0 }
+  state = appendRecord(file, base, state)
+  state = appendRecord(file, { ...base, kind: "result", status: "completed" }, state)
+  state = appendRecord(file, base, state)
+
+  const parsed = parseLines(readFileSync(file, "utf8"))
+  const records = parsed.records
+  auditChecks.push(["Kette intakt", verifyChain(records).ok])
+  auditChecks.push(["seq fortlaufend", records.map((r) => r.seq).join(",") === "1,2,3"])
+  auditChecks.push(["prev verweist auf Vorgaenger", records[1].prev === records[0].hash && records[2].prev === records[1].hash])
+  auditChecks.push(["Hash reproduzierbar", hashRecord(records[0]) === records[0].hash])
+  auditChecks.push(["kanonisch sortiert", canonicalJson({ b: 1, a: 2 }) === '{"a":2,"b":1}'])
+
+  const changed = structuredClone(records)
+  changed[1].decision = "deny"
+  auditChecks.push(["geaenderte Zeile erkannt", !verifyChain(changed).ok])
+
+  auditChecks.push(["geloeschte Zeile erkannt", !verifyChain(records.filter((_, i) => i !== 1)).ok])
+  auditChecks.push(["getauschte Reihenfolge erkannt", !verifyChain([records[0], records[2], records[1]]).ok])
+  auditChecks.push(["doppelte seq erkannt", !verifyChain([records[0], structuredClone(records[0])]).ok])
+  auditChecks.push(["leere Kette ist in Ordnung", verifyChain([]).ok && verifyChain([]).count === 0])
+  auditChecks.push(["defekte Zeile erkannt", !parseLines("{kein json").ok])
+  auditChecks.push(["keine Argumentwerte im Datensatz", !("input" in records[0]) && !("args" in records[0]) && !("url" in records[0])])
+
+  // Rotation: kleine Grenze, Kette laeuft ueber die Generationen weiter.
+  const rotDir = mkdtempSync(join(tmpdir(), "guard-audit-rot-"))
+  const rotFile = join(rotDir, "audit.jsonl")
+  let rotState = { prev: "genesis", seq: 0 }
+  rotState = appendRecord(rotFile, base, rotState, { maxBytes: 1 })
+  rotState = appendRecord(rotFile, { ...base, kind: "result" }, rotState, { maxBytes: 1 })
+  const old = parseLines(readFileSync(`${rotFile}.1`, "utf8"))
+  const current = parseLines(readFileSync(rotFile, "utf8"))
+  const first = verifyChain(old.records, "genesis", 1)
+  const second = verifyChain(current.records, first.last, first.count + 1)
+  auditChecks.push(["Rotation bricht die Kette nicht", first.ok && second.ok && old.records.length === 1])
+
+  rmSync(dir, { recursive: true, force: true })
+  rmSync(rotDir, { recursive: true, force: true })
+}
+for (const [name, ok] of auditChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- Audit-Kette\n")
+
 const total =
   base.length + scoped.length + cli.length + helpVersion.length + gitleaks.length +
   readOnlyCli.length +
@@ -1077,6 +1145,6 @@ const total =
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
-  reviewerRisky.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + 3
+  reviewerRisky.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + 3
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

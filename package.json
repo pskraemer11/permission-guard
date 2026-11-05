@@ -21,6 +21,8 @@
     "guard.js",
     "index.js",
     "reviewer.js",
+    "audit.js",
+    "verify-audit.mjs",
     "test.mjs",
     "skill-verdicts.mjs",
     "shell-reviewer.config.example.json",
@@ -33,6 +35,7 @@
   "scripts": {
     "test": "node test.mjs",
     "verdicts": "node skill-verdicts.mjs",
+    "verify-audit": "node verify-audit.mjs",
     "smoke": "node smoke-reviewer.mjs"
   }
 }

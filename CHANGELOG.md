@@ -32,6 +32,13 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   `--verify` nach, damit kein veralteter Stand hinausgeht, und `--refresh`
   meldet neue Skills als `neu aufgenommen (ohne Bericht): <name>`. Dreizehn
   Hook-Fälle und elf Werkzeugfälle in einem temporären Repo geprüft.
+- **Audit-Kette (05.11.2026):** `audit.js` schreibt je MCP-Aufruf einen
+  Entscheidungs- und einen Ergebnisdatensatz, verknüpft über Sitzung, Werkzeug
+  und Argument-Hash (D0: `source.id` gilt je `execute`-Block). Nur Feldnamen,
+  Zielarten, Flags und Hashes; Rotation bei 5 MB über die Generationen hinweg.
+  `verify-audit.mjs` prüft die Kette und endet beim ersten Bruch mit Exit 1.
+  13 Tests (543/543), deployt; Lebendtest ergab zwei Datensätze mit gleicher
+  Kennung und intakter Kette.
 - **D0 belegt (05.11.2026):** Der MCP-Pfad feuert im Code Mode. `permission.evaluate`
   kommt mit `action=<server>_<tool>` und `metadata.input`; `source.id` ist
   vorhanden und gleich der `id` aus `execute.after`, gilt aber je

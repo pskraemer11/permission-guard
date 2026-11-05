@@ -19,7 +19,8 @@ import { Plugin } from "@opencode/plugin"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { MCP_GATING_MODE, contextScope, evaluate, mcpAction, mcpCriteria, mcpVerdict } from "./guard.js"
+import { MCP_GATING_MODE, contextScope, evaluate, mcpAction, mcpCriteria, mcpObservation, mcpVerdict } from "./guard.js"
+import { appendRecord, auditPath, callKey, readState, shortHash } from "./audit.js"
 import { ensureRunning, loadConfig, review, reviewMcp, warmup } from "./reviewer.js"
 
 const BASE_DIR = path.join(os.tmpdir(), "opencode-permission-guard")
@@ -92,6 +93,21 @@ export default Plugin.define({
 
     const options = guardOptions(ctx)
     const reviewerConfig = loadConfig()
+    // Audit-Kette (Schritt D): Feldnamen, Zielarten, Entscheidungen und Hashes.
+    // Keine Argumentwerte, keine Pfade, keine URLs. Schreibfehler landen als
+    // Diagnosezeile, nie als Ausnahme - das Audit darf den Guard nicht stoeren.
+    const auditFile = auditPath()
+    let auditState = auditFile ? readState(auditFile) : null
+    const seenMcpTools = new Set()
+    const audit = (fields) => {
+      if (!auditFile || !auditState) return
+      auditState = appendRecord(
+        auditFile,
+        { ts: new Date().toISOString(), mode: MCP_GATING_MODE, ...fields },
+        auditState,
+        { onError: (error) => debug(`audit error ${error?.message ?? String(error)}`) },
+      )
+    }
     // OpenCode laedt globale Plugins zusaetzlich ohne Projektbezug (Basis ist
     // dann das Benutzerprofil). Dieser Kontext registriert nur den MCP-Zweig:
     // Shell-Pfade im ganzen Profil als vertraut zu behandeln waere zu weit.
@@ -137,7 +153,43 @@ export default Plugin.define({
             const plan = mcpAction(effect, verdict)
             notes.push(plan === "shadow" ? `schatten=${verdict.decision}/${verdict.layer}` : `urteil=${verdict.decision}/${verdict.layer}`)
             debug(`mcp ${effect} ${crit.action.tool} agent=${crit.principal.agent} key=${crit.key} ${argsNote} ${notes.join(" ")}`)
-            if (plan === "shadow" || plan === "keep") return
+
+            // Audit (Schritt D): je Aufruf ein Entscheidungsdatensatz, auch im
+            // Schattenmodus. Die Kennung verbindet ihn mit dem Ergebnisdatensatz
+            // aus execute.after; source.id taugt dafuer nicht (D0: gilt je
+            // execute-Block).
+            seenMcpTools.add(crit.action.tool)
+            const sessionHash = shortHash(input.sessionID)
+            const record = (decision, layer, reason, applied) =>
+              audit({
+                kind: "decision",
+                sessionHash,
+                sourceHash: shortHash(input.source?.id),
+                callID: callKey(sessionHash, crit.action.tool, crit.argHash),
+                agent: crit.principal.agent,
+                tool: crit.action.tool,
+                intent: crit.action.intent,
+                verb: crit.action.verb || "-",
+                resourceKinds: crit.resource.kinds,
+                contextFlags: [
+                  crit.context.emptyArgs ? "empty" : null,
+                  crit.secret ? "secret" : null,
+                  crit.context.oversized ? "oversized" : null,
+                  crit.context.unresolved ? "unresolved" : null,
+                  crit.context.contentFields.length ? "content" : null,
+                ].filter(Boolean),
+                decision,
+                layer,
+                reason: String(reason ?? "").slice(0, 80),
+                effect,
+                applied,
+                status: "open",
+              })
+
+            if (plan === "shadow" || plan === "keep") {
+              record(verdict.decision, verdict.layer, verdict.reason, false)
+              return
+            }
 
             // Ebene 3 nur im Graubereich (Absicht unbekannt). Geheimnisverdacht
             // und unanalysierbare Argumente erreichen das Modell nie.
@@ -149,12 +201,15 @@ export default Plugin.define({
               input.effect = "allow"
               input.message = `permission-guard: MCP ${decided.reason}`
               debug(`mcp allow (aktiv) ${decided.reason} ${crit.action.tool} key=${crit.key}`)
+              record("allow", verdict.layer, decided.reason, true)
             } else if (decided.decision === "deny") {
               input.effect = "deny"
               input.message = `permission-guard: MCP ${decided.reason}`
               debug(`mcp deny (aktiv) ${decided.reason} ${crit.action.tool} key=${crit.key}`)
+              record("deny", verdict.layer, decided.reason, true)
             } else {
               debug(`mcp ask (aktiv) ${decided.reason} ${crit.action.tool} key=${crit.key}`)
+              record("ask", verdict.layer, decided.reason, false)
             }
             return
           }
@@ -203,6 +258,41 @@ export default Plugin.define({
           debug(`error ${error?.message ?? String(error)}`)
         }
       })
+
+      // Ergebnisdatensatz (Schritt D): execute.after feuert laut D0 auch fuer
+      // MCP-Aufrufe aus Code Mode, einmal je Werkzeug. Aufgenommen werden nur
+      // Werkzeuge, die zuvor als MCP eingeordnet wurden - sonst entstuenden
+      // Ergebniszeilen ohne Entscheidung.
+      const toolHook = ctx?.tool?.hook
+      if (typeof toolHook === "function") {
+        await toolHook("execute.after", async (payload) => {
+          try {
+            const tool = String(payload?.tool ?? "")
+            if (!tool || !seenMcpTools.has(tool) || !auditFile || !auditState) return
+            const observation = mcpObservation(tool, { input: payload?.input })
+            const sessionHash = shortHash(payload?.sessionID)
+            auditState = appendRecord(
+              auditFile,
+              {
+                kind: "result",
+                ts: new Date().toISOString(),
+                mode: MCP_GATING_MODE,
+                sessionHash,
+                sourceHash: shortHash(payload?.id),
+                callID: callKey(sessionHash, tool, observation.argHash),
+                agent: String(payload?.agent ?? "").replace(/[^\w.-]/g, "").slice(0, 40) || "unbekannt",
+                tool,
+                status: String(payload?.status ?? "unknown"),
+              },
+              auditState,
+              { onError: (error) => debug(`audit error ${error?.message ?? String(error)}`) },
+            )
+          } catch (error) {
+            debug(`audit result error ${error?.message ?? String(error)}`)
+          }
+        })
+      }
+
       console.log(
         homeContext
           ? "[permission-guard] aktiv - globaler Kontext: MCP-Beobachtung; Shell-Regeln nur im Projekt"
