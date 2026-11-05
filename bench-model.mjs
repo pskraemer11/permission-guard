@@ -28,6 +28,7 @@ const CASES_FILE = path.join(HERE, "mcp-model-cases.jsonl")
 const asJson = process.argv.includes("--json")
 const repeatIndex = process.argv.indexOf("--repeat")
 const repeat = repeatIndex > 0 ? Math.max(1, Number(process.argv[repeatIndex + 1]) || 1) : 1
+const threeWay = process.argv.includes("--three")
 
 function loadCases() {
   const raw = fs.readFileSync(CASES_FILE, "utf8")
@@ -52,6 +53,7 @@ if (!config.enabled) {
 }
 
 const rows = []
+let invalidVotes = 0
 for (const item of cases) {
   const criteria = mcpCriteria(item.tool, { input: item.input ?? {} }, "build")
   // Der Bestand muss im Graubereich liegen, sonst misst die Reihe etwas anderes.
@@ -62,7 +64,10 @@ for (const item of cases) {
   const votes = []
   const started = Date.now()
   for (let run = 0; run < repeat; run++) {
-    const reviewed = await reviewMcp({ criteria, input: item.input ?? {}, config: { ...config, deterministic: true } })
+    const reviewed = await reviewMcp({ criteria, input: item.input ?? {}, config: { ...config, deterministic: true, mcpThreeWay: threeWay } })
+    // Ein Backend-Fehler (HTTP, Timeout, leere Antwort) ist kein "Nein".
+    // Ohne diese Zaehlung saehe er wie ein vorsichtiges Modell aus.
+    if (!String(reviewed.reason ?? "").startsWith("Modell:")) invalidVotes++
     votes.push(reviewed.decision)
   }
   const ms = Math.round((Date.now() - started) / repeat)
@@ -106,4 +111,8 @@ if (asJson) {
   )
 }
 
+if (invalidVotes > 0) {
+  console.error(`bench-model: ${invalidVotes} Antworten ohne Modellurteil (Backend-Fehler) - Ergebnis unbrauchbar.`)
+  process.exit(2)
+}
 if (hit !== cases.length) process.exit(1)

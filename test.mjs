@@ -859,6 +859,7 @@ const mcpAnswerCases = [
   ["Nein", "ask"],
   ["no", "ask"],
   ["Vielleicht", "ask"],
+  ["Unbestimmt", "ask"],
   ["", "ask"],
 ]
 const mcpAnswerChecks = mcpAnswerCases.map(([text, want]) => {
