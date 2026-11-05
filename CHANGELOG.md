@@ -6,6 +6,10 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ## [Unreleased]
 
+Noch keine Änderungen nach 0.1.0.
+
+## [0.1.0] - 2026-11-05
+
 ### Hinzugefügt
 
 - **Urteilsdatei für Skill-Skripte (05.11.2026):** `skill-verdicts.mjs`

@@ -36,24 +36,19 @@ Ablageort.
 
 ## Offene Punkte, priorisiert
 
-| Prio | Punkt                                                                    | Aufwand | Abhängigkeit           |
-| ---- | ------------------------------------------------------------------------ | ------- | ---------------------- |
-| P0   | S0: Fixtures und Commit-Metadaten von Benutzernamen und Adresse befreien | S       | vor jedem Push         |
-| P0   | S1: Remote, Sichtbarkeit und npm-Namensentscheidung                      | S       | Nutzerentscheidung     |
-| P1   | D0: echten MCP-Aufruf beobachten, Code-Mode-Pfad und `source.id` prüfen  | S       | blockiert D und F      |
-| P1   | Ebene-3-Prompt verbessern und gegen `bench-mcp --model` messen           | M       | vor Aktivierung        |
-| P1   | S2: eigenständige CI im Sub-Repo                                         | M       | Remote                 |
-| P1   | S3: Hooks, `.gitattributes`, `.gitleaksignore`                           | S       | —                      |
-| P1   | S4: README, CHANGELOG, SECURITY, CONTRIBUTING, AGENTS                    | M       | —                      |
-| P2   | D: Audit-Protokoll mit Hash-Kette                                        | M       | D0                     |
-| P2   | F: Auswertung und Monitor-Kriterien                                      | M       | D                      |
-| P2   | Aktivierung `MCP_GATING_MODE = "active"`                                 | S       | F + Nutzerentscheidung |
-| P2   | S5/S6: Release, Parent aufräumen, optionaler Umzug                       | S–M     | S0–S4                  |
-| P3   | G0/G1: Ergebnis-Form prüfen, Grenz-Markierung                            | M       | D                      |
-| P3   | G2/G3: statische Injection-Prüfung, optional lokales Modell              | M–L     | G1                     |
-| P3   | Warmup-`TypeError` diagnostizieren                                       | S       | —                      |
-| P3   | Suchmuster mit Befehlsnamen (`iex`) löst Verweigerung aus                | S       | —                      |
-| P3   | `package.json` vervollständigen (`exports`, `repository`, `files`)       | S       | S1                     |
+| Prio | Punkt                                                                                     | Aufwand | Abhängigkeit                  |
+| ---- | ----------------------------------------------------------------------------------------- | ------- | ----------------------------- |
+| P1   | Push des Release-Commits und des Tags `v0.1.0`                                            | S       | Nutzer                        |
+| P1   | S6: Parent-Workflow entfernen, Verweise umstellen                                         | S       | CI grün (erfüllt), Zustimmung |
+| P2   | Aktivierung: F-Kriterien erfüllen (7 Tage / 50 Aufrufe / 3 Werkzeuge, davon 1 schreibend) | —       | echte Nutzung                 |
+| P2   | Clef-Umstellung: Config auf `systemone`, 24 h Schatten                                    | S       | Nutzerentscheid               |
+| P3   | Shell-Fälle als `shell-cases.jsonl` und `bench-shell` festschreiben                       | S       | —                             |
+| P3   | G0/G1: Ergebnis-Form prüfen, Grenz-Markierung                                             | M       | D                             |
+| P3   | G2/G3: statische Injection-Prüfung, optional lokales Modell                               | M–L     | G1                            |
+| P3   | Dreiweg-Antwort „Unbestimmt" entscheiden                                                  | S       | Messung                       |
+| P3   | Warmup-`TypeError` diagnostizieren                                                        | S       | —                             |
+| P3   | Suchmuster mit Befehlsnamen (`iex`) löst Verweigerung aus                                 | S       | —                             |
+| P3   | `repository`/`bugs`/`homepage` in `package.json`                                          | S       | Nutzerentscheid               |
 
 ## Plan 1: Eigenständiges Repository
 
