@@ -1,6 +1,7 @@
 // Testtabelle fuer guard.js. Ausfuehren mit: node test.mjs
 import { contextScope, evaluate, mcpAction, mcpCriteria, mcpObservation, mcpVerdict } from "./guard.js"
 import { appendRecord, canonicalJson, hashRecord, parseLines, verifyChain } from "./audit.js"
+import { summarizeAudit } from "./mcp-report.mjs"
 import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMcpAnswer, reviewMcp, segments } from "./reviewer.js"
 import { parseLine, summarize } from "./stats.mjs"
 import { createHash } from "node:crypto"
@@ -1135,6 +1136,41 @@ for (const [name, ok] of auditChecks) {
 }
 console.log("-- Audit-Kette\n")
 
+// --- F: Auswertung der Audit-Datensaetze ---
+const reportChecks = []
+{
+  const rec = (fields) => ({ kind: "decision", mode: "shadow", effect: "ask", layer: 1, contextFlags: [], reason: "", ...fields })
+  const fixtures = [
+    rec({ ts: "2026-11-04T10:00:00Z", tool: "exa_web_search_exa", intent: "read", decision: "allow", callID: "a" }),
+    { kind: "result", ts: "2026-11-04T10:00:01Z", tool: "exa_web_search_exa", status: "completed", callID: "a" },
+    rec({ ts: "2026-11-05T09:00:00Z", tool: "github_create_issue", intent: "write", decision: "ask", callID: "b" }),
+    rec({ ts: "2026-11-05T09:10:00Z", tool: "custom_tool", intent: "unknown", decision: "allow", layer: 3, reason: "Absicht nicht einordenbar", callID: "c" }),
+    rec({ ts: "2026-11-05T09:20:00Z", tool: "exa_web_fetch_exa", intent: "read", decision: "allow", callID: "d" }),
+  ]
+  const report = summarizeAudit(fixtures, { now: "2026-11-05T12:00:00Z" })
+  reportChecks.push(["Aufrufe gezaehlt", report.calls === 4])
+  reportChecks.push(["Entscheidungen gezaehlt", report.decisions.allow === 3 && report.decisions.ask === 1])
+  reportChecks.push(["Schichten gezaehlt", report.layers[1] === 3 && report.layers[3] === 1])
+  reportChecks.push(["Matrix ask->allow/ask", report.matrix.ask.allow === 3 && report.matrix.ask.ask === 1])
+  reportChecks.push(["Werkzeuge sortiert", report.toolList.map((t) => t.tool).join(",") === "custom_tool,exa_web_fetch_exa,exa_web_search_exa,github_create_issue"])
+  reportChecks.push(["schreibendes Werkzeug erkannt", report.writeTools.join(",") === "github_create_issue"])
+  reportChecks.push(["unbekannte Absicht gezaehlt", report.flags.unknownIntent === 1])
+  reportChecks.push(["offene Aufrufe gezaehlt", report.open === 3])
+  reportChecks.push(["Tage gezaehlt", report.dayList.join(",") === "2026-11-04,2026-11-05"])
+  reportChecks.push(["Kriterien nicht erfuellt", report.criteria.ok === false && report.criteria.have.calls === 4])
+  reportChecks.push(["Modellentscheidung gelistet", report.model.length === 1 && report.model[0].decision === "allow"])
+
+  const narrow = summarizeAudit(fixtures, { since: "2026-11-05" })
+  reportChecks.push(["seit-Filter greift", narrow.calls === 3 && narrow.dayList.length === 1])
+  const empty = summarizeAudit([], {})
+  reportChecks.push(["leere Auswertung", empty.calls === 0 && empty.criteria.ok === false])
+}
+for (const [name, ok] of reportChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- F: Auswertung\n")
+
 const total =
   base.length + scoped.length + cli.length + helpVersion.length + gitleaks.length +
   readOnlyCli.length +
@@ -1145,6 +1181,6 @@ const total =
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
-  reviewerRisky.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + 3
+  reviewerRisky.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + 3
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

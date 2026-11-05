@@ -32,6 +32,11 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   `--verify` nach, damit kein veralteter Stand hinausgeht, und `--refresh`
   meldet neue Skills als `neu aufgenommen (ohne Bericht): <name>`. Dreizehn
   Hook-Fälle und elf Werkzeugfälle in einem temporären Repo geprüft.
+- **F: Auswertung (05.11.2026):** `mcp-report.mjs` liest die Audit-Kette und
+  zählt nach Werkzeug, Absicht, Entscheidung, Schicht und Modus, zeigt die
+  Matrix Effekt→Urteil, Auffälligkeiten, offene Aufrufe und Ebene-3-Gründe;
+  `--since`, `--days`, `--json`. Am Ende steht der Stand der Kriterien.
+  13 Tests (556/556). Erster Lauf: 1 Aufruf, 1 Tag, 1 Werkzeug.
 - **Audit-Kette (05.11.2026):** `audit.js` schreibt je MCP-Aufruf einen
   Entscheidungs- und einen Ergebnisdatensatz, verknüpft über Sitzung, Werkzeug
   und Argument-Hash (D0: `source.id` gilt je `execute`-Block). Nur Feldnamen,

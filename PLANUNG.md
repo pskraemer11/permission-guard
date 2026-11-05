@@ -272,6 +272,13 @@ Kennung, Kette intakt. Ablage `%LOCALAPPDATA%\opencode\permission-guard\audit.js
   „Nein“-Kriterien, Beispiele. Messen mit `bench-mcp --model`: 3/3 halten,
   keine neuen Fehlfreigaben.
 
+**Umgesetzt 05.11.2026:** `mcp-report.mjs` liest die Audit-Kette (beide
+Generationen), zählt nach Werkzeug, Absicht, Entscheidung, Schicht und Modus,
+zeigt die Matrix Effekt→Urteil, Auffälligkeiten, offene Aufrufe und
+Ebene-3-Gründe; `--since`, `--days`, `--json`, Kriterienstand am Ende.
+13 Tests (556/556). Erster Lauf: 1 Aufruf, 1 Tag, 1 Werkzeug, 0 schreibend —
+die Kriterien sind damit messbar und offen.
+
 ### Aktivierung
 
 - Voraussetzungen: E grün, D verifiziert, F-Kriterien erfüllt, Prompt geprüft,

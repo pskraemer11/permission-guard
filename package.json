@@ -23,6 +23,7 @@
     "reviewer.js",
     "audit.js",
     "verify-audit.mjs",
+    "mcp-report.mjs",
     "test.mjs",
     "skill-verdicts.mjs",
     "shell-reviewer.config.example.json",
@@ -36,6 +37,7 @@
     "test": "node test.mjs",
     "verdicts": "node skill-verdicts.mjs",
     "verify-audit": "node verify-audit.mjs",
+    "report": "node mcp-report.mjs",
     "smoke": "node smoke-reviewer.mjs"
   }
 }

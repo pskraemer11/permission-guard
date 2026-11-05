@@ -317,6 +317,30 @@ node verify-audit.mjs --last   # nur die aktuelle
 Exit 1 beim ersten Bruch. Grenze: die Kette erkennt Veränderung und Umordnung,
 aber kein Abschneiden am Ende ohne externen Anker; sie ist keine Signatur.
 
+### F: Auswertung der Entscheidungen (05.11.2026)
+
+`mcp-report.mjs` liest dieselben Datensätze und zählt nach Werkzeug, Absicht,
+Entscheidung, Schicht und Modus. Es zeigt die Matrix „statischer Effekt gegen
+Schattenurteil", die Auffälligkeiten (unbekannte Absicht, Geheimnisverdacht,
+unanalysierbar, unaufgelöste Ziele, Inhaltsfelder), offene Aufrufe ohne
+`execute.after` und die Ebene-3-Entscheidungen mit Grund.
+
+```powershell
+node mcp-report.mjs                 # gesamter Zeitraum
+node mcp-report.mjs --days 7        # letzte 7 Tage
+node mcp-report.mjs --since 2026-11-01
+node mcp-report.mjs --json
+```
+
+Am Ende steht der Stand der Aktivierungskriterien im Klartext:
+
+```
+F-Kriterien: nicht erfuellt  Tage 1/7  Aufrufe 1/50  Werkzeuge 1/3  schreibend 0/1
+```
+
+Die Auswertung ist rein: sie liest nur Feldnamen, Zähler und Hashes aus dem
+Audit, keine Argumentwerte.
+
 ### Verweigerung unlesbarer Formen (Entscheidung 3, 22.10.2026, Abend)
 
 Statt einer Rückfrage, die niemand begründet beantworten kann, wird verweigert,

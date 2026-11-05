@@ -43,6 +43,7 @@ $files = @(
     "reviewer.js",
     "audit.js",
     "verify-audit.mjs",
+    "mcp-report.mjs",
     "test.mjs",
     "README.md",
     "start-reviewer.ps1",
