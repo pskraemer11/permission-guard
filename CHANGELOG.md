@@ -13,8 +13,14 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   `~/.agents/skill-reviews/verdicts.json`. Der Guard liest die Datei nur und
   vertraut einem Skript ausschließlich bei `decision: "trust"` und passendem
   SHA256; jede Änderung fällt auf `ask` zurück. Die statische Liste
-  `TRUSTED_SKILL_DIRS` bleibt die Untergrenze. Neun Tests (530/530), die Datei
-  für sieben Skills erzeugt; noch ohne Freigabe, Verhalten unverändert.
+  `TRUSTED_SKILL_DIRS` bleibt die Untergrenze. Neun Tests (530/530).
+  `--reports` ist wiederholbar (späteres Verzeichnis gewinnt je Skill), jeder
+  Eintrag nennt seinen Berichtslauf. Stand: zehn Skills, 78 Skripte, eine
+  Freigabe (`nemo-retriever` nach Protokoll vom 25.10.), keine Abweichung.
+  Neue Berichte vom 05.11. für `.system`, `prompt-engineering-patterns` und
+  `python-project-bootstrap`; `.system` hat keine eigene `SKILL.md`, der
+  Sammellauf endet deshalb mit Exitcode 1 bei gültigem Bericht (95,6 %
+  Abdeckung, 12 Befunde).
 - `PLANUNG.md`: Weg zum eigenständigen Repository (S0–S6) und die noch
   offenen MCP-Schritte D–G.
 

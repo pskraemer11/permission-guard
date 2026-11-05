@@ -236,8 +236,12 @@ vier Namen in `TRUSTED_SKILL_DIRS` und eine vorberechnete Urteilsdatei.
 Die Urteilsdatei verdichtet die SkillSpector-Berichte und die Prüfprotokolle:
 
 ```powershell
-node tools/permission-guard/skill-verdicts.mjs --reports logs/skillspector/2026-10-25 --write
+node tools/permission-guard/skill-verdicts.mjs --reports logs/skillspector/2026-10-25 --reports logs/skillspector/2026-11-05 --write
 ```
+
+`--reports` ist wiederholbar; bei gleichem Skillnamen gewinnt das später
+genannte Verzeichnis. Jeder Eintrag nennt unter `report`, aus welchem Lauf er
+stammt.
 
 Sie liegt unter `~/.agents/skill-reviews/verdicts.json` und enthält je Skill
 mit Python-Code Punktzahl, Regel-IDs, Datum des Protokolls und den SHA256 jeder

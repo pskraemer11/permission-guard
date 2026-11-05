@@ -34,6 +34,15 @@ function arg(name, fallback = "") {
   return fallback
 }
 
+// Wiederholbares --reports: spaetere Verzeichnisse gewinnen je Skill.
+function args(name) {
+  const values = []
+  process.argv.forEach((value, i) => {
+    if (value === `--${name}` && i + 1 < process.argv.length) values.push(process.argv[i + 1])
+  })
+  return values
+}
+
 function today() {
   const d = new Date()
   const p = (n) => String(n).padStart(2, "0")
@@ -91,10 +100,11 @@ function unchanged(prev, hashes) {
 }
 
 function main() {
-  const reportsArg = arg("reports")
-  if (!reportsArg) fail("--reports fehlt (Verzeichnis mit den SkillSpector-Berichten)")
-  const reportsDir = resolve(reportsArg)
-  if (!existsSync(reportsDir)) fail(`Berichtsverzeichnis fehlt: ${reportsDir}`)
+  const reportDirs = args("reports").map((value) => resolve(value))
+  if (!reportDirs.length) fail("--reports fehlt (Verzeichnis mit den SkillSpector-Berichten)")
+  for (const dir of reportDirs) {
+    if (!existsSync(dir)) fail(`Berichtsverzeichnis fehlt: ${dir}`)
+  }
 
   const skillsDir = resolve(arg("skills", join(homedir(), ".agents", "skills")))
   if (!existsSync(skillsDir)) fail(`Skill-Verzeichnis fehlt: ${skillsDir}`)
@@ -114,17 +124,20 @@ function main() {
     }
   }
 
-  const reports = readdirSync(reportsDir)
-    .filter((name) => name.toLowerCase().endsWith(".json"))
-    .sort()
+  const found = new Map()
+  for (const dir of reportDirs) {
+    for (const file of readdirSync(dir)) {
+      if (!file.toLowerCase().endsWith(".json")) continue
+      found.set(basename(file, ".json"), { path: join(dir, file), source: basename(dir) })
+    }
+  }
 
   const skills = {}
   const drift = []
   const missing = []
   let withoutCode = 0
 
-  for (const file of reports) {
-    const name = basename(file, ".json")
+  for (const [name, source] of [...found].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
     const skillDir = join(skillsDir, name)
     let files = []
     if (existsSync(skillDir)) {
@@ -140,9 +153,9 @@ function main() {
 
     let report
     try {
-      report = readReport(join(reportsDir, file))
+      report = readReport(source.path)
     } catch {
-      fail(`Bericht nicht lesbar: ${join(reportsDir, file)}`)
+      fail(`Bericht nicht lesbar: ${source.path}`)
     }
 
     const sha256 = {}
@@ -174,6 +187,7 @@ function main() {
       severity: report.severity,
       findings: report.findings,
       rules: report.rules,
+      report: source.source,
       reviewed: reviewDate(reviewsDir, name),
       sha256,
     }
@@ -182,7 +196,7 @@ function main() {
   const payload = {
     schema: SCHEMA,
     generated,
-    reports: basename(reportsDir),
+    reports: reportDirs.map((dir) => basename(dir)),
     skills,
   }
 
@@ -190,7 +204,7 @@ function main() {
   const trusted = names.filter((n) => skills[n].decision === "trust")
   const unguarded = trusted.filter((n) => !skills[n].reviewed)
 
-  console.error(`Berichte: ${reports.length}  Skills mit Python-Code: ${names.length}  ohne Code: ${withoutCode}`)
+  console.error(`Berichte: ${found.size} aus ${reportDirs.length} Verzeichnis(sen)  Skills mit Python-Code: ${names.length}  ohne Code: ${withoutCode}`)
   console.error(`Vertraut: ${trusted.length}  zurueckgesetzt: ${drift.length}  fehlende Ordner: ${missing.length}`)
   for (const name of drift) console.error(`  zurueckgesetzt (Skript geaendert): ${name}`)
   for (const name of unguarded) console.error(`  Hinweis: trust ohne Pruefprotokoll: ${name}`)
