@@ -266,6 +266,26 @@ Die Datei ersetzt die statische Liste nicht, sie erweitert sie. Zum Zurücknehme
 einer Freigabe genügt `"decision": "ask"`; die vier eingebauten Namen bleiben,
 bis sie aus `TRUSTED_SKILL_DIRS` entfernt werden.
 
+Drei Betriebsarten, ein Werkzeug:
+
+| Aufruf                     | Zweck                                      | Braucht                               |
+| -------------------------- | ------------------------------------------ | ------------------------------------- |
+| `--reports <dir>… --write` | Neuaufbau aus den SkillSpector-Berichten   | die Rohberichte (lokal, gitignoriert) |
+| `--refresh --write`        | Hashes und Entscheidungen fortschreiben    | nur den Arbeitsbaum                   |
+| `--verify`                 | Abgleich prüfen, Exitcode 1 bei Abweichung | nur den Arbeitsbaum                   |
+
+Die Bring-Schuld liegt beim Skill-Repo, nicht beim Guard: `--refresh` läuft im
+`pre-commit`, sobald Skill-Dateien gestaged sind, und stagt die Datei mit.
+`--verify` läuft in der CI. Beide kommen ohne Scanner, Netz und Schlüssel aus;
+deshalb können die Rohberichte lokal bleiben, in denen der absolute Quellpfad
+steht.
+
+Der Hook lehnt zwei Fälle ab, weil die Datei sonst einen Stand beschriebe, der
+nicht im Commit ist: nicht versionierte Python-Dateien unter `skills/` und
+Python-Änderungen, die noch nicht gestaged sind. Andere Dateitypen gehen nicht
+in die Hashes ein und blockieren deshalb nicht. Ein zurückgenommener `trust`
+erscheint als Zeile `zurueckgesetzt (Skript geaendert): <name>`.
+
 ### Verweigerung unlesbarer Formen (Entscheidung 3, 22.10.2026, Abend)
 
 Statt einer Rückfrage, die niemand begründet beantworten kann, wird verweigert,

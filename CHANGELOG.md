@@ -21,6 +21,15 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   `python-project-bootstrap`; `.system` hat keine eigene `SKILL.md`, der
   Sammellauf endet deshalb mit Exitcode 1 bei gültigem Bericht (95,6 %
   Abdeckung, 12 Befunde).
+- **Betriebsarten der Urteilsdatei (05.11.2026):** `skill-verdicts.mjs` kennt
+  jetzt `--refresh` (Hashes und Entscheidungen fortschreiben, ohne Berichte)
+  und `--verify` (Abgleich, Exitcode 1 bei Abweichung). Der `pre-commit` im
+  Skill-Repo ruft `--refresh` auf, sobald Skill-Dateien gestaged sind, und
+  stagt die Datei mit; die CI ruft `--verify`. Beide kommen ohne Scanner,
+  Netz und Schlüssel aus. Der Hook blockiert nicht versionierte Python-Dateien
+  unter `skills/` und unvollständig gestagte Python-Änderungen, weil die Datei
+  sonst einen Stand beschriebe, der nicht im Commit ist. Acht Hook-Fälle und
+  neun Werkzeugfälle in einem temporären Repo geprüft.
 - `PLANUNG.md`: Weg zum eigenständigen Repository (S0–S6) und die noch
   offenen MCP-Schritte D–G.
 

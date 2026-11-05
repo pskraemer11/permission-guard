@@ -1,31 +1,29 @@
 #!/usr/bin/env node
-// Erzeugt die Urteilsdatei fuer Skill-Skripte (Nutzerentscheid 05.11.2026).
+// Urteilsdatei fuer Skill-Skripte (Nutzerentscheid 05.11.2026).
 //
-// Quellen:
-//   --reports  Verzeichnis mit SkillSpector-Berichten (<skill>.json)
-//   --skills   Skill-Verzeichnis (Default: ~/.agents/skills)
-//   --out      Zieldatei (Default: ~/.agents/skill-reviews/verdicts.json)
-//   --date     Datum der Erzeugung (Default: heute, JJJJ-MM-TT)
+// Drei Betriebsarten:
+//   build    (Standard)  verdichtet SkillSpector-Berichte und Pruefprotokolle
+//   --refresh            gleicht nur die Hashes mit dem Arbeitsbaum ab
+//   --verify             prueft die vorhandene Datei, schreibt nichts
 //
-// Die Datei enthaelt je Skill mit ausfuehrbarem Python-Code: Punktzahl,
-// Regel-IDs, Datum des Pruefprotokolls und den SHA256 jeder Skriptdatei.
-// Eine Freigabe ("trust") wird nie erfunden. Sie steht nur dann in der
-// Ausgabe, wenn sie schon in der vorhandenen Datei stand und sich keine
-// Skriptdatei geaendert hat. Jede Aenderung faellt auf "ask" zurueck, damit
-// eine Freigabe nicht still auf neuen Code uebergeht.
+// build braucht die Berichte (--reports, wiederholbar). refresh und verify
+// kommen ohne sie aus: sie kennen keine Scores, nur Dateien und Hashes. Damit
+// kann ein pre-commit die Datei fortschreiben und eine CI sie pruefen, ohne
+// dass ein Scanner, ein Netz oder ein Schluessel vorhanden sein muss.
 //
-// Der Guard liest die Datei nur. Ohne --write geht die Ausgabe nach stdout.
+// Eine Freigabe ("trust") wird nie erfunden. Sie bleibt nur bestehen, wenn
+// sich keine Skriptdatei geaendert hat; sonst faellt der Eintrag auf "ask".
 
 import { createHash } from "node:crypto"
-import { existsSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs"
+import { existsSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { basename, dirname, join, relative, resolve } from "node:path"
 
 const SCHEMA = 1
 
-function fail(message) {
+function fail(message, code = 2) {
   console.error(`skill-verdicts: ${message}`)
-  process.exit(1)
+  process.exit(code)
 }
 
 function arg(name, fallback = "") {
@@ -34,7 +32,7 @@ function arg(name, fallback = "") {
   return fallback
 }
 
-// Wiederholbares --reports: spaetere Verzeichnisse gewinnen je Skill.
+// Wiederholbares --reports: spaeteres Verzeichnis gewinnt je Skill.
 function args(name) {
   const values = []
   process.argv.forEach((value, i) => {
@@ -65,6 +63,14 @@ function pythonFiles(dir, acc = []) {
 
 function hashFile(file) {
   return createHash("sha256").update(readFileSync(file)).digest("hex")
+}
+
+function hashTree(dir) {
+  const out = {}
+  for (const full of pythonFiles(dir).sort()) {
+    out[relative(dir, full).split(/[\\/]/).join("/").toLowerCase()] = hashFile(full)
+  }
+  return out
 }
 
 function readReport(file) {
@@ -99,33 +105,38 @@ function unchanged(prev, hashes) {
   return a.every((key, i) => key === b[i] && prev.sha256[key] === hashes[key])
 }
 
-function main() {
-  const reportDirs = args("reports").map((value) => resolve(value))
-  if (!reportDirs.length) fail("--reports fehlt (Verzeichnis mit den SkillSpector-Berichten)")
-  for (const dir of reportDirs) {
-    if (!existsSync(dir)) fail(`Berichtsverzeichnis fehlt: ${dir}`)
+function loadExisting(outFile) {
+  if (!existsSync(outFile)) return { skills: {} }
+  try {
+    return JSON.parse(readFileSync(outFile, "utf8"))
+  } catch {
+    fail(`vorhandene Datei ist kein gueltiges JSON: ${outFile} (nicht ueberschrieben)`)
   }
+}
 
-  const skillsDir = resolve(arg("skills", join(homedir(), ".agents", "skills")))
-  if (!existsSync(skillsDir)) fail(`Skill-Verzeichnis fehlt: ${skillsDir}`)
+// Alle Skills im Verzeichnis, die Python-Code enthalten.
+function skillDirs(skillsDir) {
+  return readdirSync(skillsDir)
+    .filter((name) => existsSync(join(skillsDir, name)) && statSync(join(skillsDir, name)).isDirectory())
+    .sort()
+}
 
-  const outFile = resolve(arg("out", join(homedir(), ".agents", "skill-reviews", "verdicts.json")))
-  const reviewsDir = dirname(outFile)
-  const generated = arg("date", today())
-
-  // Eine vorhandene Datei wird nur gelesen, nie stillschweigend ersetzt:
-  // ohne lesbares JSON bleibt der Aufruf stehen.
-  let existing = { skills: {} }
-  if (existsSync(outFile)) {
-    try {
-      existing = JSON.parse(readFileSync(outFile, "utf8"))
-    } catch {
-      fail(`vorhandene Datei ist kein gueltiges JSON: ${outFile} (nicht ueberschrieben)`)
-    }
+function decide(prev, hashes, name, drift) {
+  if (!prev) return { decision: "ask", reason: "neu, ohne Bericht" }
+  if (prev.decision === "reject") return { decision: "reject", reason: prev.reason ?? "bestehend" }
+  if (prev.decision === "trust" && unchanged(prev, hashes)) {
+    return { decision: "trust", reason: prev.reason ?? "unveraendert" }
   }
+  if (prev.decision === "trust") {
+    drift.push(name)
+    return { decision: "ask", reason: "Skriptdatei geaendert" }
+  }
+  return { decision: prev.decision ?? "ask", reason: prev.reason ?? "bestehend" }
+}
 
+function build(reportsDirs, skillsDir, reviewsDir, existing, drift) {
   const found = new Map()
-  for (const dir of reportDirs) {
+  for (const dir of reportsDirs) {
     for (const file of readdirSync(dir)) {
       if (!file.toLowerCase().endsWith(".json")) continue
       found.set(basename(file, ".json"), { path: join(dir, file), source: basename(dir) })
@@ -133,89 +144,183 @@ function main() {
   }
 
   const skills = {}
-  const drift = []
   const missing = []
   let withoutCode = 0
 
   for (const [name, source] of [...found].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
-    const skillDir = join(skillsDir, name)
-    let files = []
-    if (existsSync(skillDir)) {
-      files = pythonFiles(skillDir).sort()
-    } else {
+    const dir = join(skillsDir, name)
+    if (!existsSync(dir)) {
       missing.push(name)
       continue
     }
-    if (!files.length) {
+    const hashes = hashTree(dir)
+    if (!Object.keys(hashes).length) {
       withoutCode++
       continue
     }
-
     let report
     try {
       report = readReport(source.path)
     } catch {
       fail(`Bericht nicht lesbar: ${source.path}`)
     }
-
-    const sha256 = {}
-    for (const full of files) {
-      const key = relative(skillDir, full).split(/[\\/]/).join("/").toLowerCase()
-      sha256[key] = hashFile(full)
-    }
-
-    const prev = existing?.skills?.[name]
-    let decision = "ask"
-    let reason = "neu"
-    if (prev?.decision === "reject") {
-      decision = "reject"
-      reason = "bestehend"
-    } else if (prev?.decision === "trust" && unchanged(prev, sha256)) {
-      decision = "trust"
-      reason = "unveraendert"
-    } else if (prev?.decision === "trust") {
-      reason = "Skriptdatei geaendert"
-      drift.push(name)
-    } else if (prev) {
-      reason = "bestehend"
-    }
-
+    const verdict = decide(existing?.skills?.[name], hashes, name, drift)
     skills[name] = {
-      decision,
-      reason,
+      ...verdict,
       score: report.score,
       severity: report.severity,
       findings: report.findings,
       rules: report.rules,
       report: source.source,
       reviewed: reviewDate(reviewsDir, name),
-      sha256,
+      sha256: hashes,
+    }
+  }
+  return { skills, stats: { found: found.size, withoutCode, missing } }
+}
+
+function refresh(skillsDir, reviewsDir, existing, drift) {
+  const skills = {}
+  const removed = []
+  const known = existing?.skills ?? {}
+
+  for (const name of skillDirs(skillsDir)) {
+    const dir = join(skillsDir, name)
+    const hashes = hashTree(dir)
+    if (!Object.keys(hashes).length) continue
+    const prev = known[name]
+    const verdict = decide(prev, hashes, name, drift)
+    skills[name] = {
+      ...verdict,
+      score: prev?.score ?? null,
+      severity: prev?.severity ?? null,
+      findings: prev?.findings ?? null,
+      rules: prev?.rules ?? [],
+      report: prev?.report ?? null,
+      reviewed: reviewDate(reviewsDir, name),
+      sha256: hashes,
     }
   }
 
-  const payload = {
-    schema: SCHEMA,
-    generated,
-    reports: reportDirs.map((dir) => basename(dir)),
-    skills,
+  for (const name of Object.keys(known)) {
+    if (!(name in skills)) removed.push(name)
+  }
+  return { skills, stats: { removed } }
+}
+
+function verify(dbFile, skillsDir) {
+  if (!existsSync(dbFile)) fail(`Urteilsdatei fehlt: ${dbFile}`, 1)
+  let data
+  try {
+    data = JSON.parse(readFileSync(dbFile, "utf8"))
+  } catch {
+    fail(`Urteilsdatei ist kein gueltiges JSON: ${dbFile}`, 1)
+  }
+  if (data?.schema !== SCHEMA) fail(`Schema ${data?.schema} statt ${SCHEMA}`, 1)
+
+  const problems = []
+  const entries = data.skills ?? {}
+
+  for (const [name, entry] of Object.entries(entries)) {
+    if (!["trust", "ask", "reject"].includes(entry?.decision)) {
+      problems.push(`${name}: Entscheidung "${entry?.decision}" ist ungueltig`)
+      continue
+    }
+    const dir = join(skillsDir, name)
+    if (!existsSync(dir)) {
+      problems.push(`${name}: Skill-Ordner fehlt`)
+      continue
+    }
+    const hashes = hashTree(dir)
+    if (!Object.keys(hashes).length) {
+      problems.push(`${name}: kein Python-Code mehr vorhanden`)
+      continue
+    }
+    if (!unchanged(entry, hashes)) {
+      const known = Object.keys(entry?.sha256 ?? {})
+      const now = Object.keys(hashes)
+      const added = now.filter((k) => !known.includes(k)).length
+      const changed = known.filter((k) => hashes[k] && hashes[k] !== entry.sha256[k]).length
+      const gone = known.filter((k) => !(k in hashes)).length
+      problems.push(`${name}: Hash weicht ab (neu ${added}, geaendert ${changed}, entfallen ${gone})`)
+    }
+  }
+
+  for (const name of skillDirs(skillsDir)) {
+    if (name in entries) continue
+    if (Object.keys(hashTree(join(skillsDir, name))).length) {
+      problems.push(`${name}: Python-Code ohne Eintrag`)
+    }
+  }
+
+  if (problems.length) {
+    console.error(`skill-verdicts: ${problems.length} Abweichung(en) in ${dbFile}`)
+    for (const line of problems) console.error(`  ${line}`)
+    console.error("  Naechster Schritt: node skill-verdicts.mjs --refresh --write")
+    process.exit(1)
+  }
+
+  console.log(`skill-verdicts: ${Object.keys(entries).length} Eintraege, Datei passt zum Arbeitsbaum.`)
+}
+
+function main() {
+  const skillsDir = resolve(arg("skills", join(homedir(), ".agents", "skills")))
+  if (!existsSync(skillsDir)) fail(`Skill-Verzeichnis fehlt: ${skillsDir}`)
+  const outFile = resolve(arg("out", join(homedir(), ".agents", "skill-reviews", "verdicts.json")))
+  const reviewsDir = dirname(outFile)
+
+  if (process.argv.includes("--verify")) {
+    verify(outFile, skillsDir)
+    return
+  }
+
+  const doRefresh = process.argv.includes("--refresh")
+  const generated = arg("date", today())
+  const existing = loadExisting(outFile)
+  const drift = []
+  let skills
+  let stats
+  let reportsField = Array.isArray(existing?.reports) ? existing.reports : []
+
+  if (doRefresh) {
+    ;({ skills, stats } = refresh(skillsDir, reviewsDir, existing, drift))
+    console.error(`Skills mit Python-Code: ${Object.keys(skills).length}  entfernt: ${stats.removed.length}`)
+    for (const name of stats.removed) console.error(`  entfernt: ${name}`)
+  } else {
+    const reportsDirs = args("reports").map((value) => resolve(value))
+    if (!reportsDirs.length) fail("--reports fehlt (Verzeichnis mit den SkillSpector-Berichten)")
+    for (const dir of reportsDirs) {
+      if (!existsSync(dir)) fail(`Berichtsverzeichnis fehlt: ${dir}`)
+    }
+    ;({ skills, stats } = build(reportsDirs, skillsDir, reviewsDir, existing, drift))
+    reportsField = reportsDirs.map((dir) => basename(dir))
+    console.error(
+      `Berichte: ${stats.found} aus ${reportsDirs.length} Verzeichnis(sen)  ` +
+        `Skills mit Python-Code: ${Object.keys(skills).length}  ohne Code: ${stats.withoutCode}`,
+    )
+    for (const name of stats.missing) console.error(`  Hinweis: Bericht ohne Skill-Ordner: ${name}`)
   }
 
   const names = Object.keys(skills)
   const trusted = names.filter((n) => skills[n].decision === "trust")
   const unguarded = trusted.filter((n) => !skills[n].reviewed)
 
-  console.error(`Berichte: ${found.size} aus ${reportDirs.length} Verzeichnis(sen)  Skills mit Python-Code: ${names.length}  ohne Code: ${withoutCode}`)
-  console.error(`Vertraut: ${trusted.length}  zurueckgesetzt: ${drift.length}  fehlende Ordner: ${missing.length}`)
+  console.error(`Vertraut: ${trusted.length}  zurueckgesetzt: ${drift.length}`)
   for (const name of drift) console.error(`  zurueckgesetzt (Skript geaendert): ${name}`)
   for (const name of unguarded) console.error(`  Hinweis: trust ohne Pruefprotokoll: ${name}`)
-  for (const name of missing) console.error(`  Hinweis: Bericht ohne Skill-Ordner: ${name}`)
+
+  const payload = {
+    schema: SCHEMA,
+    generated,
+    reports: reportsField,
+    skills,
+  }
 
   const text = `${JSON.stringify(payload, null, 2)}\n`
   if (!process.argv.includes("--write")) {
     process.stdout.write(text)
     return
   }
-
   const tmp = `${outFile}.tmp`
   writeFileSync(tmp, text, "utf8")
   renameSync(tmp, outFile)
