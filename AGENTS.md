@@ -23,14 +23,8 @@ Dateien werden nicht dorthin geschrieben.
 ## Regeln
 
 - **Fail closed:** Unbekanntes bleibt `ask`; ein `deny` wird nie überschrieben.
-- **Keine Geheimnisse** in Dateien, Commits, Logs oder Antworten. Konfiguration
-  nennt nur den Namen der Umgebungsvariable.
-- **Keine Benutzernamen oder absoluten Benutzerpfade** in Dateien und Commits;
-  `$HOME` statt konkreter Pfade.
 - **Quelltext ist die Wahrheit:** Kommentare erklären das Warum und werden mit
   dem Code geändert.
-- Kein `git push` durch den Agenten. Der Push bleibt beim Nutzer.
-- Keine Dateien löschen ohne ausdrückliche Zustimmung.
 
 ## Historie
 
