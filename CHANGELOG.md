@@ -12,6 +12,10 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Projektanweisungen (06.11.2026):** `AGENTS.md` auf die projektspezifischen
+  Guard-, Test- und Release-Regeln reduziert. Allgemeine Arbeits-, Datenschutz-
+  und Git-Regeln stehen in `$HOME/AGENTS.md` und werden nicht mehr doppelt
+  gepflegt.
 - **Backend auf Clef-Flash umgestellt (05.11.2026):** Der Reviewer lädt
   `Clef-Flash-Q4_K_M.gguf` (ggml-org) und entscheidet über `/v1/systemone`;
   `mcpBackend` und `shellBackend` stehen auf `systemone`, Schwelle 0,7. Die
