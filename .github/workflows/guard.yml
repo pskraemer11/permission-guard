@@ -1,0 +1,64 @@
+# Reusable test workflow for the permission-guard plugin.
+#
+# Called from other repositories:
+#
+#   jobs:
+#     guard:
+#       uses: pskraemer11/permission-guard/.github/workflows/guard.yml@main
+#
+# `actions/checkout` in a reusable workflow checks out the caller by default,
+# so this workflow checks out the plugin repository explicitly.
+name: permission-guard
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests (Node 22 / ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Checkout permission-guard
+        uses: actions/checkout@v4
+        with:
+          repository: pskraemer11/permission-guard
+          ref: main
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Classifier tests
+        run: node test.mjs
+
+      - name: MCP forwarding (33 cases)
+        run: node bench-mcp.mjs
+
+      - name: Case inventory unchanged
+        run: node bench-mcp.mjs --change
+
+      - name: Package contents
+        run: npm pack --dry-run
+
+      - name: No user paths and no keys
+        if: runner.os == 'Linux'
+        run: |
+          if grep -RInE '(/Users/[A-Za-z0-9._-]{3,}/|[A-Za-z]:\\+Users\\+[A-Za-z0-9._-]{3,})' \
+               --include='*.js' --include='*.mjs' --include='*.json' --include='*.md' --include='*.ps1' .; then
+            echo "::error::Personenbezogener Pfad gefunden."
+            exit 1
+          fi
+          if grep -RInE '(sk-[A-Za-z0-9]{16,}|oc_sk_|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})' \
+               --include='*.js' --include='*.mjs' --include='*.json' --include='*.md' --include='*.ps1' .; then
+            echo "::error::Moeglicher Zugangsschluessel gefunden."
+            exit 1
+          fi
+          echo "Keine Benutzerpfade oder Schluessel gefunden."
