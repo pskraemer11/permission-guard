@@ -8,10 +8,19 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **Git-Guardrails-Matrix und Tests (09.11.2026):** `test.mjs` prüft die sieben
+  kanonischen Git-Muster, globale Optionen (`-C`, `-c`, `--git-dir`,
+  `--work-tree`), Wrapper und erlaubte Gegenproben. `reviewerGaps` hält die
+  bekannten Lücken als Charakterisierungstests fest; Option B dreht diese
+  Erwartungen auf `deny`. 624/624 Tests.
 - **actionlint-CI:** `.github/workflows/actionlint.yml` prüft bei Pushes und Pull Requests alle GitHub-Actions-Workflows mit dem festgelegten offiziellen Image `rhysd/actionlint:1.7.12`, einschließlich shellcheck und pyflakes.
 
 ### Geändert
 
+- **Git-Abschnitt im README (09.11.2026):** Abdeckungsmatrix für
+  Klassifizierer und statische Regeln, getrennte `ask`/`deny`-Zeilen,
+  `guard.yml` als CI-Testworkflow klargestellt, Testzahl auf 624 aktualisiert.
+  Keine Verhaltensänderung, kein Deploy nötig.
 - **Projektanweisungen (06.11.2026):** `AGENTS.md` auf die projektspezifischen
   Guard-, Test- und Release-Regeln reduziert. Allgemeine Arbeits-, Datenschutz-
   und Git-Regeln stehen in `$HOME/AGENTS.md` und werden nicht mehr doppelt
