@@ -60,7 +60,7 @@ const base = [
   // --- muss fragen (schreibend, unklar, Geheimnis) ---
   ["git push origin master", "ask"],
   ["git config --global core.attributesFile \"C:/x\"", "ask"],
-  ["git branch -D backup", "ask"],
+  ["git branch -D backup", "deny"],
   ["git stash drop", "ask"],
   ["npm install -g firecrawl-cli@latest", "ask"],
   ["Remove-Item -Recurse -Force x", "ask"],
@@ -477,40 +477,42 @@ const interp = [
 ]
 
 // --- Git-Guardrails (09.11.2026, Option A) --------------------------------
-// Belegt den Ist-Stand des Klassifizierers. Die statischen Regeln aus
+// Belegt den Stand nach Option A und Option B. Die statischen Regeln aus
 // opencode.jsonc liegen ausserhalb dieses Repos und werden hier nicht
-// nachgebildet; die Matrix im README nennt beide Schichten. "ask" bei reset
-// und clean ist deshalb korrekt: im Betrieb verweigert die statische Regel
-// vorher. Option B (PLANUNG.md) macht die -C-Varianten sowie branch -D,
-// checkout . und restore . zu "deny"; dann werden die Erwartungen hier
-// bewusst angepasst.
+// nachgebildet; die Matrix im README nennt beide Schichten. "deny" bei reset,
+// clean, branch -D, checkout . und restore . ist die Option-B-Entscheidung;
+// push bleibt "ask".
 const gitGuardrails = [
-  // Sieben kanonische Muster: der Klassifizierer erkennt sie als schreibend.
+  // Sieben kanonische Muster. reset/clean/branch -D/checkout ./restore .
+  // sind seit Option B (09.11.2026) "deny"; push bleibt "ask".
   ["git push origin main", "ask"],
   ["git push --force origin main", "ask"],
-  ["git reset --hard HEAD~1", "ask"],
-  ["git clean -f", "ask"],
-  ["git clean -fd", "ask"],
-  ["git branch -D backup", "ask"],
-  ["git checkout .", "ask"],
-  ["git restore .", "ask"],
+  ["git reset --hard HEAD~1", "deny"],
+  ["git clean -f", "deny"],
+  ["git clean -fd", "deny"],
+  ["git branch -D backup", "deny"],
+  ["git checkout .", "deny"],
+  ["git restore .", "deny"],
 
-  // Globale Optionen und wirkungsgleiche Varianten: heute nur "ask".
+  // Globale Optionen und wirkungsgleiche Varianten.
   ["git -C C:\\p push origin main", "ask"],
-  ["git -C C:\\p reset --hard HEAD~1", "ask"],
-  ["git -C C:\\p clean -fd", "ask"],
-  ["git -C C:\\p branch -D backup", "ask"],
-  ["git -C C:\\p checkout .", "ask"],
-  ["git -C C:\\p restore .", "ask"],
+  ["git -C C:\\p reset --hard HEAD~1", "deny"],
+  ["git -C C:\\p clean -fd", "deny"],
+  ["git -C C:\\p branch -D backup", "deny"],
+  ["git -C C:\\p checkout .", "deny"],
+  ["git -C C:\\p restore .", "deny"],
   ["git -c core.pager=cat push origin main", "ask"],
   ["git --git-dir=C:\\p\\.git --work-tree=C:\\p push", "ask"],
-  ["git checkout -- .", "ask"],
+  ["git checkout -- .", "deny"],
   ["git restore --staged .", "ask"],
-  ["git clean -df", "ask"],
-  ["git clean --force", "ask"],
-  ["git branch --delete --force x", "ask"],
+  ["git restore --worktree .", "deny"],
+  ["git clean -df", "deny"],
+  ["git clean --force", "deny"],
+  ["git branch --delete --force x", "deny"],
+  ["git branch -d -f x", "deny"],
 
-  // Wrapper und andere Aufrufwege.
+  // Wrapper und andere Aufrufwege bleiben "ask": Der Guard parst keine
+  // verschachtelten Interpreter.
   ["env git push origin main", "ask"],
   ['bash -c "git push origin main"', "ask"],
   ["echo x | git push origin main", "ask"],
@@ -528,9 +530,13 @@ const gitGuardrails = [
 
   // Bewusst nur "ask" (kein Lesen): diese Formen aendern den Arbeitsstand.
   ["git checkout main", "ask"],
+  ["git branch -d backup", "ask"],
   ["git restore --staged file.txt", "ask"],
   ["git checkout ./src/file.ts", "ask"],
   ["git clean -n", "ask"],
+  // Guard-seitig ask; die statische Regel `git clean *` verweigert diese
+  // seltene Kombination weiterhin (dokumentiert).
+  ["git clean -f -n", "ask"],
   ["git pushd", "ask"],
 ]
 
@@ -583,6 +589,31 @@ run(py, undefined, "python eng freigegeben")
 run(interp, interpOptions, "Interpreters: node-Selbstskripte, python im Projekt")
 run(ruffConfigBootstrap, ruffConfigOptions, "Ruff-Konfigurationsbootstrap, exakt begrenzt")
 
+// --- Git-Meldungen (Option B) --------------------------------------------
+// ask und deny nennen Muster und Befehl; bei Geheimnisverdacht bleibt der
+// Befehl aus der Meldung heraus.
+const messageChecks = [
+  ["git push origin main", "push", true],
+  ["git branch -d backup", "branch-safe-delete", true],
+  ["git branch -D backup", "branch-force-delete", true],
+  ["git checkout .", "checkout-dot", true],
+  ["git restore .", "restore-dot", true],
+  ["git reset --hard", "reset-hard", true],
+  ["git clean -fd", "clean", true],
+  ["git push https://token@example.invalid/repo main", "push", false],
+]
+for (const [script, pattern, withCommand] of messageChecks) {
+  const got = evaluate(script, options)
+  const ok =
+    typeof got.message === "string" &&
+    got.message.includes(`Muster: ${pattern}`) &&
+    (withCommand ? got.message.includes(script) : !got.message.includes("token@"))
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${String(got.decision).padEnd(5)}  Meldung ${pattern}  ${script.slice(0, 60)}`)
+  if (!ok) console.log(`      Meldung: ${got.message ?? "fehlt"}`)
+}
+console.log("-- Git-Meldungen\n")
+
 // --- Ebene 1: Reviewer, rein lokal und ohne Netz ---
 // Die Risikoliste ist die Sicherheitsgrenze: was hier trifft, erreicht das
 // Modell nie. Getestet wird deshalb vor allem, dass sie greift.
@@ -630,25 +661,23 @@ for (const [script, mustBlock] of reviewerRisky) {
 }
 console.log("-- Reviewer: Risikoliste\n")
 
-// Dokumentierte Luecken (09.11.2026, Option A): Diese Formen erreichen heute
-// das Modell, weil RISKY sie nicht kennt. Option B nimmt sie auf; dann
-// wechseln die Erwartungen auf true. Der Test haelt den Ist-Stand fest,
-// damit die Luecke nicht unbemerkt als "erledigt" gilt.
-const reviewerGaps = [
-  ["git -C C:\\p checkout .", false],
-  ["git -C C:\\p restore .", false],
-  ["git -C C:\\p branch --delete --force x", false],
-  ["C:\\Program Files\\Git\\bin\\git.exe push origin main", false],
-  ["Set-Alias g git; g push", false],
+// Git-Risikomuster (09.11.2026, Option B): Diese Formen erreichen das Modell
+// nicht mehr. Die frueheren Luecken sind jetzt Teil der festen Grenze.
+const reviewerGit = [
+  ["git -C C:\\p checkout .", true],
+  ["git -C C:\\p restore .", true],
+  ["git -C C:\\p branch --delete --force x", true],
+  ["C:\\Program Files\\Git\\bin\\git.exe push origin main", true],
+  ["Set-Alias g git; g push", true],
 ]
-for (const [script, mustBlock] of reviewerGaps) {
+for (const [script, mustBlock] of reviewerGit) {
   const got = neverAutoApprove(script)
   const ok = Boolean(got) === mustBlock
   if (!ok) failed++
   console.log(`${ok ? "ok  " : "FAIL"}  ${String(Boolean(got)).padEnd(5)} (${String(mustBlock).padEnd(5)})  ${script.slice(0, 70)}`)
   if (!ok) console.log(`      Grund: ${got ?? "nicht geblockt"}`)
 }
-console.log("-- Reviewer: dokumentierte Luecken (Option B)\n")
+console.log("-- Reviewer: Git-Muster\n")
 
 // --- Reviewer: Fehlalarme, entschaerft 26.10.2026 ---
 // Drei Familien, belegt im Guard-Log 16:10-21:49 (126 Faelle im
@@ -1326,12 +1355,12 @@ const total =
   base.length + scoped.length + gitGuardrails.length + cli.length + helpVersion.length + gitleaks.length +
   readOnlyCli.length +
   net.length + denyForms.length + py.length + interp.length +
-  ruffConfigBootstrap.length +
+  ruffConfigBootstrap.length + messageChecks.length +
   mcpObs.length + mcpKeys.length + mcpSecChecks.length +
   mcpCritIntentChecks.length + mcpCritResourceChecks.length + mcpCritChecks.length +
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
-  reviewerRisky.length + reviewerGaps.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + 3
+  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + 3
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

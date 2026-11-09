@@ -455,8 +455,10 @@ Version ist ein Flag (`--version`), Status liefert `stats`.
 | `Remove-Item` ohne Ziel (`Get-ChildItem \| Remove-Item`) | `ask` |
 | Schreiben in `<Projekt>\.git`, `~/.config/opencode`, `~/.claude`, `~/.codex` | `deny` (Entscheidung 25.10.2026) |
 | Rekursives Löschen auf den Arbeitsordner selbst | `deny` (Entscheidung 25.10.2026) |
-| `git push`, `git branch -D`, `git checkout .`, `git restore .` | `ask` (Guard; `git push` zusätzlich statisch) |
-| `git reset --hard`, `git clean` | `deny` (statische Regel) |
+| `git push` | `ask` (statisch und Guard) |
+| `git branch -D`, `git checkout .`, `git restore .` | `deny` (Guard; `branch -D` zusätzlich statisch) |
+| `git reset --hard`, `git clean` | `deny` (statische Regel und Guard) |
+| `git branch -d` | `ask`; auf Windows ebenfalls `deny` (case-insensitive `-D`-Regel) |
 | `git commit --amend` | `ask` |
 | `npm install`, `pip install`, `winget`, `npx`, `Start-Process` | `ask` |
 | `Invoke-WebRequest`/`-RestMethod` mit Speicher-, Sende- oder Credential-Plan | `ask` (Details oben) |
@@ -477,52 +479,59 @@ Seit 25.10.2026 geht diesem `ask` ein lokaler Entscheider voraus (Ebene 1).
 ## Git-Muster und Claude-Parität (09.11.2026)
 
 Der Klassifizierer erkennt Git-Unterbefehle; die statischen Regeln in
-`opencode.jsonc` entscheiden, ob daraus `ask` oder `deny` wird. Die beiden
-Schichten sind getrennt zu lesen: `evaluate()` liefert für `reset --hard` und
-`clean` isoliert `ask`, im Betrieb verweigert die statische Regel vorher.
+`opencode.jsonc` entscheiden zusätzlich. Seit Option B liefert `evaluate()`
+für die destruktiven Formen selbst `deny`; die statische Schicht verweigert
+die kanonischen Formen vorher. `git push` bleibt eine Rückfrage.
 
 ### Kanonische Muster
 
-| Muster               | `evaluate()`                        | Statische Regel               | Effektiv |
-| -------------------- | ----------------------------------- | ----------------------------- | -------- |
-| `git push …`         | `ask` (`schreibend: push`)          | `git push *` → `ask`          | `ask`    |
-| `git reset --hard …` | `ask` (`schreibend: reset`)         | `git reset --hard *` → `deny` | `deny`   |
-| `git clean -f …`     | `ask` (`schreibend: clean`)         | `git clean *` → `deny`        | `deny`   |
-| `git clean -fd …`    | `ask`                               | `git clean *` → `deny`        | `deny`   |
-| `git branch -D …`    | `ask` (`schreibend: git branch -D`) | keine Regel → `ask`           | `ask`    |
-| `git checkout .`     | `ask` (`schreibend: checkout`)      | keine Regel → `ask`           | `ask`    |
-| `git restore .`      | `ask` (`schreibend: restore`)       | keine Regel → `ask`           | `ask`    |
+| Muster               | `evaluate()`                           | Statische Regel               | Effektiv |
+| -------------------- | -------------------------------------- | ----------------------------- | -------- |
+| `git push …`         | `ask` (`schreibend: push`)             | `git push *` → `ask`          | `ask`    |
+| `git reset --hard …` | `deny` (`Muster: reset-hard`)          | `git reset --hard *` → `deny` | `deny`   |
+| `git clean -f …`     | `deny` (`Muster: clean`)               | `git clean *` → `deny`        | `deny`   |
+| `git clean -fd …`    | `deny` (`Muster: clean`)               | `git clean *` → `deny`        | `deny`   |
+| `git branch -D …`    | `deny` (`Muster: branch-force-delete`) | `git branch -D *` → `deny`    | `deny`   |
+| `git checkout .`     | `deny` (`Muster: checkout-dot`)        | `git checkout .` → `deny`     | `deny`   |
+| `git restore .`      | `deny` (`Muster: restore-dot`)         | `git restore .` → `deny`      | `deny`   |
 
-### Varianten und Lücken
+### Varianten und Grenzen
 
-Die statischen Muster sind vollständige Wildcard-Globs. `git -C <pfad> …`
-trifft sie nicht; der Klassifizierer erkennt die Form als `write`, sodass
-`ask` bleibt. Damit wird die harte Verweigerung von `reset --hard` und
-`clean` bei `-C` weich. Weitere heute nur `ask`-Formen:
+Die Guard-Prüfung überspringt globale Optionen wie `-C`, `-c`,
+`--git-dir` und `--work-tree`. Damit werden auch Formen erkannt, die die
+statischen Präfix-Globs nicht treffen:
 
-| Variante                                      | `evaluate()` | Effektiv          |
-| --------------------------------------------- | ------------ | ----------------- |
-| `git -C <p> push`                             | `ask`        | `ask`             |
-| `git -C <p> reset --hard`                     | `ask`        | `ask`             |
-| `git -C <p> clean -fd`                        | `ask`        | `ask`             |
-| `git -C <p> branch -D`                        | `ask`        | `ask`             |
-| `git -C <p> checkout .` / `restore .`         | `ask`        | `ask`             |
-| `git checkout -- .`, `git restore --staged .` | `ask`        | `ask`             |
-| `git clean -df`, `--force`                    | `ask`        | `deny` (statisch) |
-| `git branch --delete --force`                 | `ask`        | `ask`             |
-| `C:\…\git.exe push`                           | `ask`        | `ask`             |
+| Variante                              | `evaluate()` | Effektiv               |
+| ------------------------------------- | ------------ | ---------------------- |
+| `git -C <p> push`                     | `ask`        | `ask`                  |
+| `git -C <p> reset --hard`             | `deny`       | `deny`                 |
+| `git -C <p> clean -fd`                | `deny`       | `deny`                 |
+| `git -C <p> branch -D`                | `deny`       | `deny`                 |
+| `git -C <p> checkout .` / `restore .` | `deny`       | `deny`                 |
+| `git checkout -- .`                   | `deny`       | `deny`                 |
+| `git restore --staged .`              | `ask`        | `ask`                  |
+| `git clean -df`, `--force`            | `deny`       | `deny`                 |
+| `git branch --delete --force`         | `deny`       | `deny`                 |
+| `git clean -n` / `--dry-run`          | `ask`        | `ask`                  |
+| `git branch -d`                       | `ask`        | `ask`; Windows: `deny` |
+| `C:\…\git.exe push`                   | `ask`        | `ask`                  |
 
-`git clean -n`/`--dry-run` wird durch `git clean *` derzeit **mit** verweigert;
-das ist breiter als nötig. Der Claude-Hook dient als Referenz, wird aber nicht
-per Teilstring-Grep kopiert: Er blockiert auch `git commit -m "… git push"`
-und `git checkout ./file`, sieht dafür `git -C …` und `git clean -df` nicht.
-Die geplante Option B (siehe `~/.agents/PLANUNG.md`) nimmt die irreversiblen
-Formen in eine Guard-interne `destructive`-Klasse auf und ergänzt `RISKY`.
+`git clean -n`/`--dry-run` bleibt ausgenommen. Die statische Ausnahme steht
+nach `git clean *`, damit die letzte passende Regel gewinnt. Die seltene
+Kombination `git clean -f -n` bleibt wegen der Präfix-Regel `deny`.
 
-Die Matrix wird durch `gitGuardrails` und `reviewerGaps` in `test.mjs`
-festgehalten. Die Lücken-Tests erwarten heute bewusst `ask`/`false`; Option B
-dreht diese Erwartungen auf `deny`/`true`. Die statischen Regeln sind nicht
-Teil von `test.mjs`; sie werden über `check_jsonc.py` und den Dialog geprüft.
+`git branch -D *` ist auf Windows case-insensitiv und verweigert dort auch
+`git branch -d`. Das ist die bewusst akzeptierte Nebenwirkung von
+Alternative 2. Auf Linux/macOS bleibt `git branch -d` eine Rückfrage.
+
+Bei `ask` und `deny` setzt `index.js` die Meldung aus `evaluate()`; sie nennt
+Muster und – sofern kein Geheimnisverdacht besteht – den Befehl. Ein späterer
+Schattenlauf (Variante 3) prüft zusätzlich `allow`-Aufrufe, ohne zu
+entscheiden; Details stehen in `~/.agents/PLANUNG.md`.
+
+Die Matrix wird durch `gitGuardrails`, `reviewerGit` und `messageChecks` in
+`test.mjs` festgehalten. Die statischen Regeln sind nicht Teil von `test.mjs`;
+sie werden über `check_jsonc.py` und den Dialog geprüft.
 
 ## Ebene 1: lokaler Entscheider (`reviewer.js`)
 
@@ -667,7 +676,7 @@ Freigabe-Filter aber nicht. Der Index dient der Vorauswahl, der eigene
 .\start-reviewer.ps1                       # llama-server, Gemma 4 12B, Port 8080
 .\start-reviewer.ps1 -ModelPath "D:\…\jevk5-4b-v0.3-Q5_K_M.gguf" -Port 8081
 node smoke-reviewer.mjs                    # 9 Fälle gegen die laufende Konfiguration
-node test.mjs                              # 624 Unit-Tests
+node test.mjs                              # 636 Unit-Tests
 .\start-reviewer.ps1 -Stop
 ```
 

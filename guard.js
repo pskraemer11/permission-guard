@@ -322,6 +322,136 @@ function classifyGit(tokens) {
   return "read"
 }
 
+// --- Destruktive Git-Formen (Nutzerentscheid 09.11.2026) -----------------
+//
+// Die statischen Regeln koennen nur den Befehlsanfang sehen. Besonders auf
+// Windows ist `git branch -D *` ausserdem case-insensitiv und trifft dort
+// auch `git branch -d`. Diese Pruefung arbeitet auf den Segmenten und
+// erkennt die Formen auch hinter globalen Optionen wie `-C`, `-c`,
+// `--git-dir` und `--work-tree`. Sie liefert nur ein Muster; die Entscheidung
+// `deny` faellt in evaluate(). Ein Treffer in einem unlesbaren Block bleibt
+// bewusst aus, dann greift weiterhin die normale "ask"-Einordnung.
+const GIT_BLOCK_KEYWORD =
+  /^(if|elseif|else|while|foreach|for|switch|function|filter|try|catch|finally|do|process|begin|end|param)\b/i
+
+function gitExecutableName(token) {
+  return String(token).toLowerCase().split(/[\\/]/).pop()
+}
+
+function gitDestructiveInStatement(statement) {
+  let s = statement.trim().replace(/^[({]+/, "").trim()
+  if (!s) return null
+
+  // Einzeilige Kontrollbloecke: den Rumpf rekursiv pruefen.
+  if (GIT_BLOCK_KEYWORD.test(s)) {
+    const parts = splitBlock(s)
+    if (!parts) return null
+    return (
+      gitDestructiveInStatement(parts.body) ||
+      gitDestructiveInStatement(parts.head.replace(/^[A-Za-z_]+\b/, ""))
+    )
+  }
+
+  const tokens = tokenizeCli(s)
+  let i = 0
+  while (i < tokens.length && /^[{}()]+$/.test(tokens[i])) i++
+  if (i >= tokens.length || !["git", "git.exe"].includes(gitExecutableName(tokens[i]))) return null
+  i += 1
+
+  while (i < tokens.length) {
+    const t = tokens[i]
+    if (t === "-C" || t === "-c") { i += 2; continue }
+    if (t.startsWith("-C") && t.length > 2) { i += 1; continue }
+    if (t.startsWith("--no-pager") || t.startsWith("--git-dir") || t.startsWith("--work-tree")) { i += 1; continue }
+    break
+  }
+
+  const sub = (tokens[i] || "").toLowerCase()
+  const rest = tokens.slice(i + 1)
+  if (!sub) return null
+
+  if (sub === "reset" && rest.includes("--hard")) {
+    return {
+      pattern: "reset-hard",
+      reason: "git reset --hard verwirft Arbeitsstand und Historie",
+    }
+  }
+
+  if (sub === "clean") {
+    const dryRun = rest.some((t) => t === "-n" || t === "--dry-run" || /^-[A-Za-z]*n[A-Za-z]*$/.test(t))
+    if (dryRun) return null
+    return {
+      pattern: "clean",
+      reason: "git clean loescht unversionierte Dateien",
+    }
+  }
+
+  if (sub === "branch") {
+    const forceDelete = rest.some((t) => /^-D/.test(t))
+    const deleteLong = rest.includes("--delete")
+    const deleteShort = rest.some((t) => /^-d/.test(t))
+    const force = rest.includes("--force") || rest.some((t) => /^-f/.test(t))
+    if (forceDelete || (deleteLong && force) || (deleteShort && force)) {
+      return {
+        pattern: "branch-force-delete",
+        reason: "git branch -D loescht einen Branch ohne Merge-Pruefung",
+      }
+    }
+  }
+
+  if (sub === "checkout" && rest.includes(".")) {
+    return {
+      pattern: "checkout-dot",
+      reason: "git checkout . verwirft nicht gespeicherte Aenderungen",
+    }
+  }
+
+  if (sub === "restore" && rest.includes(".")) {
+    const staged = rest.includes("--staged")
+    const worktree = rest.includes("--worktree")
+    // Nur der Index (--staged ohne --worktree) ist nicht destruktiv.
+    if (!staged || worktree) {
+      return {
+        pattern: "restore-dot",
+        reason: "git restore . verwirft nicht gespeicherte Aenderungen",
+      }
+    }
+  }
+
+  return null
+}
+
+function findDestructiveGit(script) {
+  for (const statement of splitStatements(script)) {
+    const hit = gitDestructiveInStatement(statement)
+    if (hit) return hit
+  }
+  return null
+}
+
+// Meldung analog zum Claude-Hook. Der Befehl wird nur genannt, wenn der
+// Geheimnis-Filter ihn nicht als verdaechtig einstuft.
+function gitRuleMessage(hit, raw) {
+  const head = `permission-guard: ${hit.reason} (Muster: ${hit.pattern})`
+  if (findSecrets(raw).length) return head
+  const command = String(raw).replace(/\s+/g, " ").trim().slice(0, 140)
+  return command ? `${head}: ${command}` : head
+}
+
+function gitAskMessage(write, raw) {
+  let head
+  if (write === "push") {
+    head = "permission-guard: git push laedt Commits ins Remote (Muster: push)"
+  } else if (write === "git branch -d" || write === "branch -d") {
+    head = "permission-guard: git branch -d loescht einen gemergten Branch (Muster: branch-safe-delete)"
+  } else {
+    return undefined
+  }
+  if (findSecrets(raw).length) return head
+  const command = String(raw).replace(/\s+/g, " ").trim().slice(0, 140)
+  return command ? `${head}: ${command}` : head
+}
+
 function splitBlock(statement) {
   const open = statement.indexOf("{")
   if (open < 0) return null
@@ -1801,7 +1931,7 @@ function classifyGh(statement) {
  *   home  - Benutzerprofil (fuer ~, $HOME, geschuetzte Pfade)
  *   temp  - temporaerer Ordner (fuer $env:TEMP)
  *   appData - Windows-Roaming-Konfigurationsordner; nur fuer die enge Ruff-Ausnahme
- * @returns {{decision: "allow" | "ask" | "deny", reason: string}}
+ * @returns {{decision: "allow" | "ask" | "deny", reason: string, message?: string}}
  */
 export function evaluate(script, options = {}) {
   const raw = String(script ?? "")
@@ -1817,6 +1947,19 @@ export function evaluate(script, options = {}) {
     .map((line) => line.replace(/(^|\s)#.*$/, ""))
     .join("\n")
 
+  // Destruktive Git-Formen zuerst: Sie sollen auch dann verweigert werden,
+  // wenn der Befehl erst hinter globalen Optionen sichtbar wird. Ein Treffer
+  // bleibt "deny"; die Meldung nennt Muster und - ohne Geheimnisverdacht -
+  // den Befehl.
+  const destructiveGit = findDestructiveGit(text)
+  if (destructiveGit) {
+    return {
+      decision: "deny",
+      reason: destructiveGit.reason,
+      message: gitRuleMessage(destructiveGit, raw),
+    }
+  }
+
   const write = hasWriteVerb(stripStrings(text))
   const fileWrite = hasFileWriteVerb(stripStrings(text))
 
@@ -1826,7 +1969,14 @@ export function evaluate(script, options = {}) {
     }
   }
   // Netz, Prozesse, Registry, Git-Historie: immer Rueckfrage.
-  if (write) return { decision: "ask", reason: `schreibend: ${write}` }
+  if (write) {
+    const message = gitAskMessage(write, raw)
+    return {
+      decision: "ask",
+      reason: `schreibend: ${write}`,
+      ...(message ? { message } : {}),
+    }
+  }
 
   const statements = splitStatements(text)
 

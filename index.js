@@ -232,7 +232,7 @@ export default Plugin.define({
             debug(`allow ${verdict.reason} | ${script.replace(/\s+/g, " ").slice(0, 140)}`)
           } else if (verdict.decision === "deny") {
             input.effect = "deny"
-            input.message = `permission-guard: ${verdict.reason}`
+            input.message = verdict.message ?? `permission-guard: ${verdict.reason}`
             debug(`deny ${verdict.reason}`)
           } else if (verdict.reason.startsWith("nicht einordenbar")) {
             // Ebene 1: lokales Modell entscheidet nur ueber den Rest.
@@ -252,6 +252,7 @@ export default Plugin.define({
             }
           } else {
             // Bei Geheimnis-Verdacht bewusst kein Befehlstext im Log.
+            if (verdict.message) input.message = verdict.message
             const detail = verdict.reason.startsWith("Geheimnis") ? "" : ` | ${script.replace(/\s+/g, " ").slice(0, 140)}`
             debug(`ask ${verdict.reason}${detail}`)
           }
