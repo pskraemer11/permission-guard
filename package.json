@@ -25,6 +25,8 @@
     "index.js",
     "reviewer.js",
     "audit.js",
+    "shadow.js",
+    "git-shadow-report.mjs",
     "verify-audit.mjs",
     "mcp-report.mjs",
     "skill-verdicts.mjs",
@@ -56,6 +58,7 @@
     "verdicts": "node skill-verdicts.mjs",
     "verify-audit": "node verify-audit.mjs",
     "report": "node mcp-report.mjs",
+    "shadow-report": "node git-shadow-report.mjs",
     "smoke": "node smoke-reviewer.mjs"
   }
 }

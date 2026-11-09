@@ -525,9 +525,17 @@ Kombination `git clean -f -n` bleibt wegen der Präfix-Regel `deny`.
 Alternative 2. Auf Linux/macOS bleibt `git branch -d` eine Rückfrage.
 
 Bei `ask` und `deny` setzt `index.js` die Meldung aus `evaluate()`; sie nennt
-Muster und – sofern kein Geheimnisverdacht besteht – den Befehl. Ein späterer
-Schattenlauf (Variante 3) prüft zusätzlich `allow`-Aufrufe, ohne zu
-entscheiden; Details stehen in `~/.agents/PLANUNG.md`.
+Muster und – sofern kein Geheimnisverdacht besteht – den Befehl.
+
+Der Schattenlauf (Variante 3) ist über `gitShadow: "shadow"` aktivierbar und
+seit 09.11.2026 für sieben Tage aktiv. Er protokolliert destruktive Git-Formen
+mit `effect=allow` in `%LOCALAPPDATA%\opencode\permission-guard\git-shadow.jsonl`,
+ohne zu entscheiden und ohne Befehlstexte. Auswertung:
+
+```powershell
+node git-shadow-report.mjs
+node git-shadow-report.mjs --json
+```
 
 Die Matrix wird durch `gitGuardrails`, `reviewerGit` und `messageChecks` in
 `test.mjs` festgehalten. `test-wiring.mjs` prüft mit einem Fake-`git`, dass
@@ -678,7 +686,7 @@ Freigabe-Filter aber nicht. Der Index dient der Vorauswahl, der eigene
 .\start-reviewer.ps1                       # llama-server, Gemma 4 12B, Port 8080
 .\start-reviewer.ps1 -ModelPath "D:\…\jevk5-4b-v0.3-Q5_K_M.gguf" -Port 8081
 node smoke-reviewer.mjs                    # 9 Fälle gegen die laufende Konfiguration
-node test.mjs                              # 636 Unit-Tests
+node test.mjs                              # 652 Unit-Tests
 node test-wiring.mjs                       # 13 Verdrahtungstests (Fake-git)
 .\start-reviewer.ps1 -Stop
 ```
@@ -695,10 +703,12 @@ Timeout stehen in `shell-reviewer.config.json` (beim Deploy aus
 | `apiKeyEnv` | Name der Umgebungsvariable mit dem Key, nie der Key selbst |
 | `timeoutMs` | Obergrenze, danach `ask` |
 | `grammar` | GBNF; leer nur für Backends, die sie ablehnen |
+| `gitShadow` | `off` oder `shadow`; im Schattenmodus werden destruktive Git-Formen mit `effect=allow` nur protokolliert |
 | `extraRisky` | projektspezifische Muster, die nie freigegeben werden |
 
 Überschreibbar per Umgebung: `PERMISSION_GUARD_REVIEWER` (`0`/`1`), `_URL`,
-`_MODEL`, `_KEY_ENV`, `_TIMEOUT_MS`.
+`_MODEL`, `_KEY_ENV`, `_TIMEOUT_MS`, `PERMISSION_GUARD_GIT_SHADOW` (`0`/`1`
+oder `off`/`shadow`), `PERMISSION_GUARD_GIT_SHADOW_LOG` (Pfad oder `off`).
 
 **Konfiguration wird beim Laden einmal gelesen.** `loadConfig()` läuft in
 `setup()`, also einmal pro Plugin-Instanz. Eine Änderung an
