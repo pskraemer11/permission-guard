@@ -476,6 +476,64 @@ const interp = [
   ["python tools\\notes.txt", "ask"],
 ]
 
+// --- Git-Guardrails (09.11.2026, Option A) --------------------------------
+// Belegt den Ist-Stand des Klassifizierers. Die statischen Regeln aus
+// opencode.jsonc liegen ausserhalb dieses Repos und werden hier nicht
+// nachgebildet; die Matrix im README nennt beide Schichten. "ask" bei reset
+// und clean ist deshalb korrekt: im Betrieb verweigert die statische Regel
+// vorher. Option B (PLANUNG.md) macht die -C-Varianten sowie branch -D,
+// checkout . und restore . zu "deny"; dann werden die Erwartungen hier
+// bewusst angepasst.
+const gitGuardrails = [
+  // Sieben kanonische Muster: der Klassifizierer erkennt sie als schreibend.
+  ["git push origin main", "ask"],
+  ["git push --force origin main", "ask"],
+  ["git reset --hard HEAD~1", "ask"],
+  ["git clean -f", "ask"],
+  ["git clean -fd", "ask"],
+  ["git branch -D backup", "ask"],
+  ["git checkout .", "ask"],
+  ["git restore .", "ask"],
+
+  // Globale Optionen und wirkungsgleiche Varianten: heute nur "ask".
+  ["git -C C:\\p push origin main", "ask"],
+  ["git -C C:\\p reset --hard HEAD~1", "ask"],
+  ["git -C C:\\p clean -fd", "ask"],
+  ["git -C C:\\p branch -D backup", "ask"],
+  ["git -C C:\\p checkout .", "ask"],
+  ["git -C C:\\p restore .", "ask"],
+  ["git -c core.pager=cat push origin main", "ask"],
+  ["git --git-dir=C:\\p\\.git --work-tree=C:\\p push", "ask"],
+  ["git checkout -- .", "ask"],
+  ["git restore --staged .", "ask"],
+  ["git clean -df", "ask"],
+  ["git clean --force", "ask"],
+  ["git branch --delete --force x", "ask"],
+
+  // Wrapper und andere Aufrufwege.
+  ["env git push origin main", "ask"],
+  ['bash -c "git push origin main"', "ask"],
+  ["echo x | git push origin main", "ask"],
+  ["Start-Process git -ArgumentList push", "ask"],
+  ["Set-Alias g git; g push", "ask"],
+  ["C:\\Program Files\\Git\\bin\\git.exe push origin main", "ask"],
+
+  // Erlaubte Gegenproben: normale Arbeit darf nicht blockiert werden.
+  ["git status", "allow"],
+  ["git diff --stat", "allow"],
+  ["git log --oneline", "allow"],
+  ["git branch", "allow"],
+  ['git commit -m "docs: explain git push"', "allow"],
+  ['git log --grep="git clean -fd"', "allow"],
+
+  // Bewusst nur "ask" (kein Lesen): diese Formen aendern den Arbeitsstand.
+  ["git checkout main", "ask"],
+  ["git restore --staged file.txt", "ask"],
+  ["git checkout ./src/file.ts", "ask"],
+  ["git clean -n", "ask"],
+  ["git pushd", "ask"],
+]
+
 // Exakte Ausnahme fuer Installation/Update dieses geprueften Ruff-Defaults.
 const ruffConfigOptions = {
   ...interpOptions,
@@ -514,6 +572,7 @@ function run(cases, opts, title) {
 
 run(base, undefined, "ohne Projektbezug")
 run(scoped, options, "mit Projektbezug")
+run(gitGuardrails, options, "Git-Guardrails: Ist-Stand")
 run(cli, undefined, "CLI-Allowlists")
 run(helpVersion, undefined, "Hilfe und Version")
 run(gitleaks, undefined, "gitleaks")
@@ -533,6 +592,12 @@ const reviewerRisky = [
   ["git status; git log --oneline", false],
   ["git push --force origin main", true],
   ["git reset --hard HEAD~1", true],
+  ["git -C C:\\p push origin main", true],
+  ["git -C C:\\p reset --hard HEAD~1", true],
+  ["git -C C:\\p clean -fd", true],
+  ["git -C C:\\p clean --force", true],
+  ["git -C C:\\p branch -D backup", true],
+  ["git clean -n", false],
   ["python -c \"print(1)\"", true],
   ["python3 -m pip install requests", true],
   ["npm install left-pad", true],
@@ -564,6 +629,26 @@ for (const [script, mustBlock] of reviewerRisky) {
   if (!ok) console.log(`      Grund: ${got ?? "nicht geblockt"}`)
 }
 console.log("-- Reviewer: Risikoliste\n")
+
+// Dokumentierte Luecken (09.11.2026, Option A): Diese Formen erreichen heute
+// das Modell, weil RISKY sie nicht kennt. Option B nimmt sie auf; dann
+// wechseln die Erwartungen auf true. Der Test haelt den Ist-Stand fest,
+// damit die Luecke nicht unbemerkt als "erledigt" gilt.
+const reviewerGaps = [
+  ["git -C C:\\p checkout .", false],
+  ["git -C C:\\p restore .", false],
+  ["git -C C:\\p branch --delete --force x", false],
+  ["C:\\Program Files\\Git\\bin\\git.exe push origin main", false],
+  ["Set-Alias g git; g push", false],
+]
+for (const [script, mustBlock] of reviewerGaps) {
+  const got = neverAutoApprove(script)
+  const ok = Boolean(got) === mustBlock
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${String(Boolean(got)).padEnd(5)} (${String(mustBlock).padEnd(5)})  ${script.slice(0, 70)}`)
+  if (!ok) console.log(`      Grund: ${got ?? "nicht geblockt"}`)
+}
+console.log("-- Reviewer: dokumentierte Luecken (Option B)\n")
 
 // --- Reviewer: Fehlalarme, entschaerft 26.10.2026 ---
 // Drei Familien, belegt im Guard-Log 16:10-21:49 (126 Faelle im
@@ -1238,7 +1323,7 @@ for (const [name, ok] of warmupChecks) {
 console.log("-- Aufwaermlauf\n")
 
 const total =
-  base.length + scoped.length + cli.length + helpVersion.length + gitleaks.length +
+  base.length + scoped.length + gitGuardrails.length + cli.length + helpVersion.length + gitleaks.length +
   readOnlyCli.length +
   net.length + denyForms.length + py.length + interp.length +
   ruffConfigBootstrap.length +
@@ -1247,6 +1332,6 @@ const total =
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
-  reviewerRisky.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + 3
+  reviewerRisky.length + reviewerGaps.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + 3
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)
