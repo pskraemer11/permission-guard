@@ -8,6 +8,11 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **Git-Schattenlauf Variante 3 (09.11.2026):** `gitShadow: "shadow"`
+  protokolliert destruktive Git-Formen mit `effect=allow` in
+  `%LOCALAPPDATA%\opencode\permission-guard\git-shadow.jsonl`, ohne zu
+  entscheiden. `git-shadow-report.mjs` wertet nach Muster, Tag, Agent und
+  Variante aus; keine Befehlstexte. 652/652 Tests.
 - **Verdrahtungstest (09.11.2026):** `test-wiring.mjs` legt einen Fake-`git`
   in den temporären `PATH`; `deny` für `branch -D`, `checkout .`, `restore .`,
   `reset --hard` und `clean -fd` verhindert den Aufruf, `git status` dient als
@@ -31,7 +36,7 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 - **Git-Abschnitt im README (09.11.2026):** Abdeckungsmatrix für
   Klassifizierer und statische Regeln, getrennte `ask`/`deny`-Zeilen,
-  `guard.yml` als CI-Testworkflow klargestellt, Testzahl auf 636 aktualisiert.
+  `guard.yml` als CI-Testworkflow klargestellt, Testzahl auf 652 aktualisiert.
   Keine Verhaltensänderung, kein Deploy nötig.
 - **Projektanweisungen (06.11.2026):** `AGENTS.md` auf die projektspezifischen
   Guard-, Test- und Release-Regeln reduziert. Allgemeine Arbeits-, Datenschutz-

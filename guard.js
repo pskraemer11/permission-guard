@@ -429,6 +429,25 @@ function findDestructiveGit(script) {
   return null
 }
 
+// Schattenlauf Variante 3 (09.11.2026): erkennt destruktive Git-Formen auch
+// dann, wenn die statische Schicht oder eine gespeicherte Freigabe den Befehl
+// bereits erlaubt hat. Reine Beobachtung; keine Entscheidung. Liefert nur
+// Muster und Aufrufvariante, nie den Befehlstext.
+export function gitShadowRecord(script) {
+  const text = String(script ?? "")
+  const hit = findDestructiveGit(text)
+  if (!hit) return null
+  let variant = "direct"
+  if (/(?:^|[;&|]\s*)(?:bash|sh|zsh|cmd(?:\.exe)?|env|Start-Process)\b/i.test(text)) {
+    variant = "wrapper"
+  } else if (/\bgit\b[^\r\n;|&]*\s--(?:git-dir|work-tree)\b/i.test(text)) {
+    variant = "git-dir"
+  } else if (/\bgit\b[^\r\n;|&]*\s(?:-C|-c)\b/.test(text)) {
+    variant = "global-option"
+  }
+  return { pattern: hit.pattern, variant }
+}
+
 // Meldung analog zum Claude-Hook. Der Befehl wird nur genannt, wenn der
 // Geheimnis-Filter ihn nicht als verdaechtig einstuft.
 function gitRuleMessage(hit, raw) {

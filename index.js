@@ -19,8 +19,9 @@ import { Plugin } from "@opencode/plugin"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { MCP_GATING_MODE, contextScope, evaluate, mcpAction, mcpCriteria, mcpObservation, mcpVerdict } from "./guard.js"
+import { MCP_GATING_MODE, contextScope, evaluate, gitShadowRecord, mcpAction, mcpCriteria, mcpObservation, mcpVerdict } from "./guard.js"
 import { appendRecord, auditPath, callKey, readState, shortHash } from "./audit.js"
+import { appendShadow, shadowPath } from "./shadow.js"
 import { ensureRunning, loadConfig, review, reviewMcp, warmup } from "./reviewer.js"
 
 const BASE_DIR = path.join(os.tmpdir(), "opencode-permission-guard")
@@ -98,6 +99,7 @@ export default Plugin.define({
     // Diagnosezeile, nie als Ausnahme - das Audit darf den Guard nicht stoeren.
     const auditFile = auditPath()
     let auditState = auditFile ? readState(auditFile) : null
+    const shadowFile = shadowPath()
     const seenMcpTools = new Set()
     const audit = (fields) => {
       if (!auditFile || !auditState) return
@@ -219,8 +221,35 @@ export default Plugin.define({
           // beobachtet, Shell-Befehle bleiben bei den statischen Regeln.
           if (homeContext) return
 
-          if (String(input.effect ?? "").toLowerCase() !== "ask") return
-          if (!SHELL_ACTIONS.has(String(input.action ?? "").toLowerCase())) return
+          const effect = String(input.effect ?? "").toLowerCase()
+          const action = String(input.action ?? "").toLowerCase()
+
+          // Schattenlauf Variante 3 (09.11.2026): nur beobachten, nie
+          // entscheiden. Erfasst werden ausschliesslich erlaubte Shell-
+          // Aufrufe; der Effekt bleibt unveraendert. Keine Befehlstexte,
+          // Pfade oder Argumentwerte im Protokoll.
+          if (reviewerConfig.gitShadow === "shadow" && effect === "allow" && SHELL_ACTIONS.has(action)) {
+            const shadowScript = pickScript(input)
+            const shadow = shadowScript ? gitShadowRecord(shadowScript) : null
+            if (shadow) {
+              const wrote = appendShadow(shadowFile, {
+                ts: new Date().toISOString(),
+                mode: "shadow",
+                pattern: shadow.pattern,
+                variant: shadow.variant,
+                effect,
+                planned: "deny",
+                agent: String(input.agent ?? "").replace(/[^\w.-]/g, "").slice(0, 40) || "unbekannt",
+                sessionHash: shortHash(input.sessionID),
+                commandHash: shortHash(shadowScript),
+                segments: Array.isArray(input.resources) ? input.resources.length : 1,
+              })
+              debug(`git-shadow ${shadow.pattern} variant=${shadow.variant}${wrote ? "" : " (Schreibfehler)"}`)
+            }
+          }
+
+          if (effect !== "ask") return
+          if (!SHELL_ACTIONS.has(action)) return
 
           const script = pickScript(input)
           if (!script) return

@@ -78,6 +78,9 @@ const DEFAULTS = {
   shellThreshold: 0.7,
   // Zusaetzliche Risikomuster aus der Projektkonfiguration.
   extraRisky: [],
+  // Schattenlauf Variante 3: "off" oder "shadow". Im Schattenmodus werden
+  // destruktive Git-Formen mit effect=allow nur protokolliert.
+  gitShadow: "off",
 }
 
 // --- Risikoliste -----------------------------------------------------------
@@ -304,6 +307,12 @@ export function loadConfig(overrides = {}) {
   if (env.PERMISSION_GUARD_REVIEWER_SHELL_THRESHOLD) {
     const n = Number(env.PERMISSION_GUARD_REVIEWER_SHELL_THRESHOLD)
     if (Number.isFinite(n) && n > 0 && n < 1) config.shellThreshold = n
+  }
+  if (env.PERMISSION_GUARD_GIT_SHADOW === "1" || env.PERMISSION_GUARD_GIT_SHADOW === "shadow") {
+    config.gitShadow = "shadow"
+  }
+  if (env.PERMISSION_GUARD_GIT_SHADOW === "0" || env.PERMISSION_GUARD_GIT_SHADOW === "off") {
+    config.gitShadow = "off"
   }
   return config
 }

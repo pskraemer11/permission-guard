@@ -5,6 +5,7 @@
   "_backend_lmstudio": "baseUrl http://127.0.0.1:1234/v1, model jev-omni, apiKeyEnv LMS_OpenAI_AUTH_TOKEN (nur chat/completions)",
   "_mcp_backend": "Ebene 3 fuer MCP: chat = Ja/Nein ueber chat/completions; systemone = Entscheidungsmodell ueber /v1/systemone (Clef-Flash), Entscheidung per mcpThreshold. Gemessen 05.11.2026: chat 12/14, systemone 14/14.",
   "_shell_backend": "Ebene 1 (Shell) kann denselben Weg nehmen: shellBackend systemone + shellThreshold. Gemessen 05.11.2026: 14/14, Freigaben 0,94-0,97, Aenderungen 0,02-0,06.",
+  "_git_shadow": "Variante 3: off = aus, shadow = destruktive Git-Formen mit effect=allow nur protokollieren (keine Wirkung). Ablage: %LOCALAPPDATA%\\opencode\\permission-guard\\git-shadow.jsonl; Auswertung: node git-shadow-report.mjs.",
   "enabled": true,
   "baseUrl": "http://127.0.0.1:8080/v1",
   "model": "clef",
@@ -18,5 +19,6 @@
   "mcpThreshold": 0.7,
   "shellBackend": "systemone",
   "shellThreshold": 0.7,
+  "gitShadow": "off",
   "extraRisky": []
 }

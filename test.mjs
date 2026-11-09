@@ -1,6 +1,8 @@
 // Testtabelle fuer guard.js. Ausfuehren mit: node test.mjs
-import { contextScope, evaluate, mcpAction, mcpCriteria, mcpObservation, mcpVerdict } from "./guard.js"
+import { contextScope, evaluate, gitShadowRecord, mcpAction, mcpCriteria, mcpObservation, mcpVerdict } from "./guard.js"
 import { appendRecord, canonicalJson, hashRecord, parseLines, verifyChain } from "./audit.js"
+import { summarizeShadow } from "./git-shadow-report.mjs"
+import { shadowPath } from "./shadow.js"
 import { summarizeAudit } from "./mcp-report.mjs"
 import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMcpAnswer, review, reviewMcp, segments, warmup } from "./reviewer.js"
 import { buildShellSystemoneRequest, buildSystemoneRequest, systemoneVerdict } from "./reviewer.js"
@@ -613,6 +615,58 @@ for (const [script, pattern, withCommand] of messageChecks) {
   if (!ok) console.log(`      Meldung: ${got.message ?? "fehlt"}`)
 }
 console.log("-- Git-Meldungen\n")
+
+// --- Schattenlauf Variante 3 ---------------------------------------------
+// Reine Beobachtung: Muster und Variante, kein Befehlstext, keine Wirkung.
+const shadowChecks = [
+  ["git branch -D backup", "branch-force-delete", "direct"],
+  ["git -C C:\\p checkout .", "checkout-dot", "global-option"],
+  ["git -c core.pager=cat clean -fd", "clean", "global-option"],
+  ["git --git-dir=C:\\p\\.git reset --hard", "reset-hard", "git-dir"],
+  ["git push origin main", null, null],
+  ["git clean -n", null, null],
+  ["git status", null, null],
+]
+for (const [script, pattern, variant] of shadowChecks) {
+  const got = gitShadowRecord(script)
+  const ok = pattern === null ? got === null : got?.pattern === pattern && got?.variant === variant
+  if (!ok) failed++
+  const shown = got ? `${got.pattern}/${got.variant}` : "kein Treffer"
+  console.log(`${ok ? "ok  " : "FAIL"}  ${shown.padEnd(32)}  ${script.slice(0, 60)}`)
+}
+console.log("-- Git-Schattenlauf: Detektor\n")
+
+const shadowSample = [
+  JSON.stringify({ ts: "2026-11-09T10:00:00Z", pattern: "checkout-dot", variant: "direct", agent: "build", commandHash: "a" }),
+  JSON.stringify({ ts: "2026-11-09T11:00:00Z", pattern: "checkout-dot", variant: "global-option", agent: "build", commandHash: "b" }),
+  JSON.stringify({ ts: "2026-11-10T09:00:00Z", pattern: "clean", variant: "direct", agent: "plan", commandHash: "a" }),
+  "kein JSON",
+].join("\n")
+const shadowSummary = summarizeShadow(shadowSample)
+const shadowReportChecks = [
+  ["Summe 3", shadowSummary.total === 3],
+  ["Muster checkout-dot 2", shadowSummary.patterns["checkout-dot"] === 2],
+  ["Muster clean 1", shadowSummary.patterns.clean === 1],
+  ["Varianten direct 2", shadowSummary.variants.direct === 2],
+  ["Tage 2", Object.keys(shadowSummary.days).length === 2],
+  ["eindeutige Befehle 2", shadowSummary.uniqueCommands === 2],
+]
+for (const [name, ok] of shadowReportChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- Git-Schattenlauf: Auswertung\n")
+
+const shadowPathChecks = [
+  ["off", shadowPath({ PERMISSION_GUARD_GIT_SHADOW_LOG: "off" }, "win32") === null],
+  ["custom", shadowPath({ PERMISSION_GUARD_GIT_SHADOW_LOG: "C:\\x\\s.jsonl" }, "win32") === "C:\\x\\s.jsonl"],
+  ["localappdata", shadowPath({ LOCALAPPDATA: "C:\\L" }, "win32")?.endsWith("git-shadow.jsonl") === true],
+]
+for (const [name, ok] of shadowPathChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  Pfad ${name}`)
+}
+console.log("-- Git-Schattenlauf: Ablage\n")
 
 // --- Ebene 1: Reviewer, rein lokal und ohne Netz ---
 // Die Risikoliste ist die Sicherheitsgrenze: was hier trifft, erreicht das
@@ -1356,6 +1410,7 @@ const total =
   readOnlyCli.length +
   net.length + denyForms.length + py.length + interp.length +
   ruffConfigBootstrap.length + messageChecks.length +
+  shadowChecks.length + shadowReportChecks.length + shadowPathChecks.length +
   mcpObs.length + mcpKeys.length + mcpSecChecks.length +
   mcpCritIntentChecks.length + mcpCritResourceChecks.length + mcpCritChecks.length +
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
