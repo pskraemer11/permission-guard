@@ -36,6 +36,9 @@ jobs:
       - name: Klassifizierer-Tests
         run: node test.mjs
 
+      - name: Verdrahtungstest (Fake-git)
+        run: node test-wiring.mjs
+
       - name: MCP-Weiterleitung (33 Faelle)
         run: node bench-mcp.mjs
 

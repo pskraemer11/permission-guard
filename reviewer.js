@@ -116,6 +116,11 @@ export const RISKY = [
   // Loeschen und Umschreiben.
   /^(rm|del|erase|rmdir|rd|Remove-Item|Clear-Content)\b/i,
   /^(git)\b.*\b(push|reset\s+--hard|clean\s+-\S*[fd]|branch\s+-D|checkout\s+--\s)/,
+  // Arbeitsstand verwerfen und Langformen, auch hinter `git -C ...`.
+  /^(git)\b.*\b(checkout\s+(?:--\s+)?\.|restore\s+(?:--worktree\s+)?\.|branch\s+--delete\b.*--force\b)/,
+  // Ausgeschriebener Git-Pfad (Windows) und Alias-Definitionen.
+  /^(?:[A-Za-z]:\\|\\\\|\.{0,2}[\\/]).*[\\/]git(?:\.exe)?\s+(?:push|reset|clean|branch|checkout|restore)\b/i,
+  /^(Set-Alias|New-Alias|alias)\b/i,
   // Veroeffentlichen, Ausrollen, Abhaengigkeiten.
   /^(npm|pnpm|yarn|bun)\s+(publish|install|i|add|ci|remove|uninstall)\b/,
   /^(pip|pip3|uv)\s+(install|uninstall|sync|add)\b/,

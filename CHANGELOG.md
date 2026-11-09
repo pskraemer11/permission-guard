@@ -8,18 +8,30 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
-- **Git-Guardrails-Matrix und Tests (09.11.2026):** `test.mjs` prüft die sieben
-  kanonischen Git-Muster, globale Optionen (`-C`, `-c`, `--git-dir`,
-  `--work-tree`), Wrapper und erlaubte Gegenproben. `reviewerGaps` hält die
-  bekannten Lücken als Charakterisierungstests fest; Option B dreht diese
-  Erwartungen auf `deny`. 624/624 Tests.
+- **Verdrahtungstest (09.11.2026):** `test-wiring.mjs` legt einen Fake-`git`
+  in den temporären `PATH`; `deny` für `branch -D`, `checkout .`, `restore .`,
+  `reset --hard` und `clean -fd` verhindert den Aufruf, `git status` dient als
+  Gegenprobe. 13/13 Tests; läuft in CI (Ubuntu/Windows).
+- **Git-Guardrails Option B (09.11.2026):** `evaluate()` verweigert
+  `reset --hard`, `clean` ohne Dry-Run, `branch -D`, `checkout .` und
+  `restore .` auch hinter `-C`/`-c`/`--git-dir`/`--work-tree`; `RISKY` deckt
+  die Varianten und Windows-Git-Pfade ab. `ask`/`deny` nennen Muster und
+  Befehl. Statisch: `git branch -D *`, `--delete --force`, `checkout .` und
+  `restore .` sind `deny`; `git clean -n`/`--dry-run` bleibt `ask`. Auf Windows
+  verweigert `git branch -D *` wegen Case-Insensitivität auch `git branch -d`
+  (bewusst akzeptiert). 636/636 Tests.
+- **Git-Guardrails-Matrix und Tests (09.11.2026, Option A):** `test.mjs`
+  prüft die sieben kanonischen Git-Muster, globale Optionen (`-C`, `-c`,
+  `--git-dir`, `--work-tree`), Wrapper und erlaubte Gegenproben. Dazu kommen
+  sechs `RISKY`-Fälle und fünf Git-Reviewer-Fälle; 624/624 Tests. Mit Option B
+  auf 636/636 erweitert.
 - **actionlint-CI:** `.github/workflows/actionlint.yml` prüft bei Pushes und Pull Requests alle GitHub-Actions-Workflows mit dem festgelegten offiziellen Image `rhysd/actionlint:1.7.12`, einschließlich shellcheck und pyflakes.
 
 ### Geändert
 
 - **Git-Abschnitt im README (09.11.2026):** Abdeckungsmatrix für
   Klassifizierer und statische Regeln, getrennte `ask`/`deny`-Zeilen,
-  `guard.yml` als CI-Testworkflow klargestellt, Testzahl auf 624 aktualisiert.
+  `guard.yml` als CI-Testworkflow klargestellt, Testzahl auf 636 aktualisiert.
   Keine Verhaltensänderung, kein Deploy nötig.
 - **Projektanweisungen (06.11.2026):** `AGENTS.md` auf die projektspezifischen
   Guard-, Test- und Release-Regeln reduziert. Allgemeine Arbeits-, Datenschutz-
