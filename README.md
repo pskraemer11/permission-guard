@@ -530,8 +530,10 @@ Schattenlauf (Variante 3) prüft zusätzlich `allow`-Aufrufe, ohne zu
 entscheiden; Details stehen in `~/.agents/PLANUNG.md`.
 
 Die Matrix wird durch `gitGuardrails`, `reviewerGit` und `messageChecks` in
-`test.mjs` festgehalten. Die statischen Regeln sind nicht Teil von `test.mjs`;
-sie werden über `check_jsonc.py` und den Dialog geprüft.
+`test.mjs` festgehalten. `test-wiring.mjs` prüft mit einem Fake-`git`, dass
+eine `deny`-Entscheidung den Befehl nicht ausführt. Die statischen Regeln sind
+nicht Teil von `test.mjs`; sie werden über `check_jsonc.py` und den Dialog
+geprüft.
 
 ## Ebene 1: lokaler Entscheider (`reviewer.js`)
 
@@ -677,6 +679,7 @@ Freigabe-Filter aber nicht. Der Index dient der Vorauswahl, der eigene
 .\start-reviewer.ps1 -ModelPath "D:\…\jevk5-4b-v0.3-Q5_K_M.gguf" -Port 8081
 node smoke-reviewer.mjs                    # 9 Fälle gegen die laufende Konfiguration
 node test.mjs                              # 636 Unit-Tests
+node test-wiring.mjs                       # 13 Verdrahtungstests (Fake-git)
 .\start-reviewer.ps1 -Stop
 ```
 

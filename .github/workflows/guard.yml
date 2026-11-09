@@ -39,6 +39,9 @@ jobs:
       - name: Classifier tests
         run: node test.mjs
 
+      - name: Wiring test (fake git)
+        run: node test-wiring.mjs
+
       - name: MCP forwarding (33 cases)
         run: node bench-mcp.mjs
 

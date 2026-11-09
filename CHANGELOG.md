@@ -8,6 +8,10 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **Verdrahtungstest (09.11.2026):** `test-wiring.mjs` legt einen Fake-`git`
+  in den temporären `PATH`; `deny` für `branch -D`, `checkout .`, `restore .`,
+  `reset --hard` und `clean -fd` verhindert den Aufruf, `git status` dient als
+  Gegenprobe. 13/13 Tests; läuft in CI (Ubuntu/Windows).
 - **Git-Guardrails Option B (09.11.2026):** `evaluate()` verweigert
   `reset --hard`, `clean` ohne Dry-Run, `branch -D`, `checkout .` und
   `restore .` auch hinter `-C`/`-c`/`--git-dir`/`--work-tree`; `RISKY` deckt

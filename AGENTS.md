@@ -6,10 +6,11 @@ Arbeitsregeln für Agenten in diesem Repository.
 
 ```powershell
 node test.mjs        # vollständige Suite, Exitcode 1 bei Abweichung
+node test-wiring.mjs # Fake-git: deny verhindert Ausführung
 node bench-mcp.mjs   # 33 feste Fälle, 9 Verbote
 ```
 
-Beides muss grün sein, bevor committet wird. Änderungen an `reviewer.js`
+Alle drei müssen grün sein, bevor committet wird. Änderungen an `reviewer.js`
 zusätzlich mit `node bench-model.mjs --repeat 3` gegen ein laufendes Modell
 messen.
 

@@ -29,6 +29,7 @@
     "mcp-report.mjs",
     "skill-verdicts.mjs",
     "test.mjs",
+    "test-wiring.mjs",
     "bench-mcp.mjs",
     "bench-model.mjs",
     "mcp-cases.jsonl",
@@ -49,6 +50,7 @@
   ],
   "scripts": {
     "test": "node test.mjs",
+    "test:wiring": "node test-wiring.mjs",
     "bench": "node bench-mcp.mjs",
     "bench:model": "node bench-model.mjs --repeat 3",
     "verdicts": "node skill-verdicts.mjs",
