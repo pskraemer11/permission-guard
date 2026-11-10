@@ -56,6 +56,17 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   Aufwärm-Anfrage an `/v1/systemone` statt an `chat/completions`; zwei Tests
   (575/575).
 
+### Behoben
+
+- **Sicherheitsbefunde aus dem Codex-Security-Scan (10.11.2026):**
+  Copy/Move/Replace prüfen Quelle, Ziel und Backup; Schreibanweisungen werden
+  sequenziell mit dem jeweils gültigen Arbeitsordner und den gültigen Bindungen
+  geprüft; unklare Bindungen sowie nicht auflösbarer Kontrollfluss und
+  Location-Stack sind `deny`; abgekürzte Löschflags (`-r`, `-fo`) und
+  punktierte Verzeichnisziele lösen die Löschrückfrage aus; Diagnose-Logs
+  enthalten keine rohen Befehlstexte und liegen in einem privaten Verzeichnis
+  (`diagnostics.js`). 686/686 Tests, 13/13 Verdrahtung, 33/33 MCP-Fälle.
+
 ## [0.1.0] - 2026-11-05
 
 ### Hinzugefügt

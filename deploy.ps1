@@ -42,6 +42,7 @@ $files = @(
     "index.js",
     "reviewer.js",
     "audit.js",
+    "diagnostics.js",
     "shadow.js",
     "git-shadow-report.mjs",
     "verify-audit.mjs",
