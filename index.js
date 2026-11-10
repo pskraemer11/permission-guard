@@ -21,22 +21,23 @@ import os from "node:os"
 import path from "node:path"
 import { MCP_GATING_MODE, contextScope, evaluate, gitShadowRecord, mcpAction, mcpCriteria, mcpObservation, mcpVerdict } from "./guard.js"
 import { appendRecord, auditPath, callKey, readState, shortHash } from "./audit.js"
+import { commandSummary, ensurePrivateDir, ensurePrivateFile, guardLogDir } from "./diagnostics.js"
 import { appendShadow, shadowPath } from "./shadow.js"
 import { ensureRunning, loadConfig, review, reviewMcp, warmup } from "./reviewer.js"
 
-const BASE_DIR = path.join(os.tmpdir(), "opencode-permission-guard")
+const BASE_DIR = guardLogDir()
 const LOG_FILE = path.join(BASE_DIR, "guard.log")
 // Eine Generation Historie: bei 1 MB wird guard.log zu guard.log.1 und neu
 // begonnen. Frueher wurde die Datei geloescht, damit war die Statistik nach
 // wenigen Tagen weg (stats.mjs liest beide Generationen).
 const LOG_MAX_BYTES = 1024 * 1024
 
-// Diagnose: Entscheidung und Grund. Bei "allow" zusaetzlich die ersten Zeichen
-// des Befehls (er hat den Geheimnis-Filter bereits passiert). Bei "ask"/"deny"
-// bewusst kein Befehlstext, damit nichts Sensibles im Log landet.
+// Diagnose: Entscheidung und Grund. Befehlstexte werden nie roh gespeichert;
+// stattdessen nur Name und Hash. Das gilt auch fuer "allow", weil der
+// Secret-Filter opake Bearer-Werte nicht zuverlaessig erkennt.
 function debug(message) {
   try {
-    fs.mkdirSync(BASE_DIR, { recursive: true })
+    ensurePrivateDir(BASE_DIR)
     try {
       if (fs.statSync(LOG_FILE).size > LOG_MAX_BYTES) {
         fs.renameSync(LOG_FILE, `${LOG_FILE}.1`)
@@ -44,7 +45,9 @@ function debug(message) {
     } catch {
       // Logdatei existiert noch nicht
     }
-    fs.appendFileSync(LOG_FILE, `${new Date().toISOString()} ${message}\n`)
+    fs.appendFileSync(LOG_FILE, `${new Date().toISOString()} ${message}\n`, { mode: 0o600 })
+    ensurePrivateFile(LOG_FILE)
+    ensurePrivateFile(`${LOG_FILE}.1`)
   } catch {
     // Diagnose darf den Server nie stoeren.
   }
@@ -258,7 +261,7 @@ export default Plugin.define({
           if (verdict.decision === "allow") {
             input.effect = "allow"
             input.message = `permission-guard: ${verdict.reason}`
-            debug(`allow ${verdict.reason} | ${script.replace(/\s+/g, " ").slice(0, 140)}`)
+            debug(`allow ${verdict.reason} | ${commandSummary(script)}`)
           } else if (verdict.decision === "deny") {
             input.effect = "deny"
             input.message = verdict.message ?? `permission-guard: ${verdict.reason}`
@@ -274,16 +277,14 @@ export default Plugin.define({
             if (reviewed.decision === "allow") {
               input.effect = "allow"
               input.message = `permission-guard: reviewer ${reviewed.reason}`
-              debug(`allow (reviewer) ${reviewed.reason} | ${commands.join(" ; ").replace(/\s+/g, " ").slice(0, 140)}`)
+              debug(`allow (reviewer) ${reviewed.reason} | ${commandSummary(commands.join(" ; "))}`)
             } else {
-              const detail = verdict.reason.startsWith("Geheimnis") ? "" : ` | ${script.replace(/\s+/g, " ").slice(0, 140)}`
-              debug(`ask (reviewer) ${reviewed.reason}${detail}`)
+              debug(`ask (reviewer) ${reviewed.reason} | ${commandSummary(commands.join(" ; "))}`)
             }
           } else {
-            // Bei Geheimnis-Verdacht bewusst kein Befehlstext im Log.
+            // Kein roher Befehlstext: Argumente koennen Geheimnisse enthalten.
             if (verdict.message) input.message = verdict.message
-            const detail = verdict.reason.startsWith("Geheimnis") ? "" : ` | ${script.replace(/\s+/g, " ").slice(0, 140)}`
-            debug(`ask ${verdict.reason}${detail}`)
+            debug(`ask ${verdict.reason} | ${commandSummary(script)}`)
           }
         } catch (error) {
           debug(`error ${error?.message ?? String(error)}`)

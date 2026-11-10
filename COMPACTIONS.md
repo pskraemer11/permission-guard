@@ -1538,3 +1538,26 @@ messen, deployen, dokumentieren.
 
 ## Relevant Files
 - `.github/workflows/actionlint.yml`, `CHANGELOG.md`
+
+=============== Compaction 10.11.2026 / 10:21 ================
+## Objective
+- **Current:** Vier Codex-Security-Befunde im permission-guard beheben.
+
+## Important Details
+- **Finding 1:** `extractTargets` prueft bei .NET-Copy/Move/Replace und Copy-/Move-/Rename-Cmdlets alle Operanden; unklare Bindungen sind `deny`.
+- **Finding 2:** `scopeWrites` arbeitet sequenziell mit cwd und Variablenbindungen; Kontrollfluss/Location-Stack mit Zustandsaenderung sowie unaufloesbare Bindungen sind `deny`; Wildcards bleiben `ask`.
+- **Finding 3:** `index.js` loggt nur `Name#Hash`; `diagnostics.js` legt den Logpfad pro UID an und erzwingt auf POSIX `0700`/`0600`.
+- **Finding 4:** `deletionFlags` loest eindeutige PowerShell-Prefixe (`-r`, `-fo`) auf; punktierte Ziele ohne bekannte Dateiendung gelten als potenzielle Verzeichnisse.
+- **Tests:** 686/686 Guard-Tests, 13/13 Verdrahtung, 33/33 MCP-Faelle; Syntaxchecks gruen.
+
+## Work State
+### Completed
+- Code, Tests, README, CHANGELOG.
+### Blocked
+- Kein Deploy und kein Push; die Laufzeitkopie bleibt unveraendert.
+### Next Move
+1. Nutzerentscheid zu Deploy via `deploy.ps1`.
+2. Danach Push durch den Nutzer.
+
+## Relevant Files
+- `guard.js`, `index.js`, `diagnostics.js`, `stats.mjs`, `test.mjs`, `README.md`, `CHANGELOG.md`

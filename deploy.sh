@@ -26,7 +26,7 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 TARGET=${PERMISSION_GUARD_TARGET:-"${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugin/permission-guard"}
 
-FILES="guard.js index.js reviewer.js shadow.js git-shadow-report.mjs test.mjs README.md start-reviewer.ps1 smoke-reviewer.mjs bench-reviewer.ps1 bench-quality.ps1"
+FILES="guard.js index.js audit.js diagnostics.js reviewer.js shadow.js git-shadow-report.mjs test.mjs README.md start-reviewer.ps1 smoke-reviewer.mjs bench-reviewer.ps1 bench-quality.ps1"
 CONFIG_NAME="shell-reviewer.config.json"
 CONFIG_EXAMPLE="shell-reviewer.config.example.json"
 

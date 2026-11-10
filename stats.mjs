@@ -1,8 +1,8 @@
 // Statistik ueber das Guard-Log (Ebene 0/1 des permission-guard).
 //
 // Quelle ist die Diagnosedatei, die index.js schreibt:
-//   %TEMP%/opencode-permission-guard/guard.log   (+ guard.log.1 als Vorgaenger)
-// Zeilenformat: <ISO-Zeit> <allow|ask|deny>[ (reviewer)] <Grund>[ | <Befehl>]
+//   %TEMP%/opencode-permission-guard[-<uid>]/guard.log   (+ guard.log.1)
+// Zeilenformat: <ISO-Zeit> <allow|ask|deny>[ (reviewer)] <Grund>[ | <Name#Hash>]
 //
 // Aufruf:
 //   node stats.mjs                      # alles, Textausgabe
@@ -15,12 +15,12 @@
 // Bewusst ohne Netz und ohne Abhaengigkeiten: reine Textauswertung.
 
 import fs from "node:fs"
-import os from "node:os"
 import path from "node:path"
 import process from "node:process"
 import { pathToFileURL } from "node:url"
+import { guardLogDir } from "./diagnostics.js"
 
-const DEFAULT_LOG = path.join(os.tmpdir(), "opencode-permission-guard", "guard.log")
+const DEFAULT_LOG = path.join(guardLogDir(), "guard.log")
 
 function parseArgs(argv) {
   const args = { since: null, days: null, top: 8, examples: 2, json: false, file: DEFAULT_LOG }

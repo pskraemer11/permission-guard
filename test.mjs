@@ -8,9 +8,10 @@ import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMc
 import { buildShellSystemoneRequest, buildSystemoneRequest, systemoneVerdict } from "./reviewer.js"
 import { parseLine, summarize } from "./stats.mjs"
 import { createHash } from "node:crypto"
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { commandSummary, ensurePrivateDir, ensurePrivateFile, guardLogDir } from "./diagnostics.js"
 
 // Integration aus dem Replay (22.10.2026): Logreader mit ReadLine-[void]-Familie.
 const logReaderScript = [
@@ -156,21 +157,21 @@ const scoped = [
   ["Remove-Item -LiteralPath \"C:\\Windows\\x.txt\"", "deny"],
   ["New-Item -ItemType Directory -Path \"C:\\Windows\\x\"", "deny"],
   ["cd \"D:\\other\"\nSet-Content x.txt \"y\"", "deny"],
-  ["Set-Content \"$env:APPDATA\\x.txt\" \"x\"", "ask"],
-  ["Set-Content $unknown \"x\"", "ask"],
+  ["Set-Content \"$env:APPDATA\\x.txt\" \"x\"", "deny"],
+  ["Set-Content $unknown \"x\"", "deny"],
   // Variable mit env-Pfad: wird sie aufgeloest, bleibt das Ziel pruefbar.
   ["$p = \"$env:TEMP\\opencode\\notiz.md\"\nSet-Content -LiteralPath $p \"x\"", "allow"],
   ["$p = \"$env:TEMP\\opencode\\notiz.md\"\nSet-Content -LiteralPath $p \"x\"\npy -3.12 \"C:\\p\\tools\\format_md_tables.py\" $p --write", "allow"],
   // Join-Path wird seit 26.10.2026 aufgeloest, wenn alle Teile literal sind.
   ["$p = Join-Path $env:TEMP \"opencode\\notiz.md\"\nSet-Content -LiteralPath $p \"x\"", "allow"],
   ["$p = Join-Path \"C:\\Windows\" \"x.txt\"\nSet-Content -LiteralPath $p \"x\"", "deny"],
-  ["$p = Join-Path $unknown \"x.txt\"\nSet-Content -LiteralPath $p \"x\"", "ask"],
+  ["$p = Join-Path $unknown \"x.txt\"\nSet-Content -LiteralPath $p \"x\"", "deny"],
   ["Set-Content \"C:\\p\\.git\\config\" \"x\"", "deny"],
   ["Remove-Item -Recurse -Force \"C:\\p\"", "deny"],
   ["Remove-Item -Recurse -Force .", "deny"],
   ["Remove-Item -Recurse -Force C:\\", "deny"],
   ["Set-Content \"C:\\Users\\u\\.ssh\\config\" \"x\"", "deny"],
-  ["Get-ChildItem | Remove-Item", "ask"],
+  ["Get-ChildItem | Remove-Item", "deny"],
   ["Set-Content \"C:\\p\\x\" \"$env:GITHUB_TOKEN\"", "ask"],
   // PUNKT 8: Stringmaskierung aendert nichts an echter Umleitung.
   ["\"kopf\" > \"C:\\p\\notes\\kopf.md\"", "allow"],
@@ -196,6 +197,44 @@ const scoped = [
   // Schreiben in einem Block wird ebenfalls am Ziel gemessen
   ["if (Test-Path x) { Set-Content \"C:\\p\\y.txt\" \"z\" }", "allow"],
   ["if (Test-Path x) { Set-Content \"C:\\Windows\\y.txt\" \"z\" }", "deny"],
+
+  // Finding 1: Copy/Move/Replace und Cmdlets mit Quelle und Ziel vollstaendig pruefen.
+  ["[System.IO.File]::Copy(\"C:\\p\\a.txt\", \"C:\\Windows\\b.txt\")", "deny"],
+  ["[System.IO.File]::Move(\"C:\\p\\a.txt\", \"C:\\other\\b.txt\")", "deny"],
+  ["[System.IO.File]::Replace(\"C:\\p\\a.txt\", \"C:\\p\\b.txt\", \"C:\\Windows\\backup.txt\")", "deny"],
+  ["[System.IO.File]::Copy(\"C:\\p\\a.txt\", \"C:\\p\\b.txt\")", "allow"],
+  ["Copy-Item -Path \"C:\\p\\a.txt\" \"C:\\Windows\\b.txt\"", "deny"],
+  ["Move-Item -Path \"C:\\p\\a.txt\" \"C:\\Windows\\b.txt\"", "deny"],
+  ["Rename-Item -Path \"C:\\p\\a.txt\" -NewName \"..\\..\\Windows\\b.txt\"", "deny"],
+  ["Copy-Item -Path \"C:\\p\\a.txt\"", "deny"],
+  ["Copy-Item -Path \"C:\\p\\a.txt\" -Destination $unknown", "deny"],
+  ["Copy-Item -Path \"C:\\p\\a.txt\" -Destination \"C:\\p\\b.txt\" -Force", "allow"],
+  ["Copy-Item -Path \"C:\\p\\a.txt\" -Destination \"C:\\p\\b.txt\" -ErrorAction Stop", "allow"],
+  ["Rename-Item -Path \"C:\\p\\a.txt\" -NewName \"b.txt\"", "allow"],
+  ["[System.IO.File]::Replace(\"C:\\p\\a.txt\", \"C:\\p\\b.txt\", \"C:\\p\\backup.txt\")", "allow"],
+  ["if (Test-Path x) { Copy-Item -Path \"C:\\p\\a.txt\" \"C:\\Windows\\b.txt\" }", "deny"],
+  ["if (Test-Path x) { [System.IO.File]::Copy(\"C:\\p\\a.txt\", \"C:\\Windows\\b.txt\") }", "deny"],
+
+  // Finding 2: Arbeitsordner und Bindungen gelten in Ausfuehrungsreihenfolge.
+  ["cd \"C:\\other\"\nSet-Content x.txt \"y\"\ncd \"C:\\p\"\nSet-Content y.txt \"z\"", "deny"],
+  ["cd \"C:\\p\\sub\"\nSet-Content x.txt \"y\"\ncd \"C:\\p\"", "allow"],
+  ["push-location \"C:\\p\"\nSet-Content x.txt \"y\"", "deny"],
+  ["pop-location\nSet-Content x.txt \"y\"", "deny"],
+  ["if (Test-Path x) { cd \"C:\\other\" }; Set-Content x.txt \"y\"", "deny"],
+  ["if (Test-Path x) { $p = \"C:\\p\\y.txt\" }; Set-Content $p \"z\"", "deny"],
+  ["if ($true) cd \"C:\\other\"; Set-Content x.txt \"y\"", "deny"],
+  ["if ($true) $p = \"C:\\p\"; Set-Content $p \"x\"", "deny"],
+  ["foreach ($f in @(\"a.txt\",\"b.txt\")) { Set-Content $f \"x\" }", "deny"],
+
+  // Finding 4: Abgekuerzte Loeschflags, punktierte Verzeichnisse.
+  ["Remove-Item -r -fo \"C:\\p\\data.cache\"", "ask"],
+  ["Remove-Item -re -fo \"C:\\p\\data.cache\"", "ask"],
+  ["Remove-Item -r \"C:\\p\\build\"", "ask"],
+  ["Remove-Item -fo \"C:\\p\\out.txt\"", "ask"],
+  ["Remove-Item -f \"C:\\p\\out.txt\"", "ask"],
+  ["Remove-Item \"C:\\p\\data.cache\"", "ask"],
+  ["if (Test-Path x) { Remove-Item -r -fo \"C:\\p\\data.cache\" }", "ask"],
+  ["Remove-Item -r -fo \"C:\\p\"", "deny"],
 ]
 
 // CLI-Allowlists: Grundlage sind die Hilfe-Baeume der installierten Fassungen.
@@ -1405,6 +1444,39 @@ for (const [name, ok] of warmupChecks) {
 }
 console.log("-- Aufwaermlauf\n")
 
+// --- Diagnose: keine rohen Befehlstexte, private Ablage --------------------
+const diagnosticsChecks = []
+{
+  const secret = "git config http.extraHeader 'Authorization: Bearer SECRET-TOKEN'"
+  const summary = commandSummary(secret)
+  diagnosticsChecks.push([
+    "Befehlstext wird nicht gespeichert",
+    summary.startsWith("git#") && !summary.includes("SECRET") && !summary.includes("Authorization"),
+  ])
+  diagnosticsChecks.push([
+    "Logpfad ist pro Benutzer getrennt",
+    guardLogDir("linux", 1000).endsWith("opencode-permission-guard-1000")
+      && guardLogDir("win32", null).endsWith("opencode-permission-guard"),
+  ])
+  if (process.platform !== "win32") {
+    const dir = mkdtempSync(join(tmpdir(), "pg-log-"))
+    chmodSync(dir, 0o777)
+    ensurePrivateDir(dir)
+    diagnosticsChecks.push(["Logverzeichnis ist privat", (statSync(dir).mode & 0o777) === 0o700])
+    const file = join(dir, "guard.log")
+    writeFileSync(file, "x")
+    chmodSync(file, 0o644)
+    ensurePrivateFile(file)
+    diagnosticsChecks.push(["Logdatei ist privat", (statSync(file).mode & 0o777) === 0o600])
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+for (const [name, ok] of diagnosticsChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- Diagnose\n")
+
 const total =
   base.length + scoped.length + gitGuardrails.length + cli.length + helpVersion.length + gitleaks.length +
   readOnlyCli.length +
@@ -1416,6 +1488,6 @@ const total =
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
-  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + 3
+  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + diagnosticsChecks.length + 3
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

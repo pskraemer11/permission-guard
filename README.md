@@ -149,15 +149,20 @@ innerhalb eines vertrauten Ordners liegt:
 | `git add`, `git commit` (ohne `--amend`) | `git commit -m "..."` |
 | `python -m ruff check --fix`, `python -m ruff format` | `python -m ruff format .` |
 
+Bei `Copy-Item`, `Move-Item`, `Rename-Item` sowie `[System.IO.File]::Copy`,
+`Move` und `Replace` werden Quelle, Ziel und ein etwaiges Backup gemeinsam
+geprüft. Ein fehlender oder nicht sicher auflösbarer Operand ist `deny`.
+
 **Löschen ist nicht Schreiben** (Nutzerentscheid 29.10.2026): Ein `remove-item`,
 `rm`, `del`, `rd`, `rmdir`, `erase` oder `ri` wird zur Rückfrage geführt, sobald
-`-Recurse` oder `-Force` gesetzt ist, ein Ziel einen Platzhalter enthält oder
-ohne Datei-Namens-Endung auf ein Verzeichnis deutet (`.git` zählt ohne Endung).
+`-Recurse` oder `-Force` gesetzt ist (auch abgekürzt als `-r`/`-fo`), ein Ziel
+einen Platzhalter enthält oder keine bekannte Dateiendung trägt (`.git` und
+`data.cache` gelten damit als potenzielle Verzeichnisse).
 Erfasst auch den Fall, der zur Entscheidung führte: das Löschen eines `.git` in
 einem **Unterordner** des Projekts lief vorher als „Schreiben in vertrautem
-Ordner" durch. Nur das einfache Löschen einer benannten Datei im Projekt bleibt
-`allow`. Das eigene `.git` des Projektordners bleibt darüber hinaus hart
-gesperrt (`deny`, seit 22.10.).
+Ordner" durch. Nur das einfache Löschen einer benannten Datei mit bekannter
+Endung im Projekt bleibt `allow`. Das eigene `.git` des Projektordners bleibt
+darüber hinaus hart gesperrt (`deny`, seit 22.10.).
 
 ### Netz-Lesen: `Invoke-WebRequest` / `Invoke-RestMethod`
 
@@ -451,8 +456,9 @@ Version ist ein Flag (`--version`), Status liefert `stats`.
 | Fall | Entscheidung |
 |---|---|
 | Schreiben außerhalb des Projektordners | `deny` (Entscheidung 25.10.2026) |
-| Schreibziel nicht bestimmbar (`$var`, Wildcard, fremde Umgebungsvariable) | `ask` |
-| `Remove-Item` ohne Ziel (`Get-ChildItem \| Remove-Item`) | `ask` |
+| Schreibziel nicht bestimmbar (`$var`, fremde Umgebungsvariable) | `deny` (Entscheidung 10.11.2026) |
+| Schreibziel mit Platzhalter (Wildcard) | `ask` |
+| `Remove-Item` ohne Ziel (`Get-ChildItem \| Remove-Item`) | `deny` (Entscheidung 10.11.2026) |
 | Schreiben in `<Projekt>\.git`, `~/.config/opencode`, `~/.claude`, `~/.codex` | `deny` (Entscheidung 25.10.2026) |
 | Rekursives Löschen auf den Arbeitsordner selbst | `deny` (Entscheidung 25.10.2026) |
 | `git push` | `ask` (statisch und Guard) |
@@ -933,15 +939,16 @@ gab `acme_widget` frei und fragte bei `acme_portal` und `project_sync` nach).
 - **Ein Modellurteil ist keine Garantie.** Deshalb die statische Liste davor und
   `ask` als Default in allen Zweifelsfällen.
 - **Pfadprüfung ist Textanalyse.** Sie erkennt die üblichen Schreibbefehle und
-  ihre Ziele. Ein Befehl, der seinen Zielpfad erst zur Laufzeit berechnet
-  (`Join-Path`, Schleifenvariable), bleibt `ask`.
+  ihre Ziele. Ein Befehl, der seinen Zielpfad erst zur Laufzeit berechnet und
+  nicht sicher auflösbar ist (`Join-Path` mit unbekanntem Teil,
+  Schleifenvariable), wird `deny`.
 - **`python` und `node` laufen nur innerhalb der Freigaben** (Entscheidung 1
   und 2, oben), sonst `ask`. Interpreter führen beliebigen Code aus — die
   Freigaben decken genau das ab: Skripte im reviewten Projektkreis und die
   drei benannten Selbst-Skripte. `pwsh -File` und Aufrufe nutzerdefinierter
   Funktionen (`Read-Jsonc …`) bleiben `ask`; unlesbare `&`-/Dot-Formen sind
   seit Entscheidung 3 verweigert.
-- **Ein `cd` in ein anderes Laufwerk** macht alle relativen Ziele unklar → `ask`.
+- **Ein `cd` in ein anderes Laufwerk** macht relative Ziele unklar → `deny`.
 
 ## Messung
 
@@ -1010,8 +1017,9 @@ werden nicht deployt.
 
 ## Diagnose
 
-`%TEMP%\opencode-permission-guard\guard.log` — eine Zeile je Entscheidung.
-Bei `ask`/`deny` ohne Befehlstext, damit nichts Sensibles im Log landet.
+`%TEMP%\opencode-permission-guard[-<uid>]\guard.log` — eine Zeile je
+Entscheidung. Befehlstexte werden nie roh gespeichert, sondern nur als
+`<Name>#<Hash>`; Verzeichnis und Datei sind auf POSIX privat (0700/0600).
 
 ## Änderbarkeit
 

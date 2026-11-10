@@ -1280,10 +1280,10 @@ function isUnder(target, root) {
 
 const UNKNOWN = "\u0001"
 
-// cd-Formen (nur absolute, sicher bestimmbare Wechsel). Genutzt von
-// scopeWrites und vom Aufloesungskontext in evaluate(); pop-location wird
-// bewusst nicht rueckverfolgt - Folgen nur Praezision, nicht Sicherheit,
-// weil die erlaubten Zielpfade exakt verglichen werden.
+// cd-Formen (nur absolute, sicher bestimmbare Wechsel). Genutzt vom
+// Aufloesungskontext in evaluate(); scopeWrites fuehrt Wechsel sequenziell
+// mit. push-location/pop-location werden dort als unpruefbar verweigert,
+// weil der Location-Stack nicht modelliert wird.
 const CD_RE = /^(?:cd|chdir|set-location|sl|push-location)\s+(?:"([^"]+)"|'([^']+)'|(\S+))/i
 
 // Loest einen Pfadtoken auf. null = nicht sicher bestimmbar (dann "ask").
@@ -1363,6 +1363,133 @@ function buildVarMap(statements) {
   return out
 }
 
+// .NET-Methoden und die Argumentpositionen, die Dateien veraendern.
+const DOTNET_TARGET_INDICES = {
+  copy: [0, 1],
+  move: [0, 1],
+  replace: [0, 1, 2],
+  delete: [0],
+  createdirectory: [0],
+  writealltext: [0],
+  writeallbytes: [0],
+  writealllines: [0],
+  appendalltext: [0],
+  appendalllines: [0],
+  setattributes: [0],
+  setlastwritetime: [0],
+  openwrite: [0],
+}
+
+// Cmdlets, bei denen Quelle und Ziel getrennt geprueft werden muessen.
+const COPY_MOVE_CMDLETS = new Set([
+  "copy-item", "cp", "copy", "cpi",
+  "move-item", "mv", "move", "mi",
+  "rename-item", "ren", "rni",
+])
+
+const COPY_MOVE_PATH_FLAGS = new Set([
+  "path", "literalpath", "destination", "filename", "filepath", "newname",
+])
+
+// Flags mit eigenem Wert, die kein Pfadziel sind.
+const COPY_MOVE_VALUE_FLAGS = new Set([
+  "filter", "include", "exclude", "credential", "fromsession", "tosession",
+  "erroraction", "warningaction", "informationaction",
+  "errorvariable", "warningvariable", "outvariable", "outbuffer",
+  "pipelinevariable", "stream",
+])
+
+// Zerlegt Argumente an Kommas ausserhalb von Strings und Klammern.
+function splitTopLevel(text, separator = ",") {
+  const out = []
+  let cur = ""
+  let depth = 0
+  let quote = null
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (quote) {
+      cur += ch
+      if (ch === "`" && quote === '"') {
+        if (i + 1 < text.length) cur += text[++i]
+        continue
+      }
+      if (ch === quote) quote = null
+      continue
+    }
+    if (ch === '"' || ch === "'") { quote = ch; cur += ch; continue }
+    if (ch === "(" || ch === "{" || ch === "[") depth++
+    else if (ch === ")" || ch === "}" || ch === "]") depth--
+    if (ch === separator && depth === 0) {
+      out.push(cur.trim())
+      cur = ""
+      continue
+    }
+    cur += ch
+  }
+  if (cur.trim()) out.push(cur.trim())
+  return out
+}
+
+function extractDotNetTargets(statement) {
+  const s = statement.trim().replace(/[};]\s*$/, "")
+  const m = /^\[((?:[^\[\]]|\[[^\[\]]*\])*)\]::(\w+)\s*\(([\s\S]*)\)\s*$/.exec(s)
+  if (!m) return null
+  const method = m[2].toLowerCase()
+  const indices = DOTNET_TARGET_INDICES[method]
+  if (!indices) return null
+  const args = splitTopLevel(m[3])
+  const out = []
+  for (const index of indices) {
+    if (index >= args.length) {
+      if (method === "replace" && index === 2) continue
+      return null
+    }
+    const value = args[index].trim()
+    if (!value || value.toLowerCase() === "$null") {
+      if (method === "replace" && index === 2) continue
+      return null
+    }
+    out.push(value)
+  }
+  return out
+}
+
+// Liefert undefined, wenn kein Copy/Move/Rename-Cmdlet vorkommt, null bei
+// unklarer Bindung und sonst alle Pfadoperanden.
+function extractCopyMoveTargets(statement) {
+  const tokens = tokenizeCli(statement)
+  const commandIndex = tokens.findIndex((token, index) => {
+    if (!COPY_MOVE_CMDLETS.has(token.toLowerCase().replace(/\.exe$/, ""))) return false
+    const prev = tokens[index - 1]
+    return index === 0 || prev === "{" || prev === "("
+  })
+  if (commandIndex < 0) return undefined
+
+  const out = []
+  for (let i = commandIndex + 1; i < tokens.length; i++) {
+    const token = tokens[i]
+    if (token === "{" || token === "}" || token === "(" || token === ")") continue
+    if (!token.startsWith("-")) {
+      out.push(token)
+      continue
+    }
+    const raw = token.replace(/^-+/, "")
+    const sep = raw.search(/[:=]/)
+    const name = (sep >= 0 ? raw.slice(0, sep) : raw).toLowerCase()
+    const inline = sep >= 0 ? raw.slice(sep + 1) : null
+    if (COPY_MOVE_PATH_FLAGS.has(name)) {
+      const value = inline ?? tokens[++i]
+      if (!value || value.startsWith("-")) return null
+      for (const part of value.split(",")) {
+        if (part.trim()) out.push(part.trim())
+      }
+      continue
+    }
+    if (COPY_MOVE_VALUE_FLAGS.has(name) && inline === null) i++
+  }
+  return out.length >= 2 ? [...new Set(out)] : null
+}
+
 function extractTargets(statement, vars) {
   const out = []
   const add = (value) => {
@@ -1371,12 +1498,19 @@ function extractTargets(statement, vars) {
   }
   const s = statement.trim()
 
-  // .NET-Aufruf: das erste Argument ist der Pfad.
-  if (s.startsWith("[")) {
-    const m = /^\[[^\]]+\]::\w+\s*\(\s*(?:"([^"]*)"|'([^']*)')/.exec(s)
-    add(m ? (m[1] ?? m[2]) : null)
-    return out
+  // .NET-Aufrufe auch innerhalb eines Blocks erkennen; ein Aufruf in einem
+  // String beginnt nicht an einer Befehlsgrenze.
+  const dotNetIndex = s.search(/\[[^\]]+\]::\w+\s*\(/)
+  if (dotNetIndex >= 0) {
+    const prefix = s.slice(0, dotNetIndex).trimEnd()
+    if (prefix === "" || /[{(;=]$/.test(prefix)) {
+      return extractDotNetTargets(s.slice(dotNetIndex))
+    }
   }
+
+  // Copy/Move/Rename: Quelle und Ziel immer gemeinsam pruefen.
+  const copyTargets = extractCopyMoveTargets(s)
+  if (copyTargets !== undefined) return copyTargets
 
   let explicit = false
   for (const m of s.matchAll(/(?<![-\w])-(?:(?:Literal)?Path|Destination|FilePath)\b\s*(?:=|:)?\s*(?:"([^"]*)"|'([^']*)'|([^\s;|()]+))/gi)) {
@@ -1462,20 +1596,71 @@ const DELETE_CMDLETS = new Set([
   "ri", "rm",
 ])
 
+// Bekannte Parameter der Loesch-Cmdlets. Abkuerzungen werden nur akzeptiert,
+// wenn sie eindeutig auf genau einen dieser Namen zeigen.
+const DELETION_PARAMETERS = new Set([
+  "recurse", "force", "path", "literalpath", "filter", "include", "exclude",
+  "credential", "whatif", "confirm", "verbose", "debug", "erroraction",
+  "warningaction", "informationaction", "errorvariable", "warningvariable",
+  "outvariable", "outbuffer", "pipelinevariable", "stream",
+])
+
+const ANY_LOCATION_RE = /(?:^|[;{(\s])(?:cd|chdir|set-location|sl)\b/i
+const LOCATION_STACK_RE = /\b(?:push-location|pop-location)\b|\b(?:set-location|sl)\b[^\n]*\s-stack\b/i
+const ASSIGNMENT_RE = /(?:^|[;{\s])\$[\w:]+(?:\.\w+)*\s*(?:=|\+=|-=|\*=|\/=)/
+const CONTROL_STATEMENT_RE = /^(?:if|elseif|else|while|foreach|for|switch|function|filter|try|catch|finally|do|process|begin|end|param)\b(?=\s|\()/i
+
+function resolveDeletionParameter(name) {
+  const exact = name.toLowerCase()
+  if (DELETION_PARAMETERS.has(exact)) return exact
+  const matches = [...DELETION_PARAMETERS].filter((parameter) => parameter.startsWith(exact))
+  return matches.length === 1 ? matches[0] : null
+}
+
+// Liefert die aufgeloesten Schalter oder null bei unbekannter/mehrdeutiger Form.
+function deletionFlags(statement) {
+  const flags = new Set()
+  for (const token of tokenizeCli(statement).slice(1)) {
+    if (!token.startsWith("-")) continue
+    const raw = token.replace(/^-+/, "").split(/[:=]/, 1)[0].toLowerCase()
+    const resolved = resolveDeletionParameter(raw)
+    if (!resolved) return null
+    flags.add(resolved)
+  }
+  return flags
+}
+
+// Findet ein Loesch-Cmdlet auch hinter einem Blockanfang.
+function deletionCommand(statement) {
+  const tokens = tokenizeCli(statement)
+  const index = tokens.findIndex((token, i) => {
+    const name = token.toLowerCase().replace(/\.exe$/, "")
+    if (!DELETE_CMDLETS.has(name)) return false
+    const prev = tokens[i - 1]
+    return i === 0 || prev === "{" || prev === "("
+  })
+  return index >= 0 ? tokens[index].toLowerCase().replace(/\.exe$/, "") : null
+}
+
+// Ein Punkt im Basisnamen ist kein Dateibeweis: Verzeichnisse duerfen ebenfalls
+// Punkte enthalten. Nur bekannte Dateiendungen gelten als sichere Dateiziele.
 function looksLikeDirectory(target) {
   const trimmed = String(target).replace(/[\\/]+$/, "")
   const last = trimmed.split(/[\\/]/).pop() ?? ""
-  return last.lastIndexOf(".") <= 0
+  if (last.lastIndexOf(".") <= 0) return true
+  return !PATH_EXTENSIONS.test(last)
 }
 
 /**
  * Liefert den Grund, warum ein Loeschen rueckgefragt wird, sonst null.
  * @param {string} statement
  * @param {string[]} targets die unveraenderten Zielangaben aus extractTargets
+ * @param {Set<string>|null} flags aufgeloeste Schalter, null bei Mehrdeutigkeit
  */
-function deletionEscalation(statement, targets) {
-  if (/-recurse\b/i.test(statement)) return "Rekursion"
-  if (/-force\b/i.test(statement)) return "-Force"
+function deletionEscalation(statement, targets, flags = deletionFlags(statement)) {
+  if (!flags) return "Unbekannter oder mehrdeutiger Schalter"
+  if (flags.has("recurse")) return "Rekursion"
+  if (flags.has("force")) return "-Force"
   for (const target of targets) {
     if (/[*?[\]]/.test(target)) return `Platzhalter-Ziel: ${target}`
     if (looksLikeDirectory(target)) return `Verzeichnis: ${target}`
@@ -1483,15 +1668,53 @@ function deletionEscalation(statement, targets) {
   return null
 }
 
+// Aktualisiert die Variablenbindung einer einzelnen Anweisung. Nur literale
+// Zuweisungen und Join-Path mit literalen Teilen sind verlaesslich; alles
+// andere wird aus der Karte entfernt und spaeter als unpruefbar verweigert.
+function updateVarMap(statement, vars) {
+  const text = statement.trim()
+  const literal = /^\$(\w+)\s*=\s*(?:"([^"]*)"|'([^']*)')\s*$/.exec(text)
+  if (literal) {
+    vars.set(literal[1].toLowerCase(), literal[2] ?? literal[3] ?? "")
+    return true
+  }
+  const join = /^\$(\w+)\s*=\s*Join-Path\s+(.+)$/i.exec(text)
+  if (join) {
+    const key = join[1].toLowerCase()
+    const parts = []
+    for (const raw of tokenizeCli(join[2])) {
+      const token = raw.replace(/^["']|["']$/g, "")
+      if (!token || token.startsWith("-")) {
+        vars.delete(key)
+        return true
+      }
+      parts.push(token)
+    }
+    if (parts.length) vars.set(key, parts.join("\\").replace(/\\{2,}/g, "\\"))
+    else vars.delete(key)
+    return true
+  }
+  const assignment = /^\$(\w+)\s*(?:=|\+=|-=|\*=|\/=)/.exec(text)
+  if (assignment) {
+    vars.delete(assignment[1].toLowerCase())
+    return true
+  }
+  return false
+}
+
+function hasStateChange(statement) {
+  return ANY_LOCATION_RE.test(statement) || ASSIGNMENT_RE.test(statement)
+}
+
 function scopeWrites(statements, options) {
   const opts = options ?? {}
-  const vars = buildVarMap(statements)
-  const base = opts.base ? resolveTarget(opts.base, opts, null, vars) : null
+  const emptyVars = new Map()
+  const base = opts.base ? resolveTarget(opts.base, opts, null, emptyVars) : null
   if (!base) return { ok: false, reason: "Arbeitsordner unbekannt" }
 
   const roots = [...(opts.roots ?? []), opts.base]
     .filter(Boolean)
-    .map((root) => resolveTarget(root, opts, null, vars))
+    .map((root) => resolveTarget(root, opts, null, emptyVars))
     .filter(Boolean)
   if (!roots.length) return { ok: false, reason: "keine vertrauten Ordner" }
 
@@ -1505,25 +1728,64 @@ function scopeWrites(statements, options) {
   for (const fixed of ["c:\\windows", "c:\\program files", "c:\\program files (x86)", "c:\\programdata"]) denied.push(fixed)
   denied.push(normPath(`${base}\\.git`))
 
-  // Arbeitsordner: nur absolute, sicher bestimmbare Wechsel zulassen.
+  // Jede Anweisung wird in Ausfuehrungsreihenfolge mit dem dann gueltigen
+  // Arbeitsordner und den dann gueltigen Bindungen geprueft. Kontrollfluss,
+  // Location-Stack und unaufloesbare Bindungen werden verweigert.
   let cwd = base
-  for (const statement of statements) {
-    const m = CD_RE.exec(statement.trim())
-    if (!m) continue
-    const next = resolveTarget(m[1] ?? m[2] ?? m[3], opts, cwd, vars)
-    if (!next) return { ok: false, reason: `Arbeitsordner unklar: ${m[1] ?? m[2] ?? m[3]}` }
-    cwd = next
-  }
+  const vars = new Map()
+  let braceDepth = 0
 
   for (const statement of statements) {
-    if (classifyStatement(statement) !== "filewrite") continue
-    const targets = extractTargets(statement, vars)
-    if (!targets.length) return { ok: false, reason: `Ziel unklar: ${statement.slice(0, 60)}` }
+    const text = statement.trim()
+    if (!text) continue
+
+    if (LOCATION_STACK_RE.test(text)) {
+      return { ok: false, reason: `unpruefbar: Location-Stack: ${text.slice(0, 60)}` }
+    }
+
+    const masked = stripStrings(text)
+    const open = (masked.match(/{/g) ?? []).length
+    const close = (masked.match(/}/g) ?? []).length
+    const control = CONTROL_STATEMENT_RE.test(text)
+    if ((braceDepth > 0 || open > 0 || control) && hasStateChange(text)) {
+      return { ok: false, reason: `unpruefbar: Kontrollfluss mit Zustandsaenderung: ${text.slice(0, 60)}` }
+    }
+
+    if (updateVarMap(text, vars)) {
+      braceDepth = Math.max(0, braceDepth + open - close)
+      continue
+    }
+
+    const cd = CD_RE.exec(text)
+    if (cd) {
+      const next = resolveTarget(cd[1] ?? cd[2] ?? cd[3], opts, cwd, vars)
+      if (!next) return { ok: false, reason: `unpruefbar: Arbeitsordner unklar: ${cd[1] ?? cd[2] ?? cd[3]}` }
+      cwd = next
+      braceDepth = Math.max(0, braceDepth + open - close)
+      continue
+    }
+
+    braceDepth = Math.max(0, braceDepth + open - close)
+
+    if (classifyStatement(text) !== "filewrite") continue
+    const deletion = deletionCommand(text) !== null
+    const targets = extractTargets(text, vars)
+    if (!targets || !targets.length) {
+      return { ok: false, reason: `unpruefbar: Ziel unklar: ${text.slice(0, 60)}` }
+    }
 
     const resolved = []
     for (const target of targets) {
       const abs = resolveTarget(target, opts, cwd, vars)
-      if (!abs) return { ok: false, reason: `Pfad nicht bestimmbar: ${target.slice(0, 60)}` }
+      if (!abs) {
+        // Platzhalter bleiben eine Rueckfrage; unaufloesbare Bindungen werden
+        // dagegen verweigert (Nutzerentscheid 10.11.2026).
+        if (/[*?[\]]/.test(target)) {
+          if (deletion) return { ok: false, reason: `Loeschen: Platzhalter-Ziel: ${target}` }
+          return { ok: false, reason: `Ziel unklar: ${target.slice(0, 60)}` }
+        }
+        return { ok: false, reason: `unpruefbar: Pfad nicht bestimmbar: ${target.slice(0, 60)}` }
+      }
       resolved.push(abs)
     }
 
@@ -1535,17 +1797,18 @@ function scopeWrites(statements, options) {
       }
     }
 
-    if (/-Recurse\b/i.test(statement) || /\brm\s+-[a-z]*r/i.test(statement)) {
+    const flags = deletionFlags(statement)
+    const recursive = /-Recurse\b/i.test(statement)
+      || /\brm\s+-[a-z]*r/i.test(statement)
+      || (flags !== null && flags.has("recurse"))
+    if (recursive) {
       for (const abs of resolved) {
         if (abs === cwd || isUnder(cwd, abs)) return { ok: false, reason: `rekursiv auf ${abs}` }
       }
     }
 
-    // Loeschen nicht freigeben, sondern rueckfragen. Der Grund beginnt
-    // bewusst mit "Loeschen:" und traegt keines der Sperrpraefixe aus
-    // evaluate() - daraus folgt "ask", nicht "deny".
-    if (DELETE_CMDLETS.has((tokenizeCli(statement)[0] ?? "").toLowerCase().replace(/\.exe$/, ""))) {
-      const why = deletionEscalation(statement, targets)
+    if (deletion) {
+      const why = deletionEscalation(statement, targets, flags)
       if (why) return { ok: false, reason: `Loeschen: ${why}` }
     }
   }
@@ -2047,8 +2310,10 @@ export function evaluate(script, options = {}) {
     // geschuetzte Pfade oder rekursiv auf den Arbeitsordner wird nicht mehr
     // gefragt, sondern verweigert. Die Rueckfrage war die haeufigste
     // Unterbrechung und liess sich ohne lesbaren Pfad nicht begruenden.
-    // Alles Unbestimmbare ("unklar", "keine vertrauten Ordner") bleibt "ask".
-    if (!scoped.ok && /^(ausserhalb des Projekts|geschuetzter Pfad|rekursiv auf)/.test(scoped.reason)) {
+    // Unklare Bindungen sowie nicht aufloesbarer Kontrollfluss/Location-Stack
+    // werden ebenfalls verweigert. Nur ein fehlender Projektbezug
+    // ("Arbeitsordner unbekannt", "keine vertrauten Ordner") bleibt "ask".
+    if (!scoped.ok && /^(ausserhalb des Projekts|geschuetzter Pfad|rekursiv auf|unpruefbar:)/.test(scoped.reason)) {
       return { decision: "deny", reason: scoped.reason }
     }
     if (!scoped.ok) return { decision: "ask", reason: scoped.reason }
