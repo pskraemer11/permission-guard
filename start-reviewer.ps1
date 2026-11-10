@@ -66,7 +66,7 @@ try {
 if ($alive) { "Port $Port ist bereits belegt - laeuft der Reviewer schon?"; exit 0 }
 
 $log = Join-Path $env:TEMP "permission-guard-reviewer-$Port.log"
-$serverArgs = @('-m', $ModelPath, '-c', '4096', '--port', "$Port", '--no-webui', '-ngl', 'all', '--jinja')
+$serverArgs = @('-m', $ModelPath, '-c', '4096', '-np', '1', '--port', "$Port", '--no-webui', '-ngl', 'all', '--jinja')
 if ($DraftPath) { $serverArgs += @('--model-draft', $DraftPath) }
 $proc = Start-Process -FilePath $Server -WindowStyle Hidden -ArgumentList $serverArgs `
   -PassThru -RedirectStandardOutput $log -RedirectStandardError "$log.err"
