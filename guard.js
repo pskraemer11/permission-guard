@@ -777,15 +777,11 @@ const MCP_WRITE_VERBS = new Set([
   "call", "manage", "register", "enable", "disable", "configure", "start",
   "stop", "restart", "cancel", "resume", "sleep", "terminate", "archive",
   "unarchive", "grant", "revoke", "invite", "transfer", "pay", "purchase",
-  "buy", "tag", "release", "deploy", "save", "export", "import",
+  "buy", "tag", "release", "deploy", "sync", "save", "export", "import",
   "share", "merge", "commit", "reserve", "book", "close", "apply", "generate",
   "build", "restore", "replace", "append", "insert", "upsert", "modify",
   "change", "schedule", "order",
 ])
-
-// Mehrdeutige Verben: Sie bedeuten je nach Kontext Lesen oder Schreiben. Neben
-// einem Lesewort gelten sie als schreibend (siehe mcpIntent).
-const MCP_AMBIGUOUS_VERBS = new Set(["sync"])
 
 // Loeschen und Zerstoeren steht ueber Schreiben: ein Name mit "search" und
 // "delete" ist eine Loeschung, nicht eine Suche.
@@ -845,16 +841,6 @@ function mcpIntent(words) {
       verb = word
     } else if (!verb) {
       verb = word
-    }
-  }
-  // Ein Lesewort neben einem mehrdeutigen Verb (sync) macht den Aufruf nicht
-  // lesend: sync_status kann einen Abgleich anstossen. Ohne Lesewort bleibt die
-  // Einordnung offen, wie bei warc0s-project-sync (Modell entscheidet).
-  if (intent === "read") {
-    const ambiguous = words.find((w) => MCP_AMBIGUOUS_VERBS.has(w))
-    if (ambiguous) {
-      intent = "write"
-      verb = ambiguous
     }
   }
   return { intent, verb }
@@ -1733,13 +1719,25 @@ function updateVarMap(statement, vars) {
   const assignment = /^\$(\w+)\s*(?:=|\+=|-=|\*=|\/=)/.exec(text)
   if (assignment) {
     vars.delete(assignment[1].toLowerCase())
-    return true
+    // Nur ein Literal gilt als reine Bindung. Alles andere (Befehl, Aufruf,
+    // .NET-Methode) wird weiter geprueft, sonst waere "$x = Remove-Item ..."
+    // unsichtbar.
+    const rhs = text.slice(assignment[0].length).trim()
+    return /^(?:-?\d+(?:\.\d+)?|"[^"]*"|'[^']*'|\$[\w:.]+|\$null|\$true|\$false)$/i.test(rhs)
   }
   return false
 }
 
 function hasStateChange(statement) {
   return ANY_LOCATION_RE.test(statement) || ASSIGNMENT_RE.test(statement)
+}
+
+// Zuweisung vor dem Befehl: "$null = Remove-Item ..." hat den Befehl hinter dem
+// "=". Ohne diesen Schnitt erkennt die Ziel- und Loeschpruefung ihn nicht, weil
+// der Befehl nicht am Segmentanfang steht. Nur fuer die Schreibzielpruefung
+// gedacht; die Variablenkarte bleibt unveraendert.
+function stripAssignment(statement) {
+  return String(statement).replace(/^\s*\$[\w:]+(?:\.\w+)*\s*(?:[+\-*/])?=\s*/, "")
 }
 
 function scopeWrites(statements, options) {
@@ -1804,8 +1802,10 @@ function scopeWrites(statements, options) {
     braceDepth = Math.max(0, braceDepth + open - close)
 
     if (classifyStatement(text) !== "filewrite") continue
-    const deletion = deletionCommand(text) !== null
-    const targets = extractTargets(text, vars)
+    // Der Befehl ohne Zuweisung ("$null = Remove-Item ...") fuer Loesch- und Zielpruefung.
+    const command = stripAssignment(text)
+    const deletion = deletionCommand(command) !== null
+    const targets = extractTargets(command, vars)
     if (!targets || !targets.length) {
       return { ok: false, reason: `unpruefbar: Ziel unklar: ${text.slice(0, 60)}` }
     }
@@ -1833,9 +1833,9 @@ function scopeWrites(statements, options) {
       }
     }
 
-    const flags = deletionFlags(statement)
-    const recursive = /-Recurse\b/i.test(statement)
-      || /\brm\s+-[a-z]*r/i.test(statement)
+    const flags = deletionFlags(command)
+    const recursive = /-Recurse\b/i.test(command)
+      || /\brm\s+-[a-z]*r/i.test(command)
       || (flags !== null && flags.has("recurse"))
     if (recursive) {
       for (const abs of resolved) {

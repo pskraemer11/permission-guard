@@ -101,15 +101,18 @@ export default Plugin.define({
     // Keine Argumentwerte, keine Pfade, keine URLs. Schreibfehler landen als
     // Diagnosezeile, nie als Ausnahme - das Audit darf den Guard nicht stoeren.
     const auditFile = auditPath()
-    let auditState = auditFile ? readState(auditFile) : null
+    // Nur ein Schalter: der Zustand wird vor jedem Anhaengen neu gelesen (siehe unten).
+    const auditOn = Boolean(auditFile)
     const shadowFile = shadowPath()
     const seenMcpTools = new Set()
+    // Vor jedem Anhaengen aus der Datei lesen. Zwei Plugin-Instanzen teilen die
+    // Datei; mit einem gemerkten Zustand wuerde die zweite die Kette brechen.
     const audit = (fields) => {
-      if (!auditFile || !auditState) return
-      auditState = appendRecord(
+      if (!auditFile || !auditOn) return
+      appendRecord(
         auditFile,
         { ts: new Date().toISOString(), mode: MCP_GATING_MODE, ...fields },
-        auditState,
+        readState(auditFile),
         { onError: (error) => debug(`audit error ${error?.message ?? String(error)}`) },
       )
     }
@@ -305,10 +308,10 @@ export default Plugin.define({
         await toolHook("execute.after", async (payload) => {
           try {
             const tool = String(payload?.tool ?? "")
-            if (!tool || !seenMcpTools.has(tool) || !auditFile || !auditState) return
+            if (!tool || !seenMcpTools.has(tool) || !auditFile || !auditOn) return
             const observation = mcpObservation(tool, { input: payload?.input })
             const sessionHash = shortHash(payload?.sessionID)
-            auditState = appendRecord(
+            appendRecord(
               auditFile,
               {
                 kind: "result",
@@ -321,7 +324,7 @@ export default Plugin.define({
                 tool,
                 status: String(payload?.status ?? "unknown"),
               },
-              auditState,
+              readState(auditFile),
               { onError: (error) => debug(`audit error ${error?.message ?? String(error)}`) },
             )
           } catch (error) {

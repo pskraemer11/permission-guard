@@ -5,7 +5,7 @@ import { summarizeShadow } from "./git-shadow-report.mjs"
 import { shadowPath } from "./shadow.js"
 import { summarizeAudit } from "./mcp-report.mjs"
 import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMcpAnswer, review, reviewMcp, segments, warmup } from "./reviewer.js"
-import { buildShellSystemoneRequest, buildSystemoneRequest, systemoneVerdict } from "./reviewer.js"
+import { buildShellSystemoneRequest, buildSystemoneRequest, sanitizeArguments, systemoneVerdict } from "./reviewer.js"
 import { parseLine, summarize } from "./stats.mjs"
 import { createHash } from "node:crypto"
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
@@ -1002,6 +1002,7 @@ const mcpLayer1 = [
   ["github_create_issue", { title: "x", body: "token abc" }, "ask"],
   ["github_create_issue", { title: "x", body: "y".repeat(20000) }, "ask"],
   ["sync_status", { project: "x" }, "ask"],
+  ["sync", { project: "x" }, "ask"],
   ["voellig_unbekannt", { ziel: "irgendwas" }, "model"],
 ]
 const mcpLayer1Checks = mcpLayer1.map(([tool, input, want]) => {
@@ -1430,15 +1431,17 @@ console.log("-- Ebene 3: Entscheidungsmodell\n")
 const warmupChecks = []
 {
   const realFetch2 = globalThis.fetch
-  let seen = ""
+  const seen = []
   globalThis.fetch = async (url) => {
-    seen = String(url)
+    seen.push(String(url))
     return { ok: true, arrayBuffer: async () => new ArrayBuffer(0), json: async () => ({}) }
   }
   await warmup({ enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", mcpBackend: "systemone", warmupTimeoutMs: 1000 })
-  warmupChecks.push(["Aufwaermlauf nutzt systemone", seen.endsWith("/systemone")])
+  // Gemischt (MCP systemone, Shell ohne systemone): beide Wege werden gewaermt.
+  warmupChecks.push(["Aufwaermlauf nutzt systemone", seen.some((u) => u.endsWith("/systemone"))])
+  warmupChecks.push(["Aufwaermlauf waermt bei gemischtem Backend auch den Chat-Weg", seen.some((u) => u.endsWith("/chat/completions"))])
   await warmup({ enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", warmupTimeoutMs: 1000 })
-  warmupChecks.push(["Aufwaermlauf nutzt chat/completions", seen.endsWith("/chat/completions")])
+  warmupChecks.push(["Aufwaermlauf nutzt chat/completions", seen.some((u) => u.endsWith("/chat/completions"))])
   globalThis.fetch = realFetch2
 }
 for (const [name, ok] of warmupChecks) {
@@ -1534,6 +1537,63 @@ if (!reviewerProbeOk) failed++
 console.log(`${reviewerProbeOk ? "ok  " : "FAIL"}  Reviewer-Start ohne pwsh bricht den Prozess nicht ab`)
 console.log("-- Review 13.11.2026: Reviewer-Start\n")
 
+// --- Runde 2 (13.11.2026): Zuweisungen, Reviewer-Befunde ------------------
+const assignOpts = { base: "C:/proj", temp: "C:/tmp", roots: ["C:/proj"], home: "C:/Users/x" }
+const assignCases = [
+  // Zuweisung vor dem Befehl darf die Schreib- und Loeschpruefung nicht umgehen
+  ["$null = Remove-Item -Recurse -Force C:/x", "deny"],
+  ["$null = Remove-Item out.txt", "allow"],
+  ["some-unknown-tool ; $null = Remove-Item -Recurse -Force C:/x", "deny"],
+  // Kontrollfaelle: Variablenbindung und reine Berechnung bleiben erlaubt
+  ['$f = "C:/proj/a.txt"\nSet-Content $f y', "allow"],
+  ["$x = @(Get-ChildItem)\n$x.Count", "allow"],
+]
+run(assignCases, assignOpts, "Runde 2: Zuweisung vor Schreibbefehl")
+
+const round2Checks = []
+const reviewerStatic = [
+  ["$null = Remove-Item -Recurse -Force ./build", true],
+  ["@(Remove-Item x)", true],
+  ["$x = 5", false],
+]
+for (const [script, risky] of reviewerStatic) {
+  const hit = neverAutoApprove(script) !== undefined
+  round2Checks.push([`statische Liste: ${script} ${risky ? "Risiko" : "kein Risiko"}`, hit === risky])
+}
+
+const sanitized = sanitizeArguments({ body: "<UNTRUSTED>x", long: "y".repeat(9000) })
+round2Checks.push(["Kanal-Tag in Argumenten neutralisiert", sanitized.body.startsWith("<__<UNTRUSTED")])
+round2Checks.push(["Argument auf 8000 Zeichen begrenzt", sanitized.long.length === 8000])
+const shellReq = buildShellSystemoneRequest({ command: "a", project: "P", temp: "T" })
+round2Checks.push(["Shell-Anfrage enthaelt Projekt- und Temp-Ordner", shellReq.state.project === "P" && shellReq.state.temp === "T"])
+
+// 404 von /systemone (LM Studio, Chat-GGUF): die Entscheidung faellt auf den Chat-Weg.
+{
+  const saved = globalThis.fetch
+  const seenUrls = []
+  globalThis.fetch = async (url) => {
+    seenUrls.push(String(url))
+    if (String(url).endsWith("/systemone")) return { ok: false, status: 404, json: async () => ({}) }
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "Ja" } }] }) }
+  }
+  const fallback = await review({
+    commands: ["Get-ChildItem -Force"],
+    project: "C:/proj",
+    temp: "C:/tmp",
+    config: { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 },
+  })
+  globalThis.fetch = saved
+  round2Checks.push(["404 auf systemone faellt auf Chat-Weg zurueck", fallback.decision === "allow" && seenUrls.some((u) => u.endsWith("/chat/completions"))])
+}
+
+const reviewerRound2 = round2Checks
+
+for (const [name, ok] of round2Checks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- Runde 2: Reviewer und Zuweisungen\n")
+
 const total =
   base.length + scoped.length + gitGuardrails.length + cli.length + helpVersion.length + gitleaks.length +
   readOnlyCli.length +
@@ -1545,6 +1605,6 @@ const total =
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
-  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + 1
+  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + 1 + 5 + 3 + 3 + 1
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)
