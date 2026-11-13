@@ -34,6 +34,13 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Reviewer-Standard auf `systemone` (13.11.2026):** `reviewer.js` setzt
+  `mcpBackend` und `shellBackend` standardmäßig auf `systemone` statt `chat`.
+  Grund: Der Betriebsfall ist ein Entscheidungsmodell (Clef-Flash über
+  llama.cpp, Port 8080), das nur über die Systemone-API Wahrscheinlichkeiten
+  liefert, nicht über Chat oder Completion. Ohne eigene Konfiguration antwortet
+  das Modell sonst mit 501, und jede Anfrage bliebe `ask`. Wer ein Chat-GGUF
+  nutzt, setzt `"chat"` plus Grammatik in `shell-reviewer.config.json`.
 - **Git-Abschnitt im README (09.11.2026):** Abdeckungsmatrix für
   Klassifizierer und statische Regeln, getrennte `ask`/`deny`-Zeilen,
   `guard.yml` als CI-Testworkflow klargestellt, Testzahl auf 652 aktualisiert.
