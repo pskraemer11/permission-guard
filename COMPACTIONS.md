@@ -1679,3 +1679,27 @@ messen, deployen, dokumentieren.
 ## Next Move
 1. Entscheidungen oben treffen.
 2. Commit und Push nur auf Anweisung.
+
+
+=============== Korrektur 14.11.2026 / Shell-Frage "short" uebernommen ================
+## Korrektur
+- Frueherer Eintrag (Runde 2, 13.11.) behauptete, die Formulierung sei nicht Ursache.
+  Das war falsch. Das Modell gibt nur Wahrscheinlichkeiten aus; die Frage muss den
+  Ordnerbezug im Text selbst enthalten, nicht nur im Zustand.
+- Gemessen am 14.11.2026 mit Clef-Flash Q4_K_M, 17 Faelle, je Fall dreimal:
+  - alte Frage, Ordner nur im Zustand: 12/17
+  - Ordner im Fragetext, lange Kriterien ("paths"): 16/17
+  - Ordner im Fragetext, kurze Frage ("short"): 17/17
+- Uebernommen in reviewer.js: `shellDecisionQuestion(project, temp)`. Die Ordner kommen
+  pro Anfrage aus dem Projekt- und Temp-Ordner.
+- Verifiziert: `bench-shell.mjs --repeat 3` 17/17 einstimmig (zweiter Lauf, Exit 0).
+  Ein erster Lauf hatte einen ungueltigen Aufruf (vermutlich Erststart); der Einzelaufruf
+  danach war stabil bei rund 70 ms.
+- `bench-model.mjs --repeat 3` (MCP): 14/14 einstimmig, unveraendert.
+
+## Offen
+- Zugangsdaten lesen (`token.json`): In "short" ist der Fall mit p = 0,53 korrekt
+  "ask", aber knapp. Eine statische Regel bleibt eine Entscheidung des Nutzers.
+- Andere Modelle: JevK5 und Jeff-GGUF liefern unter llama-server `/v1/systemone` 501
+  (kein Entscheidungskopf). Clef-Flash ist das einzige Modell auf diesem Weg.
+- Schwelle aus der Konfigurationsdatei weiter ungeprueft (siehe Runde 2).

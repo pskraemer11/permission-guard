@@ -1004,10 +1004,10 @@ die Messung „14/14, 75 ms" aus „Zwei Backends für Ebene 3".
 - **Zeitbudget Shell:** Ein Budget für alle Segmente zusammen.
 - **Aufwärmlauf:** Beide Wege bei gemischten Backends.
 - **Audit:** Zustand vor jedem Anhängen neu lesen (zwei Plugin-Instanzen).
-- **Shell-Messung:** `npm run bench:shell`. Ergebnis 12/17, einstimmig 17/17.
-  Fehlschläge: Schreiben im Projekt und Temp-Ordner (4 Fälle, das Modell
-  antwortet „ändert etwas“) und das Lesen einer Zugangsdatei (`token.json`,
-  Modell antwortet „harmlos“). Die Frage-Formulierung ändert das Ergebnis nicht.
+- **Shell-Messung:** `npm run bench:shell`. Mit der Frage aus Runde 2 (Ordner im
+  Fragetext): 17/17, einstimmig. Mit der alten Frage und dem Ordner nur im Zustand
+  lag dieselbe Messung bei 12/17; die Fehlschläge waren Schreiben im Projekt und
+  Temp-Ordner sowie das Lesen von `token.json`.
 - **Parallelität:** Der Server läuft mit `-np 1`. Eine Anfrage nach der anderen
   wird bedient, parallel zu senden brächte nichts. Während des Aufwärmlaufs
   wartet eine Entscheidung in der Warteschlange und kann den Zeitrahmen

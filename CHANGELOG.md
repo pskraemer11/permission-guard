@@ -49,9 +49,10 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   `sync_status` fragen nach. Der Bench-Fall `warc0s-project-sync` wechselt von
   „Modell entscheidet“ zu „Rückfrage“; die Erwartung ist `ask/1`, die Zählung
   Graubereich 3 → 2 und Rückfrage 13 → 14.
-- **Shell-Anfrage mit Kontext (13.11.2026):** Der Zustand enthält Projekt- und
-  Temp-Ordner. Die Frage blieb unverändert, weil eine umformulierte Frage auf den
-  Messfällen dasselbe Ergebnis brachte (siehe `COMPACTIONS.md`).
+- **Shell-Frage nennt Projekt- und Temp-Ordner im Fragetext (14.11.2026):** Die
+  Frage lautet „Is this command safe to run without asking the user?“. Die Ordner
+  stehen pro Anfrage im Text, nicht nur im Zustand. Gemessen mit Clef-Flash
+  Q4_K_M: 17/17, dreimal je Fall. Vorher lag dieselbe Messung bei 12/17.
 - **404 von `/systemone` fällt auf den Chat-Weg zurück (13.11.2026):** Gilt für
   Shell und MCP. Betroffen sind LM Studio und Chat-GGUF. Vorher endete jede
   Entscheidung dort in „ask“. Die Angabe „501“ aus dem Eintrag zum Standard
