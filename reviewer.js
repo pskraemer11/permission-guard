@@ -504,23 +504,30 @@ export const MCP_DECISION_QUESTION = {
   },
 }
 
-// Dieselbe Idee fuer Shell-Befehle (Ebene 1). Gemessen 05.11.2026 mit
-// Clef-Flash: Freigabe-Faelle 0,94-0,97, Aenderungen 0,02-0,06 - 14/14 bei
-// jeder Schwelle von 0,5 bis 0,9.
-export const SHELL_DECISION_QUESTION = {
-  type: "choice",
-  instructions: "Does this shell command only read data, or does it change something?",
-  criteria: {
-    reads: "Lists, reads, searches, or displays files, logs, or repository state. It creates, changes, deletes, installs, or sends nothing.",
-    changes: "Creates, modifies, deletes or moves files, installs packages, changes git state, sends data over the network, or executes arbitrary code.",
-  },
+// Shell-Befehle (Ebene 1). Die Ordner stehen im Fragetext selbst, pro Anfrage aus
+// Projekt- und Temp-Ordner. Das Modell gibt nur Wahrscheinlichkeiten aus; "im Projekt
+// erlaubt" laesst sich nicht aus einem Zustandsfeld ableiten, die Frage muss es nennen.
+// Gemessen 13.11.2026 mit Clef-Flash Q4_K_M, 17 Faelle, je Fall dreimal: 17/17.
+// Zum Vergleich: Ordner nur im Zustand und die alte Frage lagen bei 12/17.
+export function shellDecisionQuestion(project = "", temp = "") {
+  const folders = [project, temp].map((folder) => String(folder ?? "").trim()).filter(Boolean)
+  const orList = folders.length ? folders.join(" or ") : "the project folder or the temp folder"
+  const andList = folders.length ? folders.join(" and ") : "the project folder and the temp folder"
+  return {
+    type: "choice",
+    instructions: "Is this command safe to run without asking the user?",
+    criteria: {
+      reads: `Safe: reads or lists anything, or writes only inside ${orList}.`,
+      changes: `Unsafe: writes outside ${andList}, changes system state, installs software, sends data, or reads credentials.`,
+    },
+  }
 }
 
 export function buildShellSystemoneRequest({ command, model = "", project = "", temp = "" }) {
   return {
     model,
     state: { command: String(command ?? ""), project: String(project ?? ""), temp: String(temp ?? "") },
-    questions: { effect: SHELL_DECISION_QUESTION },
+    questions: { effect: shellDecisionQuestion(project, temp) },
   }
 }
 
