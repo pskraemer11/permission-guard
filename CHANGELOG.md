@@ -8,10 +8,17 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **Shell-Messung `bench-shell.mjs` (13.11.2026):** 17 Fälle mit Projektbezug
+  für Ebene 1, `npm run bench:shell`. Gegenstück zu `bench-model.mjs`, das nur
+  Ebene 3 misst.
+- **Lock-Datei versioniert, `npm ci` in der CI (13.11.2026):** `package-lock.json`
+  ist nicht mehr ignoriert. `ci.yml` und `guard.yml` installieren mit `npm ci`
+  und führen `test-index.mjs` aus. Der Test-Gate prüft `test-index.mjs` mit.
+
 - **Verdrahtungstest für `index.js` (13.11.2026):** `test-index.mjs` bindet das
   Plugin mit Fake-ctx ein und prüft Metadaten-Befehle an das Modell sowie
   Aussen-Schreiben. `@opencode/plugin` ist eine devDependency; `npm run test:index`
-  führt den Test aus. Er läuft nicht in der CI, siehe `COMPACTIONS.md`.
+  führt den Test aus. Er läuft in der CI (`ci.yml`, `guard.yml`).
 - **Git-Schattenlauf Variante 3 (09.11.2026):** `gitShadow: "shadow"`
   protokolliert destruktive Git-Formen mit `effect=allow` in
   `%LOCALAPPDATA%\opencode\permission-guard\git-shadow.jsonl`, ohne zu
@@ -37,6 +44,18 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 - **actionlint-CI:** `.github/workflows/actionlint.yml` prüft bei Pushes und Pull Requests alle GitHub-Actions-Workflows mit dem festgelegten offiziellen Image `rhysd/actionlint:1.7.12`, einschließlich shellcheck und pyflakes.
 
 ### Geändert
+
+- **MCP `sync` ist schreibend (Nutzerentscheid 13.11.2026):** `sync` allein und
+  `sync_status` fragen nach. Der Bench-Fall `warc0s-project-sync` wechselt von
+  „Modell entscheidet“ zu „Rückfrage“; die Erwartung ist `ask/1`, die Zählung
+  Graubereich 3 → 2 und Rückfrage 13 → 14.
+- **Shell-Anfrage mit Kontext (13.11.2026):** Der Zustand enthält Projekt- und
+  Temp-Ordner. Die Frage blieb unverändert, weil eine umformulierte Frage auf den
+  Messfällen dasselbe Ergebnis brachte (siehe `COMPACTIONS.md`).
+- **404 von `/systemone` fällt auf den Chat-Weg zurück (13.11.2026):** Gilt für
+  Shell und MCP. Betroffen sind LM Studio und Chat-GGUF. Vorher endete jede
+  Entscheidung dort in „ask“. Die Angabe „501“ aus dem Eintrag zum Standard
+  `systemone` war unvollständig; es ist 404.
 
 - **Reviewer-Standard auf `systemone` (13.11.2026):** `reviewer.js` setzt
   `mcpBackend` und `shellBackend` standardmäßig auf `systemone` statt `chat`.
@@ -68,6 +87,24 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   (575/575).
 
 ### Behoben
+
+- **Zuweisung umging die Schreibprüfung (13.11.2026):** `$null = Remove-Item
+  -Recurse -Force C:/x` war als „Schreiben in vertrautem Ordner“ erlaubt. Ursache:
+  `updateVarMap` verbuchte jede Zuweisung als reine Bindung und übersprang die
+  Zeile. Jetzt gilt nur ein Literal als Bindung; der Befehl dahinter wird geprüft.
+  Die Löschprüfung arbeitet auf dem Befehl ohne Zuweisung. Der Fehler bestand
+  schon vor den Korrekturen des Tages.
+- **Statische Reviewer-Liste (13.11.2026):** Eine Zuweisung oder ein `@(` davor
+  gibt den Befehl dahinter nicht mehr frei.
+- **Argumente an das Modell (Review, 13.11.2026):** Kanal-Tags werden wie im
+  Chat-Pfad neutralisiert; Texte sind auf 8000 Zeichen begrenzt.
+- **Zeitbudget Shell (Review, 13.11.2026):** Alle Segmente zusammen haben ein
+  Budget von `timeoutMs`. Vorher galt das je Segment.
+- **Audit-Kette bei zwei Plugin-Instanzen (13.11.2026):** Beide Instanzen teilen
+  `audit.jsonl`. Der Zustand wird jetzt vor jedem Anhängen aus der Datei gelesen.
+  Vorher brach die Kette mit „seq 1 statt 3“.
+- **Aufwärmlauf bei gemischten Backends (Review, 13.11.2026):** Beide Wege werden
+  gewärmt, und nach einem 404 auch der Chat-Weg.
 
 - **Review-Befunde Kerndateien (13.11.2026):** Im Review der Kerndateien
   (`guard.js`, `index.js`, `audit.js`, `reviewer.js`) wurden Umgehungen

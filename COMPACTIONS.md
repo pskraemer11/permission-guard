@@ -1629,3 +1629,53 @@ messen, deployen, dokumentieren.
 2. `bench-model.mjs --repeat 3` gegen das laufende Modell.
 3. Die offenen Punkte oben einzeln als Befund prüfen und beheben.
 4. Commit und Push nur auf Anweisung.
+
+
+=============== Compaction 13.11.2026 / Runde 2: Umgehung, Reviewer, Messungen ================
+## Objective
+- Offene Befunde des ersten Reviews (Diff) und die drei Punkte aus der Nutzerfrage abarbeiten.
+
+## Status
+- Zuweisungs-Umgehung behoben (`updateVarMap` und Schreibzielprüfung). Der Fehler
+  bestand schon vor den Korrekturen des Tages; die Liste des zweiten Reviews hatte
+  ihn nicht erfasst.
+- Reviewer: Argumente entschärft, Zeitbudget, 404-Rückfall, Warmup bei gemischten
+  Backends, Shell-Kontext im Zustand. Die Shell-Frage ist unverändert (siehe unten).
+- MCP `sync` ist schreibend (Option 2, Nutzerentscheid).
+- Audit liest vor jedem Anhängen neu. Verifiziert: vorher „seq 1 statt 3“.
+- Paket: `@opencode/plugin` als devDependency, `npm ci` in ci.yml und guard.yml,
+  Lock-Datei versioniert, Index-Test im Test-Gate.
+- Gates: `test.mjs` 722/722, `test-wiring.mjs` 13/13, `bench-mcp.mjs` 33/33 (Graubereich 2),
+  `bench-model.mjs --repeat 3` 14/14 einstimmig, `bench-shell.mjs --repeat 3` 12/17 einstimmig.
+
+## Messungen und Warum die Frage unverändert blieb
+- Die umformulierte Shell-Frage (Chat-Regel: Schreiben im Projekt erlaubt) und die
+  alte Frage ergaben auf den 17 Fällen identisch 12/17 mit denselben Fehlern.
+  Deshalb wurde die gemessene alte Fassung wiederhergestellt.
+- Schreiben im Projekt/Temp (4 Fälle): p ≈ 0,03–0,05 für „ändert etwas“. Das Modell
+  beantwortet die Ja/Nein-Frage wörtlich; die Policy „im Projekt erlaubt“ lässt sich
+  mit einer Frage und zwei Kategorien nicht ausdrücken. Das ist Algorithmus-Design
+  (Frage) plus Modell. Im Betrieb entscheidet der Guard einfache Schreibvorgänge im
+  Projekt deterministisch, bevor das Modell gefragt wird.
+- `token.json` (Zugangsdaten lesen): p = 0,967 „liest nur“. Das ist eine Modellschwäche;
+  die Gegenmaßnahme wäre ein statisches Muster, kein anderer Prompt.
+
+## Offen (Entscheidungen des Nutzers)
+- Zugangsdaten-Lesen: statisches Muster ergänzen (z. B. `token`, `secret`,
+  `password`, `.pem`, `.key`)? Das trifft auch harmlose Dateinamen wie
+  `token-count.txt`.
+- Projekt-Schreiben im Systemone-Pfad: Zwei-Fragen-Design (nur lesend? /
+  schreibt außerhalb?) mit neuer Messung, oder bewusst Rückfrage lassen.
+- `shellThreshold`/`mcpThreshold` aus der Konfigurationsdatei validieren, z. B. auf
+  [0,5; 1). Begründung: Die Schwelle ist die einzige Hürde zwischen Modellurteil
+  und allow; eine Datei mit 0 lässt alles durch. Umgebungsvariablen sind bereits
+  auf 0 < x < 1 geprüft.
+- Timeout 2000 ms für Entscheidungen: Unter Last (ein Slot, Aufwärmlauf) kann eine
+  Antwort zu spät kommen. Einmal ist das bei der Shell-Messung passiert (ungültige
+  Antwort, Messung als unbrauchbar gezählt).
+- Die Audit-Änderung ist nicht durch einen Test im Plugin abgedeckt, sondern durch
+  die Probe mit `audit.js` und die Prüfung der Lesereihenfolge in `index.js`.
+
+## Next Move
+1. Entscheidungen oben treffen.
+2. Commit und Push nur auf Anweisung.
