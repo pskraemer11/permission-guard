@@ -8,6 +8,10 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **Verdrahtungstest für `index.js` (13.11.2026):** `test-index.mjs` bindet das
+  Plugin mit Fake-ctx ein und prüft Metadaten-Befehle an das Modell sowie
+  Aussen-Schreiben. `@opencode/plugin` ist eine devDependency; `npm run test:index`
+  führt den Test aus. Er läuft nicht in der CI, siehe `COMPACTIONS.md`.
 - **Git-Schattenlauf Variante 3 (09.11.2026):** `gitShadow: "shadow"`
   protokolliert destruktive Git-Formen mit `effect=allow` in
   `%LOCALAPPDATA%\opencode\permission-guard\git-shadow.jsonl`, ohne zu
