@@ -36,11 +36,17 @@ jobs:
         with:
           node-version: "22"
 
+      - name: Abhaengigkeiten (npm ci)
+        run: npm ci
+
       - name: Classifier tests
         run: node test.mjs
 
       - name: Wiring test (fake git)
         run: node test-wiring.mjs
+
+      - name: Wiring index.js (plugin)
+        run: node test-index.mjs
 
       - name: MCP forwarding (33 cases)
         run: node bench-mcp.mjs

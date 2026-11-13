@@ -33,11 +33,17 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
+      - name: Abhaengigkeiten (npm ci)
+        run: npm ci
+
       - name: Klassifizierer-Tests
         run: node test.mjs
 
       - name: Verdrahtungstest (Fake-git)
         run: node test-wiring.mjs
+
+      - name: Verdrahtung index.js (Plugin)
+        run: node test-index.mjs
 
       - name: MCP-Weiterleitung (33 Faelle)
         run: node bench-mcp.mjs

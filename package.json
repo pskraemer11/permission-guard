@@ -48,7 +48,10 @@
     "deploy.sh",
     "shell-reviewer.config.example.json",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "test-index.mjs",
+    "bench-shell.mjs",
+    "shell-model-cases.jsonl"
   ],
   "scripts": {
     "test": "node test.mjs",
@@ -60,7 +63,8 @@
     "report": "node mcp-report.mjs",
     "shadow-report": "node git-shadow-report.mjs",
     "smoke": "node smoke-reviewer.mjs",
-    "test:index": "node test-index.mjs"
+    "test:index": "node test-index.mjs",
+    "bench:shell": "node bench-shell.mjs --repeat 3"
   },
   "devDependencies": {
     "@opencode/plugin": "^2.3.0"
