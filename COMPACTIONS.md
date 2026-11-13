@@ -1584,3 +1584,48 @@ messen, deployen, dokumentieren.
 1. Vor einem Commit `node test.mjs`, `node test-wiring.mjs` und `node bench-mcp.mjs`
    ausführen, wie es das Repo vorschreibt.
 2. Commit und Push nur auf Anweisung des Nutzers.
+
+
+=============== Compaction 13.11.2026 / Review-Befunde Kerndateien ================
+## Objective
+- Die Befunde aus dem code-review (medium) über `guard.js`, `index.js`, `audit.js`,
+  `reviewer.js` beheben. Mehrere waren fail-open: Der Guard erlaubte destruktive
+  Befehle. Begründung: `AGENTS.md` verlangt fail closed.
+
+## Status
+- Behoben, mit Regressionstest je Befund plus Kontrollfall (`test.mjs`, Abschnitt
+  "Befunde des Reviews vom 13.11.2026"):
+  - Kommentar-Schnitt in Strings (`stripComment`)
+  - `$( … )`, `@( … )`, `@{ … }` als Teilausdrücke (`subexpressions`)
+  - PowerShell-Abkürzungen der Netz-Parameter (`netFlagKind`)
+  - git config Schreibformen, git stash ohne Unterbefehl
+  - `New-Object` nur für wenige Lesetypen (`classifyNewObject`)
+  - `-Target` als Ziel
+  - Außerhalb-Schreiben vor "nicht einordenbar" verweigern
+  - `index.js`: Modell sieht auch die Metadaten-Befehle
+  - `reviewer.js`: `error`-Listener beim Start von `pwsh`; Test mit Prozess-Probe,
+    im alten Zustand nachweislich rot (Exit 1) und im neuen grün (Exit 0)
+- Gates: `test.mjs` 708/708, `test-wiring.mjs` 13/13, `bench-mcp.mjs` 33/33,
+  `bench-mcp.mjs --change` unverändert.
+- `index.js` lässt sich in diesem Ordner nicht importieren (fehlendes Paket
+  `@opencode/plugin`). Die Änderung ist nur per `node --check` und Lesen geprüft,
+  nicht durch einen Test.
+
+## Offen (Entscheidung nötig)
+- MCP `sync`: Mit `sync` als Schreibverb fiel der Bench-Fall `warc0s-project-sync`
+  von "Modell entscheidet" auf "ask". Das ist eine Designfrage. Gelöst wurde nur der
+  Konflikt "Lesewort neben sync" (`MCP_AMBIGUOUS_VERBS`). Wer `sync` allgemein als
+  schreibend will, ändert dann den Bench-Erwartungswert bewusst.
+- Nicht im Review-Ergebnis, aber laut Review real: `$null = Remove-Item …` und
+  `@(Remove-Item …)` in der statischen Liste des Reviewers; `shellThreshold: 0` in der
+  Konfiguration lässt jede Wahrscheinlichkeit als allow durch. Nicht behoben.
+- Zwei Plugin-Instanzen mit gemeinsamer `audit.jsonl` können die Kette verzweigen
+  (nur aus dem Code abgeleitet, nicht geprüft). Nicht behoben.
+- `reviewer.js` mit neuem Standard (`systemone`): Die Messung mit
+  `bench-model.mjs --repeat 3` (AGENTS.md) steht weiter aus.
+
+## Next Move
+1. Entscheidung zu `sync` treffen.
+2. `bench-model.mjs --repeat 3` gegen das laufende Modell.
+3. Die offenen Punkte oben einzeln als Befund prüfen und beheben.
+4. Commit und Push nur auf Anweisung.

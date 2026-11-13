@@ -270,9 +270,14 @@ export default Plugin.define({
             // Ebene 1: lokales Modell entscheidet nur ueber den Rest.
             // Grundlage sind die vom Scanner getrennten Segmente; sie zeigen
             // auch Inhalte, die in Anfuehrungszeichen verborgen waeren.
-            const commands = Array.isArray(input.resources) && input.resources.length
-              ? input.resources
-              : [script]
+            // Alle Quellen zaehlen: resources und die Befehlsfelder der Metadaten
+            // (pickScript). Sonst saehe das Modell einen Befehl nie, der nur dort steht.
+            const fromResources = Array.isArray(input.resources)
+              ? input.resources.filter((r) => typeof r === "string" && r.trim())
+              : []
+            const fromScript = String(script).split(/\r?\n/).filter((line) => line.trim())
+            const commands = [...new Set([...fromResources, ...fromScript])]
+            if (!commands.length) commands.push(script)
             const reviewed = await review({ commands, project: options.base, temp: options.temp, config: reviewerConfig })
             if (reviewed.decision === "allow") {
               input.effect = "allow"

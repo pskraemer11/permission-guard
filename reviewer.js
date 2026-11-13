@@ -594,6 +594,9 @@ export async function ensureRunning(config) {
       ["-NoProfile", "-WindowStyle", "Hidden", "-File", starter, "-Port", port],
       { detached: true, stdio: "ignore", windowsHide: true },
     )
+    // Fehlt pwsh, meldet Node das asynchron als 'error'-Ereignis. Ohne Listener
+    // beendet das den Prozess und mit ihm den OpenCode-Host.
+    child.on("error", () => {})
     child.unref()
     return { ok: true, started: true, port }
   } catch (error) {

@@ -65,6 +65,29 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Behoben
 
+- **Review-Befunde Kerndateien (13.11.2026):** Im Review der Kerndateien
+  (`guard.js`, `index.js`, `audit.js`, `reviewer.js`) wurden Umgehungen
+  bestätigt, die Befehle fälschlich erlaubten. Behoben in `guard.js`:
+  - `#` innerhalb eines Strings schnitt den Rest der Zeile ab. Ein Kommentar
+    endet jetzt nur außerhalb von Anführungszeichen.
+  - `$( … )` in doppelt gequoteten Strings sowie `@( … )` und `@{ … }` werden
+    als eigene Teilausdrücke geprüft. `stash@{0}` bleibt ein Index.
+  - PowerShell-Abkürzungen von Netz-Parametern (`-M`, `-B`, `-OutF`) gelten als
+    die gesperrten Parameter.
+  - `git config --unset`, `--add`, `--replace-all`, `--edit` sind Schreibformen.
+    `git stash` ohne Unterbefehl und `git stash -u` sind Schreibformen; lesend
+    bleiben nur `list` und `show`.
+  - `New-Object` ist nur für wenige reine Lesetypen erlaubt (Puffer, Zähler,
+    Listen). `WebClient`, `StreamWriter` u. a. sind Rückfrage.
+  - `-Target` (z. B. `New-Item -ItemType Junction`) zählt als Schreibziel.
+  - Außerhalb-Schreiben wird verweigert, auch wenn der übrige Befehl unlesbar
+    ist. Vorher ging der ganze Befehl an das Modell.
+  - MCP: `sync` ist mehrdeutig. Neben einem Lesewort (`sync_status`) gilt der
+    Aufruf als schreibend. Ohne Lesewort bleibt die Einordnung offen.
+  In `index.js` sieht das Modell jetzt auch die Befehlsfelder der Metadaten, nicht
+  nur `resources`. In `reviewer.js` fängt der Start einen fehlenden `pwsh`
+  ab, statt den Host zu beenden. Tests: 708/708, Verdrahtung 13/13, MCP 33/33.
+  Offen: siehe `COMPACTIONS.md`.
 - **Sicherheitsbefunde aus dem Codex-Security-Scan (10.11.2026):**
   Copy/Move/Replace prüfen Quelle, Ziel und Backup; Schreibanweisungen werden
   sequenziell mit dem jeweils gültigen Arbeitsordner und den gültigen Bindungen

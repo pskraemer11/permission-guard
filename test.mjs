@@ -10,7 +10,9 @@ import { parseLine, summarize } from "./stats.mjs"
 import { createHash } from "node:crypto"
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { spawnSync } from "node:child_process"
+import { fileURLToPath, pathToFileURL } from "node:url"
+import { dirname, join } from "node:path"
 import { commandSummary, ensurePrivateDir, ensurePrivateFile, guardLogDir } from "./diagnostics.js"
 
 // Integration aus dem Replay (22.10.2026): Logreader mit ReadLine-[void]-Familie.
@@ -999,6 +1001,7 @@ const mcpLayer1 = [
   ["firecrawl_scrape", {}, "ask"],
   ["github_create_issue", { title: "x", body: "token abc" }, "ask"],
   ["github_create_issue", { title: "x", body: "y".repeat(20000) }, "ask"],
+  ["sync_status", { project: "x" }, "ask"],
   ["voellig_unbekannt", { ziel: "irgendwas" }, "model"],
 ]
 const mcpLayer1Checks = mcpLayer1.map(([tool, input, want]) => {
@@ -1477,6 +1480,60 @@ for (const [name, ok] of diagnosticsChecks) {
 }
 console.log("-- Diagnose\n")
 
+// --- Befunde des Reviews vom 13.11.2026 (Regressionen) ---------------------
+// Jeder Befund hat einen Fall, der den Fehler festhaelt, und einen Kontrollfall,
+// der legitimes Verhalten bestaetigt.
+const reviewFixes = [
+  // Kommentar nur ausserhalb von Anfuehrungszeichen
+  ['echo "a # b" ; Remove-Item -Recurse -Force C:/Users/x/Documents', "ask"],
+  ['Write-Output "a # b" ; Start-Process calc.exe', "ask"],
+  ['Write-Output "a # b"', "allow"],
+  ["Get-ChildItem -Force # Remove-Item x", "allow"],
+  // Teilausdruecke in Strings und Array-Literale
+  ['Write-Output "$(Remove-Item -Recurse -Force C:/x)"', "ask"],
+  ['Write-Output "$(Get-Date)"', "allow"],
+  ["@(Remove-Item -Recurse -Force C:/x)", "ask"],
+  ["$x = @(Get-ChildItem)\n$x.Count", "allow"],
+  // Abkuerzungen von Netz-Parametern
+  ["Invoke-WebRequest -Uri https://example.invalid -M POST -B payload", "ask"],
+  ["Invoke-WebRequest -Uri https://example.invalid -OutF C:/x.exe", "ask"],
+  ["Invoke-WebRequest -Uri https://example.invalid -Method GET", "allow"],
+  // New-Object nur fuer Typen ohne Seiteneffekt
+  ['(New-Object Net.WebClient).DownloadFile("https://example.invalid/x","C:/x.exe")', "ask"],
+  ["New-Object System.Text.StringBuilder", "allow"],
+  // git config Schreibformen und git stash ohne Unterbefehl
+  ["git config --unset core.hooksPath", "ask"],
+  ["git stash -u", "ask"],
+  ["git stash", "ask"],
+  ["git stash list", "allow"],
+  ["git config --get core.hooksPath", "allow"],
+]
+run(reviewFixes, undefined, "Review 13.11.2026: Regressionen")
+
+// Mit Projektbezug: Aussen-Schreiben wird verweigert, auch neben unlesbaren Teilen.
+// -Target einer Verknuepfung zaehlt als Ziel.
+const reviewFixesScoped = [
+  ["some-unknown-tool ; Set-Content C:/Users/x/Desktop/x.txt y", "deny"],
+  ["New-Item -ItemType Junction -Path ./j -Target C:/Users/x", "deny"],
+]
+run(reviewFixesScoped, options, "Review 13.11.2026: mit Projektbezug")
+
+// Ohne pwsh im PATH darf der Reviewer-Start den Prozess nicht abbrechen.
+// Vorher beendete das ein unbehandeltes 'error'-Ereignis den Node-Prozess.
+const reviewerProbe = spawnSync(
+  process.execPath,
+  [
+    "--input-type=module",
+    "-e",
+    `const m = await import(${JSON.stringify(pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), "reviewer.js")).href)}); await m.ensureRunning({ enabled: true, baseUrl: "http://127.0.0.1:9/v1" }); console.log("ok")`,
+  ],
+  { env: { ...process.env, PATH: "" }, encoding: "utf8", timeout: 20000 },
+)
+const reviewerProbeOk = reviewerProbe.status === 0 && /ok/.test(reviewerProbe.stdout)
+if (!reviewerProbeOk) failed++
+console.log(`${reviewerProbeOk ? "ok  " : "FAIL"}  Reviewer-Start ohne pwsh bricht den Prozess nicht ab`)
+console.log("-- Review 13.11.2026: Reviewer-Start\n")
+
 const total =
   base.length + scoped.length + gitGuardrails.length + cli.length + helpVersion.length + gitleaks.length +
   readOnlyCli.length +
@@ -1488,6 +1545,6 @@ const total =
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
-  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + diagnosticsChecks.length + 3
+  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + 1
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)
