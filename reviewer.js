@@ -16,12 +16,17 @@
 // Das Modell darf nie ein "deny" erzeugen und nie ein "deny" der statischen
 // Regeln ueberschreiben - es kann ausschliesslich "ask" zu "allow" heben.
 //
+// Betrieb seit 05.11.2026: Clef-Flash-Q4_K_M (Entscheidungsmodell) ueber
+// llama.cpp, Port 8080, beide Ebenen mit "systemone" (siehe unten und
+// shell-reviewer.config.example.json). Grundlage ist eine Messung mit einem
+// Chat-Modell; die Befunde erklaeren die Prompt- und Grammatik-Form.
+//
 // Messung 25.10.2026, Gemma 4 12B IT QAT UD Q4_K_XL (llama.cpp, RTX 5060 Ti):
 //   - JSON-Antworten waren unzuverlaessig (Wiederholungsschleifen; "allow"
 //     auch fuer "git push --force" und "rmtree").
-//   - Eine einzelne Ja/Nein-Frage mit Grammatik-Zwang antwortet in ~200 ms
-//     und trennt die Faelle sauber - ausser "Remove-Item", das aber schon
-//     statisch verweigert wird.
+//   - Eine einzelne Ja/Nein-Frage mit Grammatik-Zwang (JSON-Format) antwortet 
+//     in ~200 ms und trennt die Faelle sauber - ausser "Remove-Item", das aber
+//     schon statisch verweigert wird.
 //
 // Nachgeschaerft 26.10.2026 (drei Fehlalarm-Familien, belegt im Guard-Log
 // 16:10-21:49, 126 Faelle im Reviewer-Band):
@@ -34,11 +39,12 @@
 //   - RISKY[0] enthielt den Backslash in der Zeichenklasse und traf damit
 //     jeden absoluten Windows-Pfad. Dafuer gibt es jetzt eine gezielte Regel
 //     fuer voll ausgeschriebene Interpreter-Pfade mit -c/-e/-Command.
-// Jev-Omni (ngquocvinh/Jev-Omni-Q4_K_M, gemma4-Basis, LM Studio) verlangt
+//
+// Jev-Omni (ngquocvinh/Jev-Omni-Q4_K_M, gemma4-Basis) verlangt
 // laut Nutzertest die ausdrueckliche Anweisung "Antworte nur mit Ja oder Nein",
 // sonst antwortet es ausfuehrlich. Genau das steht im Systemprompt.
 //
-// Ohne Netz und ohne OpenCode testbar: node test.mjs
+// Ohne Netz und ohne OpenCode testbar: `node test.mjs`
 
 import fs from "node:fs"
 import path from "node:path"
@@ -50,11 +56,15 @@ const CONFIG_FILE = path.join(HERE, "shell-reviewer.config.json")
 
 const DEFAULTS = {
   enabled: true,
-  // llama.cpp (llama-server) oder LM Studio, beide OpenAI-kompatibel.
+  // llama-server; lokal kein Key. Betriebsmodell ist Clef-Flash (ggml-org/
+  // Clef-Flash-GGUF), ein Entscheidungsmodell. Ohne shell-reviewer.config.json
+  // blieben jedoch die Ebenen oben auf "chat" - das Modell antwortet dort mit
+  // 501, jede Anfrage bliebe "ask". Das ist fail closed, aber unbrauchbar;
+  // deshalb setzt der Betrieb beide Backends in der Konfiguration.
   baseUrl: "http://127.0.0.1:8080/v1",
-  model: "gemma-4-12b-it-qat",
-  // LM Studio verlangt einen Key ("Require API Key"). Name der Umgebungsvariable,
-  // die ihn haelt - der Wert steht nie in dieser Datei.
+  model: "clef",
+  // Nur fuer Backends mit Pflicht-Key (etwa LM Studio): Name der
+  // Umgebungsvariable, die ihn haelt - der Wert steht nie in dieser Datei.
   apiKeyEnv: "",
   timeoutMs: 2000,
   // Eigenes Budget fuer den Aufwaermlauf. Der Kaltstart nach dem Entladen
@@ -71,10 +81,12 @@ const DEFAULTS = {
   grammar: 'root ::= "Ja" | "Nein"',
   // Ebene 3 fuer MCP: "chat" erzeugt ein Wort, "systemone" laesst ein
   // Entscheidungsmodell die Optionen bewerten (Wahrscheinlichkeit statt Text).
-  mcpBackend: "chat",
+  // Standard ist "systemone", passend zum Entscheidungsmodell oben; ein
+  // Chat-GGUF braucht umgekehrt "chat" plus Grammatik.
+  mcpBackend: "systemone",
   mcpThreshold: 0.7,
-  // Ebene 1 (Shell) kann denselben Weg nehmen.
-  shellBackend: "chat",
+  // Ebene 1 (Shell) nimmt denselben Weg.
+  shellBackend: "systemone",
   shellThreshold: 0.7,
   // Zusaetzliche Risikomuster aus der Projektkonfiguration.
   extraRisky: [],

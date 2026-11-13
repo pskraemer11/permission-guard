@@ -44,13 +44,13 @@ mit Schreibfreigabe und die Selbstschutzgrenze wäre weg.
 Dieses Verzeichnis ist so geschnitten, dass es als Wurzel eines eigenen
 Repositories funktioniert (`git init` hier, nicht im Monorepo):
 
-| Datei | Zweck |
-| --- | --- |
-| `LICENSE` | MIT |
-| `package.json` | `"type": "module"`, `npm test`, Node ≥ 20 |
-| `.gitignore` | schließt `shell-reviewer.config.json`, Logs, `node_modules` aus |
-| `deploy.sh` | POSIX-Gegenstück zu `deploy.ps1` |
-| `deploy.ps1` | Windows, mit Testlauf und SHA256-Vergleich |
+| Datei          | Zweck                                                           |
+| -------------- | --------------------------------------------------------------- |
+| `LICENSE`      | MIT                                                             |
+| `package.json` | `"type": "module"`, `npm test`, Node ≥ 20                       |
+| `.gitignore`   | schließt `shell-reviewer.config.json`, Logs, `node_modules` aus |
+| `deploy.sh`    | POSIX-Gegenstück zu `deploy.ps1`                                |
+| `deploy.ps1`   | Windows, mit Testlauf und SHA256-Vergleich                      |
 
 Beim Herauslösen mitnehmen: `.github/workflows/permission-guard.yml` aus dem
 Monorepo an die neue Repo-Wurzel verschieben und den `working-directory`-Eintrag
@@ -66,10 +66,10 @@ Nicht ins Repository gehören: `shell-reviewer.config.json` (maschinenabhängig)
 Logs und Messartefakte. Zugangsdaten werden ausschließlich über den in
 `apiKeyEnv` genannten Variablennamen referenziert, nie als Wert.
 
-Hinweis zur Einordnung: Der **Reviewer** ist allgemein nutzbar. Der **Guard**
-ist eine bewusst meinungsstarke PowerShell-Policy mit Entscheidungen aus einem
-konkreten Arbeitsablauf – als Referenzimplementierung wertvoll, als
-allgemeingültiges Werkzeug nicht.
+Hinweis zur Einordnung: 
+Der **Reviewer** ist allgemein nutzbar. 
+Der **Guard** ist eine bewusst meinungsstarke PowerShell-Policy mit Entscheidungen aus einem
+konkreten Arbeitsablauf – als Referenzimplementierung wertvoll, als allgemeingültiges Werkzeug nicht.
 
 
 ## Problem
@@ -80,7 +80,7 @@ Die statischen Regeln in `opencode.jsonc` matchen das **Präfix** des Befehls:
 { "action": "shell", "resource": "Get-ChildItem *", "effect": "allow" }
 ```
 
-Ein Agent ruft aber fast nie `Get-ChildItem ...` auf, sondern:
+Ein Agent ruft aber fast nie direkt `Get-ChildItem ...` auf, sondern z.B.:
 
 ```powershell
 cd "C:\...\Projekt"
@@ -138,38 +138,38 @@ werden kann als:
 **Schreibend im Projekt:** Zusätzlich erlaubt, wenn jedes Ziel auflösbar ist und
 innerhalb eines vertrauten Ordners liegt:
 
-| Befehl | Beispiel |
-|---|---|
-| `Set-Content`, `Add-Content`, `Out-File`, `Clear-Content` | `Set-Content CHANGELOG.md "..."` |
-| `New-Item`, `mkdir` | `New-Item -ItemType Directory build` |
-| `Remove-Item`, `del`, `rm` | `Remove-Item out.txt` — siehe Lösch-Regel unten |
-| `Copy-Item`, `Move-Item`, `Rename-Item` | `Move-Item a.md b.md` |
-| Umleitung in eine Datei | `git log > log.txt` |
-| `[System.IO.File]::WriteAllText` / `AppendAllText` / `WriteAllBytes` | `WriteAllText("CHANGELOG.md", $row)` |
-| `git add`, `git commit` (ohne `--amend`) | `git commit -m "..."` |
-| `python -m ruff check --fix`, `python -m ruff format` | `python -m ruff format .` |
+| Befehl                                                                 | Beispiel                                          |
+| ---------------------------------------------------------------------- | ------------------------------------------------- |
+| `Set-Content`, `Add-Content`, `Out-File`, `Clear-Content`              | `Set-Content CHANGELOG.md "..."`                  |
+| `New-Item`, `mkdir`                                                    | `New-Item -ItemType Directory build`              |
+| `Remove-Item`, `del`, `rm`                                             | `Remove-Item out.txt` — siehe Lösch-Regel unten   |
+| `Copy-Item`, `Move-Item`, `Rename-Item`                                | `Move-Item a.md b.md`                             |
+| Umleitung in eine Datei                                                | `git log > log.txt`                               |
+| `[System.IO.File]::WriteAllText` / `AppendAllText` / `WriteAllBytes`   | `WriteAllText("CHANGELOG.md", $row)`              |
+| `git add`, `git commit` (ohne `--amend`)                               | `git commit -m "..."`                             |
+| `python -m ruff check --fix`, `python -m ruff format`                  | `python -m ruff format .`                         |
 
 Bei `Copy-Item`, `Move-Item`, `Rename-Item` sowie `[System.IO.File]::Copy`,
 `Move` und `Replace` werden Quelle, Ziel und ein etwaiges Backup gemeinsam
 geprüft. Ein fehlender oder nicht sicher auflösbarer Operand ist `deny`.
 
-**Löschen ist nicht Schreiben** (Nutzerentscheid 29.10.2026): Ein `remove-item`,
-`rm`, `del`, `rd`, `rmdir`, `erase` oder `ri` wird zur Rückfrage geführt, sobald
-`-Recurse` oder `-Force` gesetzt ist (auch abgekürzt als `-r`/`-fo`), ein Ziel
-einen Platzhalter enthält oder keine bekannte Dateiendung trägt (`.git` und
-`data.cache` gelten damit als potenzielle Verzeichnisse).
-Erfasst auch den Fall, der zur Entscheidung führte: das Löschen eines `.git` in
-einem **Unterordner** des Projekts lief vorher als „Schreiben in vertrautem
-Ordner" durch. Nur das einfache Löschen einer benannten Datei mit bekannter
-Endung im Projekt bleibt `allow`. Das eigene `.git` des Projektordners bleibt
-darüber hinaus hart gesperrt (`deny`, seit 22.10.).
+**Löschen ist nicht Schreiben** (Nutzerentscheid 29.10.2026):
+Ein `remove-item`, `rm`, `del`, `rd`, `rmdir`, `erase` oder `ri` wird zur Rückfrage geführt,
+sobald `-Recurse` oder `-Force` gesetzt ist (auch abgekürzt als `-r`/`-fo`),
+ein Ziel einen Platzhalter enthält oder keine bekannte Dateiendung trägt
+(`.git` und `data.cache` gelten damit als potenzielle Verzeichnisse).
+
+Erfasst auch den Fall, der zur Entscheidung führte: das Löschen eines `.git` in einem
+**Unterordner** des Projekts lief vorher als „Schreiben in vertrautem Ordner" durch.
+Nur das einfache Löschen einer benannten Datei mit bekannter Endung im Projekt bleibt `allow`.
+Das eigene `.git` des Projektordners bleibt darüber hinaus hart gesperrt (`deny`, seit 22.10.).
 
 ### Netz-Lesen: `Invoke-WebRequest` / `Invoke-RestMethod`
 
 Nutzerentscheidung (22.10.2026): Beide Cmdlets (auch die Aliase `iwr`/`irm`)
-gelten als **Lesen**, solange nichts gespeichert oder gesendet wird. Erlaubt nur
-wenn gleichzeitig:
+gelten als **Lesen**, solange nichts gespeichert oder gesendet wird.
 
+Erlaubt nur wenn gleichzeitig:
 - kein `-OutFile`, `-InFile` (Dateiziel),
 - keine Methode außer GET/HEAD (`-Method Post` und Co. bleiben `ask`),
 - kein `-Body`, `-Form`.
@@ -184,29 +184,33 @@ Daten tragen; ohne Schreibziel führt aber nur die Anfrage selbst nach draußen.
 
 `python` generell bleibt `ask`. Erlaubt sind genau zwei Formen:
 
-| Form | Bewertung |
-|---|---|
-| `python -m pytest …` (auch `py -3.12 -m pytest …`) | Lesen — die Freigabe deckt bewusst auch die Testcode-Ausführung ab (Entscheidung) |
-| `python -m pyright …` (auch `py -3.12 -m pyright …`) | Lesen — Typprüfung nach `pyproject.toml`, schreibt weder Quelltext noch Bytecode (Entscheidung 29.10.2026) |
-| `python -m ruff check …` ohne `--fix` | Lesen |
-| `python -m ruff format …`, `check … --fix …` | Schreibend → Zielpfadprüfung wie oben (`ruff format D:\…` bleibt `ask`, Wildcards bleiben `ask`) |
-| `python -m ruff format --check \|--diff` | Lesen |
-| `python <skript>` mit Zielpfad **im Projekt** (Entscheidung 2) | Lesen — Skriptinhalt ist versioniert reviewbar; Parameter des Skripts werden nicht geprüft |
-| alles andere (`python -c`, `python -m pip`, Skripte außerhalb des Projekts, `.git`, `python` ohne Zielskript) | `ask` |
+| Form                                                             | Bewertung                                                                                                    |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `python -m pytest …` (auch `py -3.12 -m pytest …`)               | Lesen — die Freigabe deckt bewusst auch die Testcode-Ausführung ab (Entscheidung)                            |
+| `python -m pyright …` (auch `py -3.12 -m pyright …`)             | Lesen — Typprüfung nach `pyproject.toml`, schreibt weder Quelltext noch Bytecode (Entscheidung 29.10.2026)   |
+| `python -m ruff check …` ohne `--fix`                            | Lesen                                                                                                        |
+| `python -m ruff format …`, `check … --fix …`                     | Schreibend → Zielpfadprüfung wie oben (`ruff format D:\…` bleibt `ask`, Wildcards bleiben `ask`)             |
+| `python -m ruff format --check \|--diff`                         | Lesen                                                                                                        |
+| `python <skript>` mit Zielpfad **im Projekt** (Entscheidung 2)   | Lesen — Skriptinhalt ist versioniert reviewbar; Parameter des Skripts werden nicht geprüft                   |
+| alles andere (`python -c`, `python -m pip`, Skripte außerhalb    | `ask`                                                                                                        |
+| des Projekts, `.git`, `python` ohne Zielskript)                  |                                                                                                              |
 
 ### `.NET`-Methoden und Stringmaskierung (Punkt 8)
 
 Der Klassifizierer unterscheidet jetzt zwischen Aussehen und Wirkung — belegt
 aus dem Replay (Punkt 8 der PLANUNG), nicht geraten:
 
-| Verhalten                                        | Beispiel                                          | Bewertung                                                                                                                                                    |
-| ------------------------------------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `>` innerhalb von String-Literalen               | `Write-Output "5 > 3"`                            | Prosa, keine Umleitung. Echte Umleitung (`"x" > f.txt`) greift weiter; geht ein Zitat nicht auf, gilt das Skript konservativ als schreibend                  |
-| `[regex]::Replace(...)`                          | `[regex]::Replace($c, "<[^>]+>", " ")`            | Lesen im Speicher. `[IO.File]::Replace` bleibt schreibend                                                                                                    |
-| Wert-Casts zu bekannten Lesetypen                | `[datetime]'2026-10-19T22:54:52Z'`                | Der Cast selbst ist nur Konvertierung; der Ausdruck dahinter wird normal bewertet. Unbekannte Typen (`[xml]`, `[scriptblock]`) bleiben `ask`                 |
-| `[void]`-Cast                                    | `[void]$out.Append($c)`                           | Wirft nur den Rückgabewert weg; die Anweisung wird danach normal bewertet                                                                                    |
-| Stream- und StringBuilder-Methoden auf Variablen | `$sr.ReadLine()`, `$sr.Close()`, `$sb.Append($c)` | `append`, `appendline`, `read`, `readline`, `readtoend`, `peek`, `close` in `SAFE_METHODS`. Schreibende Methoden (`.WriteLine()`, `.Write()`) fehlen bewusst |
-| `Import-Csv`                                     | `Import-Csv data.csv`                             | Lesen, wie `Get-Content`                                                                                                                                     |
+| Verhalten                                        | Beispiel                                          | Bewertung                                                                                        |
+| ------------------------------------------------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `>` innerhalb von String-Literalen               | `Write-Output "5 > 3"`                            | Prosa, keine Umleitung. Echte Umleitung (`"x" > f.txt`) greift weiter;                           |
+| ↳                                                |                                                   | geht ein Zitat nicht auf, gilt das Skript konservativ als schreibend                             |
+| `[regex]::Replace(...)`                          | `[regex]::Replace($c, "<[^>]+>", " ")`            | Lesen im Speicher. `[IO.File]::Replace` bleibt schreibend                                        |
+| Wert-Casts zu bekannten Lesetypen                | `[datetime]'2026-10-19T22:54:52Z'`                | Der Cast selbst ist nur Konvertierung; der Ausdruck dahinter wird normal bewertet.               |
+| ↳                                                |                                                   | Unbekannte Typen (`[xml]`, `[scriptblock]`) bleiben `ask`                                        |
+| `[void]`-Cast                                    | `[void]$out.Append($c)`                           | Wirft nur den Rückgabewert weg; die Anweisung wird danach normal bewertet                        |
+| Stream- und StringBuilder-Methoden auf Variablen | `$sr.ReadLine()`, `$sr.Close()`, `$sb.Append($c)` | `append`, `appendline`, `read`, `readline`, `readtoend`, `peek`, `close` in `SAFE_METHODS`.      |
+| ↳                                                |                                                   | Schreibende Methoden (`.WriteLine()`, `.Write()`) fehlen bewusst                                 |
+| `Import-Csv`                                     | `Import-Csv data.csv`                             | Lesen, wie `Get-Content`                                                                         |
 
 Wichtigste Lehre: „Zuweisungen als Präfix" (8.1 in der PLANUNG) war eine
 falsche Vermutung — die Zuweisung selbst war nie das Problem.
@@ -217,20 +221,21 @@ Bewusst **nicht** freigeschaltet, alle aus demselben Replay belegt:
 
 | Form                                | Beispiel                                        | Grund                                                                                                        |
 | ----------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Aufruf nutzerdefinierter Funktionen | `Read-Jsonc $p`, `Walk $obj`                    | Rumpf wäre für sich einordbar, aber der Aufruf selbst wird nicht aufgelöst — Nutzerentscheid 4: bleibt `ask`  |
-| `& <befehl>` / Dot-Sourcing         | `& node $tp $src 2>&1`, `. .\init.ps1`          | Nutzerentscheid 3: **verweigert** (`deny`) — Ziel steckt in einer Variablen, die Zeile zeigt es nicht         |
+| Aufruf nutzerdefinierter Funktionen | `Read-Jsonc $p`, `Walk $obj`                    | Rumpf wäre für sich einordbar, aber der Aufruf selbst wird nicht aufgelöst — Nutzerentscheid 4: bleibt `ask` |
+| `& <befehl>` / Dot-Sourcing         | `& node $tp $src 2>&1`, `. .\init.ps1`          | Nutzerentscheid 3: **verweigert** (`deny`) — Ziel steckt in einer Variablen, die Zeile zeigt es nicht        |
 
 ### Interpreters-Freigaben (Nutzerentscheidungen 1 und 2, 22.10.2026, spät)
 
 Beides ausdrückliche Nutzerentscheidungen, pfadverankert wie pytest:
 
-| Fall                                                                                                                                                  | Bewertung                                                             |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `node tools/permission-guard/test.mjs`, `replay.mjs`, `analyze.mjs` — auch relativ, mit `2>&1`, nach `cd` oder mit eindeutig zugewiesenem Pfad-Präfix | Lesen — Selbstpflege des Guards, Inhalt versioniert                   |
-| `python <skript>` mit Zielpfad innerhalb des Projekts (`*.py`), Parameter des Skripts ungeprüft                                                       | Lesen — Inhalt ist versioniert und damit vor der Ausführung reviewbar |
-| `python -c`, `python -m <anderes>`, `python` ohne Zielskript (REPL)                                                                                   | `ask` — Inline-Code ist für das Review unsichtbar                     |
-| Skripte außerhalb des Projekts (Temp-Ordner) und `<Projekt>\.git`                                                                                     | `ask` — außerhalb des reviewten Umkreises                             |
-| `node` mit fremdem Skript, `--eval`, `--version`, nackter Aufruf; `deno`, `ruby`, `perl`                                                              | `ask` — nur die drei benannten Selbst-Skripte sind freigegeben        |
+| Fall                                                                                                           | Bewertung                                                             |
+| -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `node tools/permission-guard/test.mjs`, `replay.mjs`, `analyze.mjs` — auch relativ, mit `2>&1`, nach `cd` oder | Lesen — Selbstpflege des Guards, Inhalt versioniert                   |
+| mit eindeutig zugewiesenem Pfad-Präfix                                                                         |                                                                       |
+| `python <skript>` mit Zielpfad innerhalb des Projekts (`*.py`), Parameter des Skripts ungeprüft                | Lesen — Inhalt ist versioniert und damit vor der Ausführung reviewbar |
+| `python -c`, `python -m <anderes>`, `python` ohne Zielskript (REPL)                                            | `ask` — Inline-Code ist für das Review unsichtbar                     |
+| Skripte außerhalb des Projekts (Temp-Ordner) und `<Projekt>\.git`                                              | `ask` — außerhalb des reviewten Umkreises                             |
+| `node` mit fremdem Skript, `--eval`, `--version`, nackter Aufruf; `deno`, `ruby`, `perl`                       | `ask` — nur die drei benannten Selbst-Skripte sind freigegeben        |
 
 Aufgelöst wird gegen den Arbeitsordner der Sitzung, ein `cd` im selben Skript
 folgt mit; Misslingen eines `cd`-Ziels stellt relative Auflösung ab (fail
@@ -408,38 +413,41 @@ Grundlage sind die Hilfe-Bäume der installierten Fassungen, nicht Annahmen.
 Erlaubt wird nur, was nachweislich liest und nichts speichert, sendet oder
 startet. Unbekannte Unterbefehle bleiben `ask`.
 
-| CLI | erlaubt | bleibt `ask` |
-|---|---|---|
-| `opencode` | `--help`, `--version`, `models`, `stats` (ohne `--standalone`/`--server`), `debug` | `run`, `serve`, `api`, `acp`, `auth`, `mcp`, `plugin`, `session`, `service`, `reload`, `pair`, `mini`, `upgrade`, `uninstall`, TUI ohne Argument |
-| `firecrawl` | `list`, `list-tools`, `find-tools`, `search`, `map`, `alexandria`, `developer`, `gov`, `research`, `status`, `version`, `doctor`, sowie `scrape` und `crawl` ohne Schreib-Flags | `agent`, `interact`, `monitor`, `batch-scrape`, `parse`, `feedback`, `search-feedback`, `env`, `config`, `login`, `logout`, `init`, `setup`, `make`, `launch`, `experimental`, `credits` |
-| `gitleaks` | `version`, `help`, `git`, `dir` (auch `file`/`directory`) — Scans nur mit voller Redaktion (`--redact` oder `--redact=100`) | `stdin`, `completion`, Scans ohne oder mit Teilredaktion (`--redact=20`), `-r`/`--report-path`, `--report-template`, `--log-opts`, `--diagnostics`, `--diagnostics-dir` |
-| `sqlite3` | nur mit `-readonly` | ohne das Flag (öffnet schreibend), `-cmd`, `-init`, `.output`, `.once`, `.save`, `.backup`, `.restore`, `.clone`, `.archive` |
-| `gh` | `auth status`, `repo view`, `api` (nur nachweislich lesend, siehe unten) | alles andere, insbesondere `api` mit Senden-Verdacht, `pr merge`, `release create` |
+| CLI           | erlaubt                                                                                     | bleibt `ask`                                                                                      |
+| ------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `opencode`    | `--help`, `--version`, `models`, `stats` (ohne `--standalone`/`--server`), `debug`          | `run`, `serve`, `api`, `acp`, `auth`, `mcp`, `plugin`, `session`, `service`,                      |
+|               |                                                                                             | `reload`, `pair`, `mini`, `upgrade`, `uninstall`, TUI ohne Argument                               |
+| `firecrawl`   | `list`, `list-tools`, `find-tools`, `search`, `map`, `alexandria`, `developer`,`gov`,       | `agent`, `interact`, `monitor`, `batch-scrape`, `parse`, `feedback`, `search-feedback`, `env`,    |
+|               | `research`, `status`, `version`, `doctor`, sowie `scrape` und `crawl` ohne Schreib-Flags    | `config`, `login`, `logout`, `init`, `setup`, `make`, `launch`, `experimental`, `credits`         |
+| `gitleaks`    | `version`, `help`, `git`, `dir` (auch `file`/`directory`) —                                 | `stdin`, `completion`, Scans ohne oder mit Teilredaktion (`--redact=20`), `-r`/`--report-path`,   |
+|               | Scans nur mit voller Redaktion (`--redact` oder `--redact=100`)                             | `--report-template`, `--log-opts`, `--diagnostics`, `--diagnostics-dir`                           |
+| `sqlite3`     | nur mit `-readonly`                                                                         | ohne das Flag (öffnet schreibend), `-cmd`, `-init`, `.output`, `.once`, `.save`, `.backup`,       |
+|               |                                                                                             | `.restore`, `.clone`, `.archive`                                                                  |
+| `gh`          | `auth status`, `repo view`, `api` (nur nachweislich lesend, siehe unten)                    | alles andere, insbesondere `api` mit Senden-Verdacht, `pr merge`, `release create`                |
 
 Zusätzlich gesperrt, auch bei erlaubtem Unterbefehl: `-o`/`--output`,
 `-k`/`--api-key`, `--api-url`, `--screenshot`, `--full-page-screenshot`,
 `--profile`, `--cancel`, `--webhook`.
 
-Die sqlite3- und gh-Regeln (Entscheidung 25.10.2026, `gh api` nachgeschärft
-29.10.2026) schließen die häufigsten Leseaufrufe im Log: `sqlite3.exe -readonly
-<db> ".tables"`, `gh auth status` und lesende `gh api`-Aufrufe. Ohne die
-Flag-Prüfung ist keines davon tragfähig: `sqlite3` ohne `-readonly` schreibt in
-die Datenbank, und `gh api` kann jeden beliebigen Verb senden. Deshalb gilt für
-`gh api` jetzt: standardmäßig GET, aber **nur wenn ein Senden nachweisbar
-ausgeschlossen ist** — `ghApiIsReadOnly()` lässt ausschließlich die Methoden
-`GET`, `HEAD`, `OPTIONS` zu (als `-X Wert` oder `--method=Wert`); die Flags
-`-f`, `-F`, `--field`, `--raw-field` und `--input` schalten bei `gh` still auf
-POST um und führen deshalb zur Rückfrage, ebenso der Endpunkt `graphql` (immer
-POST, trägt auch lesend klingende Mutationen). Mehrdeutiges wird nicht
-interpretiert und nicht aufgelöst — es bleibt `unknown` und damit Rückfrage.
+Die sqlite3- und gh-Regeln (Entscheidung 25.10.2026, `gh api` nachgeschärft 29.10.2026)
+schließen die häufigsten Leseaufrufe im Log: `sqlite3.exe -readonly <db> ".tables"`, `gh auth status`
+und lesende `gh api`-Aufrufe. 
+Ohne die Flag-Prüfung ist keines davon tragfähig: `sqlite3` ohne `-readonly` schreibt
+in die Datenbank, und `gh api` kann jeden beliebigen Verb senden. 
+Deshalb gilt für `gh api` jetzt: standardmäßig GET, aber 
+**nur wenn ein Senden nachweisbar ausgeschlossen ist** —
+`ghApiIsReadOnly()` lässt ausschließlich die Methoden `GET`, `HEAD`, `OPTIONS` zu 
+(als `-X Wert` oder `--method=Wert`); die Flags `-f`, `-F`, `--field`, `--raw-field`
+und `--input` schalten bei `gh` still auf POST um und führen deshalb zur Rückfrage, 
+ebenso der Endpunkt `graphql` (immer POST, trägt auch lesend klingende Mutationen). 
+Mehrdeutiges wird nicht interpretiert und nicht aufgelöst — es bleibt `unknown` und damit Rückfrage.
 
-Die gitleaks-Regel (Entscheidung 23.10.2026) hat zwei Gründe: Ein Scan ohne
-`--redact` druckt gefundene Geheimnisse — damit in den Verlauf und ins
-Protokoll. Und `--log-opts` startet `git log` mit beliebigen Optionen, darunter
-`--output=<datei>`; `--diagnostics` schreibt Profile bzw. startet einen
-HTTP-Server. Beides bleibt Rückfrage. Grundlage ist der Hilfe-Baum der
-installierten Fassung (`gitleaks help`, `gitleaks git --help`,
-`gitleaks dir --help`).
+Die gitleaks-Regel (Entscheidung 23.10.2026) hat zwei Gründe: Ein Scan ohne `--redact` 
+druckt gefundene Geheimnisse — damit in den Verlauf und ins Protokoll. 
+Und `--log-opts` startet `git log` mit beliebigen Optionen, darunter
+`--output=<datei>`; `--diagnostics` schreibt Profile bzw. startet einen HTTP-Server. 
+Beides bleibt Rückfrage. Grundlage ist der Hilfe-Baum der installierten Fassung 
+(`gitleaks help`, `gitleaks git --help`, `gitleaks dir --help`).
 
 Zwei Eigenheiten, die den Regeln zugrunde liegen:
 
@@ -453,31 +461,33 @@ Version ist ein Flag (`--version`), Status liefert `stats`.
 
 ## Was **nicht** erlaubt wird
 
-| Fall | Entscheidung |
-|---|---|
-| Schreiben außerhalb des Projektordners | `deny` (Entscheidung 25.10.2026) |
-| Schreibziel nicht bestimmbar (`$var`, fremde Umgebungsvariable) | `deny` (Entscheidung 10.11.2026) |
-| Schreibziel mit Platzhalter (Wildcard) | `ask` |
-| `Remove-Item` ohne Ziel (`Get-ChildItem \| Remove-Item`) | `deny` (Entscheidung 10.11.2026) |
-| Schreiben in `<Projekt>\.git`, `~/.config/opencode`, `~/.claude`, `~/.codex` | `deny` (Entscheidung 25.10.2026) |
-| Rekursives Löschen auf den Arbeitsordner selbst | `deny` (Entscheidung 25.10.2026) |
-| `git push` | `ask` (statisch und Guard) |
-| `git branch -D`, `git checkout .`, `git restore .` | `deny` (Guard; `branch -D` zusätzlich statisch) |
-| `git reset --hard`, `git clean` | `deny` (statische Regel und Guard) |
-| `git branch -d` | `ask`; auf Windows ebenfalls `deny` (case-insensitive `-D`-Regel) |
-| `git commit --amend` | `ask` |
-| `npm install`, `pip install`, `winget`, `npx`, `Start-Process` | `ask` |
-| `Invoke-WebRequest`/`-RestMethod` mit Speicher-, Sende- oder Credential-Plan | `ask` (Details oben) |
-| `git config <key> <value>` | `ask` |
-| Registry, Aufgabenplanung, `Set-ExecutionPolicy`, `Set-Acl` | `ask` |
-| `python` außerhalb der Freigabe, `node` außerhalb der Selbst-Skripte, `pwsh -File` | `ask` |
-| `& <befehl>`, Dot-Sourcing (Ziel in Variablen) | `deny` (Entscheidung 3) |
-| `Invoke-Expression`, `iex`, `-EncodedCommand`, `powershell -e` | `deny` (Entscheidung 25.10.2026) |
-| Geheimnispfade: `.env`, `.ssh`, `auth.json`, `*.pem`, `*.key`, `.npmrc`, `.aws` | `ask` |
-| Geheimnisbegriffe: `password`, `secret`, `token`, `api_key` | `ask` |
-| `$env:NAME` mit unbekanntem Namen (`$env:TEMP` ist erlaubt) | `ask` |
-| Schreiben nach `.ssh`, `.gnupg`, `.aws/credentials`, `.git-credentials` | `deny` |
-| `Format-Volume`, `Clear-Disk`, `Initialize-Disk`, `diskpart` | `deny` |
+| Fall                                                                              | Entscheidung                                      |
+| --------------------------------------------------------------------------------- | ------------------------------------------------- |
+| Schreiben außerhalb des Projektordners                                            | `deny` (Entscheidung 25.10.2026)                  |
+| Schreibziel nicht bestimmbar (`$var`, fremde Umgebungsvariable)                   | `deny` (Entscheidung 10.11.2026)                  |
+| Schreibziel mit Platzhalter (Wildcard)                                            | `ask`                                             |
+| `Remove-Item` ohne Ziel (`Get-ChildItem \| Remove-Item`)                          | `deny` (Entscheidung 10.11.2026)                  |
+| Schreiben in `<Projekt>\.git`, `~/.config/opencode`, `~/.claude`, `~/.codex`      | `deny` (Entscheidung 25.10.2026)                  |
+| Rekursives Löschen auf den Arbeitsordner selbst                                   | `deny` (Entscheidung 25.10.2026)                  |
+| `git push`                                                                        | `ask` (statisch und Guard)                        |
+| `git branch -D`, `git checkout .`, `git restore .`                                | `deny` (Guard; `branch -D` zusätzlich statisch)   |
+| `git reset --hard`, `git clean`                                                   | `deny` (statische Regel und Guard)                |
+| `git branch -d`                                                                   | `ask`; auf Windows ebenfalls `deny`               |
+| ↳                                                                                 | (case-insensitive `-D`-Regel)                     |
+| `git commit --amend`                                                              | `ask`                                             |
+| `npm install`, `pip install`, `winget`, `npx`, `Start-Process`                    | `ask`                                             |
+| `Invoke-WebRequest`/`-RestMethod` mit Speicher-, Sende- oder Credential-Plan      | `ask` (Details oben)                              |
+| `git config <key> <value>`                                                        | `ask`                                             |
+| Registry, Aufgabenplanung, `Set-ExecutionPolicy`, `Set-Acl`                       | `ask`                                             |
+| `python` außerhalb der Freigabe, `node` außerhalb der Selbst-Skripte,             | `ask`                                             |
+| `pwsh -File`                                                                      |                                                   |
+| `& <befehl>`, Dot-Sourcing (Ziel in Variablen)                                    | `deny` (Entscheidung 3)                           |
+| `Invoke-Expression`, `iex`, `-EncodedCommand`, `powershell -e`                    | `deny` (Entscheidung 25.10.2026)                  |
+| Geheimnispfade: `.env`, `.ssh`, `auth.json`, `*.pem`, `*.key`, `.npmrc`, `.aws`   | `ask`                                             |
+| Geheimnisbegriffe: `password`, `secret`, `token`, `api_key`                       | `ask`                                             |
+| `$env:NAME` mit unbekanntem Namen (`$env:TEMP` ist erlaubt)                       | `ask`                                             |
+| Schreiben nach `.ssh`, `.gnupg`, `.aws/credentials`, `.git-credentials`           | `deny`                                            |
+| `Format-Volume`, `Clear-Disk`, `Initialize-Disk`, `diskpart`                      | `deny`                                            |
 
 Alles, was der Klassifizierer nicht kennt, bleibt bei `ask` (fail closed).
 Seit 25.10.2026 geht diesem `ask` ein lokaler Entscheider voraus (Ebene 1).
@@ -549,6 +559,33 @@ eine `deny`-Entscheidung den Befehl nicht ausführt. Die statischen Regeln sind
 nicht Teil von `test.mjs`; sie werden über `check_jsonc.py` und den Dialog
 geprüft.
 
+## Befehlszerlegung und Befehlsstil
+
+Ein Shell-Aufruf wird vor der Prüfung in Segmente zerlegt. Die Segmente kommen
+vom Scanner (`event.resources`). Die Teilung berücksichtigt Anführungszeichen,
+damit ein Trenner in einem Argument keine eigene Ausführung erzeugt.
+
+In der Modellprüfung mit `shellBackend: "systemone"` wird jedes Segment einzeln
+bewertet. Das schwächste Ergebnis entscheidet, und ein harmloses Segment kann ein
+schreibendes nicht überdecken (`reviewer.js`, Funktion `review`).
+
+Umleitungen sind nach dem Code so eingeordnet:
+
+- Standard-Handle-Umleitungen wie `2>&1`, `*>&1`, `1>&2`, `2>$null` und `2>NUL`
+  gelten weder als Verschleierung noch als Schreiben (`guard.js`,
+  `hasRedirection`; `reviewer.js`, Kommentar zu `OPERATOR_CHARS`).
+- Dateiumleitungen (`>`, `>>`) zählen als Schreiben. Im Modellpfad sind sie
+  verschleiernde Operatoren.
+- Backtick, `<` und `$(` sind im Modellpfad verschleiernde Operatoren.
+
+Die Stilregel für Agentenbefehle steht in `~/AGENTS.md`: ein Befehl je
+Tool-Aufruf, kein `2>&1` oder `2>$null` zur Unterdrückung, keine dekorativen
+Ausgabeüberschriften. Sie ist kein Sicherheitsmerkmal des Guards. Der technische
+Grund für `2>&1` entfiel am 26.10.2026, als der Modellpfad die Standard-Handle-
+Umleitungen ausnahm. Die Regel dient heute der Lesbarkeit und dem Erhalt von
+Fehlermeldungen. Ein Befehl je Aufruf macht außerdem Entscheidungen im Log leichter
+nachzuvollziehen.
+
 ## Ebene 1: lokaler Entscheider (`reviewer.js`)
 
 Bleibt nach der statischen Prüfung ein `nicht einordenbar` übrig, fragt das
@@ -559,7 +596,8 @@ Segmente aus dem Scanner (event.resources)
         │
         ├─ statische Risikoliste (RISKY) ── Treffer ──▶ ask  (kein Modellaufruf)
         │
-        └─ lokales Modell: "Wirkt der Befehl ausschließlich im Projektordner?"
+        └─ lokales Modell: chat "Wirkt der Befehl ausschließlich im Projektordner?"
+                │          systemone: Wahrscheinlichkeit für "reads" ≥ shellThreshold?
                 ├─ "Ja"   ──▶ allow
                 ├─ "Nein" ──▶ ask
                 └─ Timeout / Fehler / unklare Antwort ──▶ ask
@@ -611,6 +649,16 @@ Leben, sondern bindet ihn an OpenCode:
 
 ### Modellauswahl
 
+**Betrieb seit 05.11.2026:** `Clef-Flash-Q4_K_M.gguf` (Entscheidungsmodell,
+`ggml-org/Clef-Flash-GGUF`) über `llama-server` auf Port 8080, beide Ebenen mit
+`systemone`. Gemessen: 14/14 Entscheidungen, Freigabe-Fälle 0,94–0,97,
+Änderungen 0,02–0,06, rund 75–100 ms (Abschnitte „Zwei Backends für Ebene 3" und
+`shell-reviewer.config.example.json`). Start: `.\start-reviewer.ps1`.
+
+**Historisch (25.–26.10.2026): Chat-Modelle.** Die folgende Messung entstand vor
+dem Wechsel auf den Entscheidungs-Endpunkt. Sie erklärt, warum der Chat-Weg
+(`chat` + Grammatik) überhaupt geprüft wurde, und gilt für ihn unverändert.
+
 `bench-quality.ps1` prüft ein Modell gegen 18 feste Befehle: neun müssen
 freigegeben werden (lesend bzw. im Projekt), neun müssen zurückfragen
 (Netzwerk, Schreiben außerhalb, Secrets, Löschen, Container). Gleicher Prompt,
@@ -621,22 +669,24 @@ Bei der Auswertung zählt nicht die reine Trefferquote: Ein Fehler auf der
 Entscheidend sind gefährliche Befehle, die sie *nicht* kennt, und
 übervorsichtige Rückfragen bei Lesebefehlen.
 
-| Modell | richtig | Median | Datei | wirksame Fehlfreigaben | übervorsichtig |
-| --- | --- | --- | --- | --- | --- |
-| Gemma 4 12B IT QAT Q4_K_XL | 15/18 | 204 ms | 6,26 GB | 0 | 0 |
-| JevK5 4B v0.3 Q5_K_M | 13/18 | **116 ms** | **2,86 GB** | 0 (nach RISKY-Ergänzung) | 1 (`node --version`) |
-| Jev-Omni 12B Q4_K_M | 12/18 | 238 ms | 6,87 GB | 0 | 5 |
-| Jev-Omni 12B IQ2_XS | 8/18 | 324 ms | 3,62 GB | 0 | 8 |
-| Jev-Style Qwen3.5 2B Q4_K_M | Polarität invertiert | 39 ms | 1,22 GB | – | – |
+| Modell                      | richtig                | Median  | Datei    | wirksame Fehlfreigaben   | übervorsichtig        |
+| --------------------------- | ---------------------- | ------- | -------- | ------------------------ | --------------------- |
+| Gemma 4 12B IT QAT Q4_K_XL  | **15/18**              | 204 ms  | 6,26 GB  | 0                        | 0                     |
+| JevK5 4B v0.3 Q5_K_M        | 13/18                  | **116   | 2,86     | 0 (nach RISKY-Ergänzung) | 1 (`node --version`)  |
+| ↳                           |                        | ms      | GB**     |                          |                       |
+| Jev-Omni 12B Q4_K_M         | 12/18                  | 238 ms  | 6,87 GB  | 0                        | 5                     |
+| Jev-Omni 12B IQ2_XS         | 8/18                   | 324 ms  | 3,62 GB  | 0                        | 8                     |
+| Jev-Style Qwen3.5 2B Q4_K_M | [Polarität invertiert] | 39 ms   | 1,22 GB  | –                        | –                     |
 
-- **Gemma 4 12B ist Standard.** Einziges Modell ohne Fehlentscheidung im
-  Wirkungsbereich.
-- **JevK5 4B ist der Sparmodus.** 3,4 GB weniger VRAM, eine unnötige Rückfrage.
-  Geeignet, wenn parallel ein Coding-Modell auf der GPU liegen soll.
-- **Jev-Omni ist ungeeignet** (5 bzw. 8 übervorsichtige Rückfragen). IQ2_XS ist
-  zudem langsamer als Q4_K_M.
-- **2B-Modelle sind zu klein.** `Jev-Style-Qwen3.5-2B` dreht die Polarität und
-  hält `curl … -OutFile C:\temp\…` für sicher.
+- **Gemma 4 12B war Standard im Chat-Weg.**
+  Einziges Modell ohne Fehlentscheidung im Wirkungsbereich. Seit 05.11.2026
+  ersetzt durch Clef-Flash im `systemone`-Weg.
+- **JevK5 4B ist der Sparmodus.** 
+  3,4 GB weniger VRAM, eine unnötige Rückfrage. Geeignet, wenn parallel ein Coding-Modell auf der GPU liegen soll.
+- **Jev-Omni ist ungeeignet** 
+  (5 bzw. 8 übervorsichtige Rückfragen). IQ2_XS ist zudem langsamer als Q4_K_M.
+- **2B-Modelle sind zu klein.** 
+  `Jev-Style-Qwen3.5-2B` dreht die Polarität und hält `curl … -OutFile C:\temp\…` für sicher.
 
 Neues Modell prüfen — erst messen, dann umstellen:
 
@@ -649,50 +699,59 @@ node smoke-reviewer.mjs
 
 ### Backend-Vergleich
 
-| Backend | Latenz (gleiches Modell) | Key | Bemerkung |
-| --- | --- | --- | --- |
-| **llama.cpp direkt** (`llama-server`) | 203 ms | nein | Standard, `-ngl all --jinja` |
-| LM Studio (Port 1234) | 520–900 ms | ja | eigener llama.cpp-Build (CUDA 12) plus Proxy-Schicht |
-| OpenRouter Decisions | ~130 ms (Herstellerangabe) | ja | andere API, siehe unten |
+Stand 26.10.2026, Chat-Weg mit `jev-omni`. Der Betrieb nutzt seit 05.11.2026 nur
+noch `llama-server`; LM Studio ist kein Betriebsweg mehr, bleibt aber als
+Auswertung der Latenz stehen.
+
+| Backend                               | Latenz (gleiches Modell)   | Key  | Bemerkung                                            |
+| ------------------------------------- | -------------------------- | ---- | ---------------------------------------------------- |
+| **llama.cpp direkt** (`llama-server`) | 203 ms                     | nein | Betriebsweg, `-ngl all --jinja`                      |
+| LM Studio (Port 1234)                 | 520–900 ms                 | ja   | eigener llama.cpp-Build (CUDA 12) plus Proxy-Schicht |
+| OpenRouter Decisions                  | ~130 ms (Herstellerangabe) | ja   | andere API, siehe unten                              |
 
 Gleiches Modell (`jev-omni`), nur das Backend geändert: 203 ms gegen 520–900 ms.
 Der frühere Eindruck „llama.cpp ist dreimal schneller" kam fast vollständig von
 dieser Schicht; auf demselben Backend liegt Gemma nur rund 20 % vor Jev-Omni.
 
-**Befund am Rande:** Dasselbe Modell antwortete über llama.cpp mit „Nein" und
-über LM Studio mit „Ja" auf `rg -n "TODO" src`. Bei `temperature 0` und
-Grammatik darf das nicht passieren; Verdacht: abweichendes Chat-Template oder
-Sampling-Defaults. Deshalb: pro Backend prüfen, nicht nur pro Modell.
+**Befund am Rande:** 
+Dasselbe Modell antwortete über llama.cpp mit „Nein" und über LM Studio mit „Ja" 
+auf `rg -n "TODO" src`. Bei `temperature 0` und Grammatik darf das nicht passieren; 
+Verdacht: abweichendes Chat-Template oder Sampling-Defaults. 
+Deshalb: pro Backend prüfen, nicht nur pro Modell.
 
-**Grammatik-Falle.** Ohne `grammar` gibt Gemma 4 12B auf llama.cpp nur
-Kanal-Token aus (`"<|channel>0101010"`, `finish_reason: length`). Unbrauchbar,
-und es sieht wie ein Serverproblem aus. Mit `root ::= "Ja" | "Nein"` kommt
-sauber `Ja`. LM Studio akzeptiert den Parameter und ignoriert ihn; `reviewer.js`
+**Grammatik-Falle.** 
+Ohne `grammar` gibt Gemma 4 12B auf llama.cpp nur Kanal-Token aus 
+(`"<|channel>0101010"`, `finish_reason: length`). 
+Unbrauchbar, und es sieht wie ein Serverproblem aus. 
+<-> Mit `root ::= "Ja" | "Nein"` kommt sauber `Ja`. 
+LM Studio akzeptiert den Parameter und ignoriert ihn; `reviewer.js`
 wiederholt die Anfrage einmal ohne Grammatik, falls ein Backend sie ablehnt.
 
-**OpenRouter (Jev 1.13)** ist *kein* Chat-Modell, sondern läuft über den
-Entscheidungs-Endpunkt `/api/alpha/decisions` (Modell-ID `typesafe/jev-1.13`) und
-liefert Wahrscheinlichkeiten statt Text. Damit ist es kein austauschbares
+**OpenRouter (Jev 1.13)** 
+ist *kein* Chat-Modell, sondern läuft über den Entscheidungs-Endpunkt 
+`/api/alpha/decisions` (Modell-ID `typesafe/jev-1.13`) und liefert
+Wahrscheinlichkeiten statt Text. Damit ist es kein austauschbares
 Backend für `reviewer.js`, aber eine brauchbare dritte Meinung für den
-Testfall-Satz. Es beantwortet *unsere* Frage, ist aber kein Ground Truth, und
-der Befehlstext verlässt dabei den Rechner — für eine Einmal-Auswertung
-vertretbar, für den Dauerbetrieb nicht.
+Testfall-Satz. 
+Es beantwortet *unsere* Frage, ist aber kein Ground Truth, und der 
+Befehlstext verlässt dabei den Rechner — für eine Einmal-Auswertung
+vertretbar, für den Dauerbetrieb nicht (bei Claude Code dagegen üblicher Weg).
 
-**Artificial Analysis Decision Index v1.0** (13.10.2026): Jev 1.13 führt mit 58
-(GLIDE 54, Microsoft-Decision-1 54), 42 USD pro 1 Mio. Aufgaben, 0,13 s pro
-Aufgabe, auf der Kosten-/Fähigkeits-Pareto-Kurve. Für unseren Fall zählen die
-Sub-Scores Klassifikation (WildGuardTest 94) und Werkzeugwahl (When2Call 81);
-Wissen und Schlussfolgern (HLE, Omniscience) tragen den Index, braucht ein
-Freigabe-Filter aber nicht. Der Index dient der Vorauswahl, der eigene
-18-Befehl-Satz bleibt maßgeblich.
+**Artificial Analysis Decision Index v1.0** (13.10.2026): 
+Jev 1.13 führt Score mit 58 (GLIDE 54, Microsoft-Decision-1 54), aber 42 USD pro 
+1 Mio. Aufgaben, 0,13 s pro Aufgabe, auf der Kosten-/Fähigkeits-Pareto-Kurve. 
+Für unseren Fall zählen die Sub-Scores Klassifikation (WildGuardTest 94) und 
+Werkzeugwahl (When2Call 81); Wissen und Schlussfolgern (HLE, Omniscience) tragen
+den Index, braucht ein Freigabe-Filter aber nicht. 
+Der Index dient der Vorauswahl, der eigene 18-Befehl-Satz bleibt maßgeblich.
 
 ### Betrieb
 
 ```powershell
-.\start-reviewer.ps1                       # llama-server, Gemma 4 12B, Port 8080
-.\start-reviewer.ps1 -ModelPath "D:\…\jevk5-4b-v0.3-Q5_K_M.gguf" -Port 8081
+.\start-reviewer.ps1                       # llama-server, Clef-Flash, Port 8080
+.\start-reviewer.ps1 -ModelPath "D:\…\anderes.gguf" -Port 8081
 node smoke-reviewer.mjs                    # 9 Fälle gegen die laufende Konfiguration
-node test.mjs                              # 652 Unit-Tests
+node test.mjs                              # 686 Unit-Tests
 node test-wiring.mjs                       # 13 Verdrahtungstests (Fake-git)
 .\start-reviewer.ps1 -Stop
 ```
@@ -701,16 +760,16 @@ Ohne laufenden Server bleibt alles bei `ask`. Endpunkt, Modell, Grammatik und
 Timeout stehen in `shell-reviewer.config.json` (beim Deploy aus
 `shell-reviewer.config.example.json` erzeugt, danach nie überschrieben):
 
-| Feld | Bedeutung |
-| --- | --- |
-| `enabled` | Reviewer ein/aus |
-| `baseUrl` | OpenAI-kompatibler Endpunkt |
-| `model` | Modellname (llama.cpp ignoriert ihn, LM Studio braucht ihn) |
-| `apiKeyEnv` | Name der Umgebungsvariable mit dem Key, nie der Key selbst |
-| `timeoutMs` | Obergrenze, danach `ask` |
-| `grammar` | GBNF; leer nur für Backends, die sie ablehnen |
-| `gitShadow` | `off` oder `shadow`; im Schattenmodus werden destruktive Git-Formen mit `effect=allow` nur protokolliert |
-| `extraRisky` | projektspezifische Muster, die nie freigegeben werden |
+| Feld         | Bedeutung                                                                                                |
+| ------------ | -------------------------------------------------------------------------------------------------------- |
+| `enabled`    | Reviewer ein/aus                                                                                         |
+| `baseUrl`    | OpenAI-kompatibler Endpunkt                                                                              |
+| `model`      | Modellname: `clef` für `systemone`; im Chat-Weg für Backends mit Pflichtangabe                           |
+| `apiKeyEnv`  | Name der Umgebungsvariable mit dem Key, nie der Key selbst                                               |
+| `timeoutMs`  | Obergrenze, danach `ask`                                                                                 |
+| `grammar`    | GBNF; leer nur für Backends, die sie ablehnen                                                            |
+| `gitShadow`  | `off` oder `shadow`; im Schattenmodus werden destruktive Git-Formen mit `effect=allow` nur protokolliert |
+| `extraRisky` | projektspezifische Muster, die nie freigegeben werden                                                    |
 
 Überschreibbar per Umgebung: `PERMISSION_GUARD_REVIEWER` (`0`/`1`), `_URL`,
 `_MODEL`, `_KEY_ENV`, `_TIMEOUT_MS`, `PERMISSION_GUARD_GIT_SHADOW` (`0`/`1`
@@ -775,7 +834,9 @@ gilt. Beides ist rein und ohne Backend testbar.
 | -------------------------- | ------------------------------------------------------- | --------------------------------------------------- |
 | 2 Notbremse (läuft zuerst) | Werkzeugname und Argumente gegen eine kurze, enge Liste | `deny`                                              |
 | 1 feste Regel              | Absicht aus Schritt B                                   | `allow` bei `read`, `ask` bei `write`/`destructive` |
-| 3 lokales Gemma            | nur bei `unknown`, mit drei getrennten Kanälen          | `allow` nur bei klarem „Ja", sonst `ask`            |
+| 3 lokales Modell           | nur bei `unknown`, `chat` mit drei Kanälen oder ↵       | `allow` nur bei klarem „Ja" bzw. p ≥                |
+| ↳                          |                                                         | `mcpThreshold`,                                     |
+| ↳                          | `systemone` mit `{tool, arguments}`                     | sonst `ask`                                         |
 
 Reihenfolge und Grenzen:
 
@@ -845,12 +906,12 @@ ohne erkennbares Verb, fünf klar lesend, neun nicht. Weil dasselbe Modell bei
 12/14), läuft die Messung mit festem Seed und ohne Cache (`deterministic`), und
 jeder Fall wird mehrfach befragt.
 
-| Fassung | Treffer | Anmerkung |
-| --- | --- | --- |
-| Ausgangsfassung | 8/14 (57 %) | exakt die Trivialstrategie „immer Nein" |
-| Rolle + Felderklärung | 8/14 (57 %) | mehr Kontext ließ das Modell in „Nein" flüchten |
-| kompakt + eine Kontextzeile | 11/14 (79 %) | |
-| **kompakt, vier Beispiele** | **12/14 (86 %)** | 14/14 einstimmig über je drei Läufe |
+| Fassung                     | Treffer          | Anmerkung                                       |
+| --------------------------- | ---------------- | ----------------------------------------------- |
+| Ausgangsfassung             | 8/14 (57 %)      | exakt die Trivialstrategie „immer Nein"         |
+| Rolle + Felderklärung       | 8/14 (57 %)      | mehr Kontext ließ das Modell in „Nein" flüchten |
+| kompakt + eine Kontextzeile | 11/14 (79 %)     |                                                 |
+| **kompakt, vier Beispiele** | **12/14 (86 %)** | 14/14 einstimmig über je drei Läufe             |
 
 Die beiden Restfehler gehen in die sichere Richtung (Rückfrage statt Freigabe).
 Das feste Regime bleibt unverändert: 33/33 Weiterleitungen, 3/3 im Graubereich.
@@ -864,10 +925,10 @@ nur mit erneuter Messung.
 
 `mcpBackend` wählt den Weg:
 
-| Wert | Weg | Gemessen (14 Graubereich-Fälle) |
-| --- | --- | --- |
-| `chat` (Standard) | `chat/completions`, Antwortwort mit Grammatik | 12/14 bei 12B, 13/14 bei 26B |
-| `systemone` | `/v1/systemone`, Entscheidungsmodell liefert Wahrscheinlichkeit | **14/14** mit Clef-Flash, 75 ms |
+| Wert              | Weg                                                             | Gemessen (14 Graubereich-Fälle) |
+| ----------------- | --------------------------------------------------------------- | ------------------------------- |
+| `chat` (Standard) | `chat/completions`, Antwortwort mit Grammatik                   | 12/14 bei 12B, 13/14 bei 26B    |
+| `systemone`       | `/v1/systemone`, Entscheidungsmodell liefert Wahrscheinlichkeit | **14/14** mit Clef-Flash, 75 ms |
 
 Im `systemone`-Modus entfällt der Prompt: Der Zustand ist `{tool, arguments}`,
 die Frage eine `choice` zwischen „reads" und „changes", und `mcpThreshold`
@@ -926,8 +987,10 @@ weniger Fälle als „bestanden" zu melden. Die Modellprüfung ist getrennt, wei
 sie einen laufenden Server braucht; ohne `--model` zählt ein Graubereichsfall
 als korrekt einsortiert.
 
-Stand 04.11.2026: **33/33** Weiterleitungen, Ebene 3 live **3/3** (Gemma 4 12B
-gab `acme_widget` frei und fragte bei `acme_portal` und `project_sync` nach).
+Stand 04.11.2026 (Chat-Weg, Gemma 4 12B): **33/33** Weiterleitungen, Ebene 3
+live **3/3** — `acme_widget` wurde freigegeben, `acme_portal` und
+`project_sync` gingen auf Rückfrage. Für den Betriebsweg mit Clef-Flash gilt
+die Messung „14/14, 75 ms" aus „Zwei Backends für Ebene 3".
 
 ## Grenzen
 
@@ -1003,7 +1066,7 @@ node replay.mjs                 # Messung: wie viele Befehle laufen ohne Rueckfr
 node analyze.mjs                # Punkt-8-Analyse: Woher genau kommt "nicht einordenbar"
 ```
 
-573 Fälle in den Gruppen ohne/mit Projektbezug, CLI-Allowlists, Hilfe und
+686 Fälle in den Gruppen ohne/mit Projektbezug, CLI-Allowlists, Hilfe und
 Version, gitleaks, sqlite3/gh, Netz-Lesen, Verweigerung & Geheimnis-Ersetzung,
 python, Interpreters, Ruff-Bootstrap, Reviewer (Risikoliste, Fehlalarme,
 Antwortformat, Aufbau), MCP (Erkennung, Schlüssel, Geheimnisverdacht,

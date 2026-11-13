@@ -1561,3 +1561,26 @@ messen, deployen, dokumentieren.
 
 ## Relevant Files
 - `guard.js`, `index.js`, `diagnostics.js`, `stats.mjs`, `test.mjs`, `README.md`, `CHANGELOG.md`
+
+
+=============== Compaction 12.11.2026 / Befehlsstil-Doku ================
+## Objective
+- **Current:** Die Guard-Dokumentation erklärt Segmentierung und Umleitungen.
+  Die Stilregel für Agentenbefehle steht in `~/AGENTS.md`.
+- **Why:** Entscheidung E8 vom 11.11.2026 des Nutzers: Die Stilregel bleibt global
+  für alle Harnesses. Die technische Erklärung der Segmentierung gehört in diese
+  Dokumentation.
+
+## Status
+- `README.md`: Abschnitt „Befehlszerlegung und Befehlsstil“ ergänzt, vor „Ebene 1“.
+- Umleitungen sind mit dem Code abgeglichen: Standard-Handles sind keine
+  Verschleierung, Dateiumleitungen zählen als Schreiben.
+- Keine Codeänderung. Tests nicht ausgeführt, weil nichts committet wird und die
+  Änderung reine Doku ist.
+- Offen: Der Reviewer antwortet seit dem 11.11. nicht mehr (Ursache in einer
+  eigenen Session zu klären, siehe PLANUNG O-15).
+
+## Next Move
+1. Vor einem Commit `node test.mjs`, `node test-wiring.mjs` und `node bench-mcp.mjs`
+   ausführen, wie es das Repo vorschreibt.
+2. Commit und Push nur auf Anweisung des Nutzers.

@@ -67,6 +67,13 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   enthalten keine rohen Befehlstexte und liegen in einem privaten Verzeichnis
   (`diagnostics.js`). 686/686 Tests, 13/13 Verdrahtung, 33/33 MCP-Fälle.
 
+### Dokumentiert
+
+- **Befehlszerlegung und Befehlsstil (12.11.2026):** `README.md` hat einen neuen
+  Abschnitt „Befehlszerlegung und Befehlsstil“ vor „Ebene 1“. Er beschreibt die
+  Segmentierung, die Modellprüfung je Segment und die Einordnung der
+  Umleitungen. Keine Codeänderung.
+
 ## [0.1.0] - 2026-11-05
 
 ### Hinzugefügt
