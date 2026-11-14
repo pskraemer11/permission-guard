@@ -55,6 +55,13 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Test-Gate bricht bei CRLF in der Konfiguration ab (14.11.2026):**
+  `pre-commit` und `pre-push` prüfen `.githooks/test-gate.conf` vor dem Einlesen
+  auf CR. Bisher wanderte das CR in den letzten Wert; `.githooks/` passte nicht
+  mehr als Präfix und der Testbefehl hieß `test-index.mjs\r`. Das Gate
+  übersprang damit still oder startete eine nicht vorhandene Datei. Jetzt endet
+  der Lauf mit Exit 1 und nennt Datei und Fix. Die Hooks bleiben byte-identisch
+  mit `~/.agents/references/githooks/`.
 - **GitHub-Helfer auf v7 (14.11.2026):** `actions/checkout` und
   `actions/setup-node` stehen in `ci.yml`, `guard.yml` und `actionlint.yml` auf
   `@v7` statt `@v4`. Grund: GitHub hat Node 20 auf seinen Runnern abgekündigt

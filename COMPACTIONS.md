@@ -1733,3 +1733,54 @@ messen, deployen, dokumentieren.
   klassischen Pfade deckt; die Achse ist fuer die uebrigen da.
 - Empfehlungen 3 (Normalisierung weiterer Wrapper) und 5 (Korpus aus echten
   Befehlen) stehen aus.
+
+=============== Compaction 14.11.2026 / Test-Gate gegen CRLF ================
+## Objective
+- **Current:** Das Test-Gate soll nicht mehr still ausfallen, wenn
+  `.githooks/test-gate.conf` CRLF-Zeilenenden bekommt.
+
+## Important Details
+- **Finding:** Ein CR am Zeilenende wandert in den letzten Wert. `.githooks/`
+  passt dann nicht mehr als Praefix, und der Testbefehl heisst
+  `test-index.mjs\r`. Beides wirkt still: Der Commit laeuft ohne Tests durch.
+- **Umsetzung:** `pre-commit` und `pre-push` lesen die Datei vor der Auswertung
+  und brechen bei CR mit Exit 1 ab. Erkennung per `case` auf `*$'\r'*`, nicht
+  per `grep`: Die Git-Bash-Grep findet ein CR in der Datei nicht (gemessen:
+  Datei mit zwei CR, `grep -q` Exit 1; `case` und `tr` finden es).
+- **Verteilung:** Die Vorlage `~/.agents/references/githooks/`, dieses Repo,
+  `AI+IDE-Hints` und `python-project-template` tragen dieselben Dateien
+  (SHA256 geprueft). Die fuenf Nachbar-Repos mit eigenem Hook-Stand haben nur
+  die AGENTS.md-Zeile; ihre Hooks lesen keine `test-gate.conf`.
+- **Regel:** `.gitattributes` schuetzt nur beim Auschecken. Ein Werkzeug, das
+  die Datei im Arbeitsbaum neu schreibt, umgeht den Pin; deshalb der
+  Laufzeit-Abbruch (fail closed).
+
+## Work State
+- **Completed:** Sperre in beiden Hooks, README-Abschnitt "Zeilenenden",
+  `python-project-init` (Baseline und Schritt 6), `project-audit`
+  (Tooling/CI), `reviewer.md`, AGENTS.md in fuenf Nachbar-Repos.
+- **Verified:** Smoke-Test im Wegwerf-Repo mit den echten Hooks: CRLF -> Exit 1
+  mit Meldung, LF -> Exit 0 und Gate laeuft; `bash -n` 8/8; `test.mjs`,
+  `test-index.mjs`, `test-wiring.mjs`, `bench-mcp.mjs` Exit 0.
+- **Blocked:** Die Aenderungen in den Nachbar-Repos und in `~/.agents` sind
+  nicht committet; dort liegen weitere, fremde Aenderungen im Arbeitsbaum.
+
+## Next Move
+1. Dieses Repo committen, Push durch den Nutzer.
+2. Getrennt entscheiden, ob `~/.agents`, `AI+IDE-Hints` und
+   `python-project-template` committet werden; nur die genannten Pfade.
+3. Optional: die fuenf Nachbar-Repos mit einem echten Test-Gate ausstatten.
+
+## Relevant Files
+- `.githooks/pre-commit`, `.githooks/pre-push`: CRLF-Sperre vor dem Einlesen.
+- `CHANGELOG.md`: Eintrag "Test-Gate bricht bei CRLF ...".
+- `PLANUNG.md`: Nachtrag 14.11.2026.
+- `~/.agents/references/githooks/`: Vorlage und README.
+- `~/.agents/skills/python-project-init/SKILL.md`,
+  `~/.agents/skills/project-audit/SKILL.md`.
+- `~/.config/opencode/agents/reviewer.md`.
+
+## Important Context
+- Kein ADR: Die Entscheidung ist leicht rueckgaengig zu machen und betrifft
+  nur die Hook-Konfiguration; die Begruendung steht hier und im README. Ein
+  `docs/adr/` gibt es in diesem Repo bisher nicht.
