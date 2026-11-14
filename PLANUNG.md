@@ -1,6 +1,6 @@
 # PLANUNG — permission-guard
 
-Stand: 05.11.2026
+Stand: 14.11.2026
 
 ## Wozu dieses Dokument
 
@@ -431,3 +431,20 @@ Repositories und wurde mit `git bundle verify` geprüft.
 | `74751f2` | `c08329f` | MCP-Schritt E                                |
 | `6fe01da` | `3cb5231` | README-Tabellen ausgerichtet                 |
 | `5b4998e` | `42f0103` | S0, Planung, CHANGELOG                       |
+
+## Nachtrag 14.11.2026: Test-Gate gegen CRLF abgesichert
+
+`pre-commit` und `pre-push` brechen ab, wenn `.githooks/test-gate.conf` ein CR
+enthält. Grund: Ein CR am Zeilenende wandert in den letzten Wert; `.githooks/`
+passt nicht mehr als Präfix, der Testbefehl heißt `test-index.mjs\r`, und das
+Gate überspringt still. Die Vorlage, dieses Repo, `AI+IDE-Hints` und
+`python-project-template` tragen dieselben Hook-Dateien (SHA256 geprüft).
+
+Erkennung per `case`, nicht per `grep`: Die Git-Bash-Grep findet ein CR in der
+Datei nicht (gemessen). Smoke-Test: CRLF → Exit 1 mit Meldung, LF → Exit 0;
+`bash -n` 8/8; `test.mjs`, `test-index.mjs`, `test-wiring.mjs` und
+`bench-mcp.mjs` Exit 0.
+
+Offen: Commit und Push dieses Repos; getrennte Commits für `~/.agents`,
+`AI+IDE-Hints` und `python-project-template`; die fünf Nachbar-Repos mit
+eigenem Hook-Stand haben nur die AGENTS.md-Regel, noch kein Laufzeit-Gate.

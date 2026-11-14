@@ -164,7 +164,7 @@ const READ_CMDLETS = new Set([
   "import-csv", "convertfrom-stringdata", "select-string", "compare-object", "add-member",
   "select-xml", "start-sleep", "write-output", "write-host",
   "write-information", "write-verbose", "write-warning", "write-debug",
-  "new-object", "new-guid", "new-timespan", "new-timespan",
+  "new-guid", "new-timespan", "new-timespan",
   // Aliase
   "gci", "gi", "gc", "cat", "type", "ls", "dir", "pwd", "gl",
   "cd", "chdir", "set-location", "push-location", "pop-location", "sl", "cls", "clear-host",
@@ -309,12 +309,19 @@ function classifyGit(tokens) {
 
   // git config: lesen nur mit --get/--list oder genau einem Positionsargument.
   if (sub === "config") {
+    if (/(^|\s)(--replace-all|--add|--unset|--unset-all|--rename-section|--remove-section|--edit|-e)(\s|=|$)/.test(" " + restText)) return "write"
     if (/(^|\s)(--get|--get-all|--get-regexp|--list|-l|--show-origin|--name-only)(\s|$)/.test(" " + restText)) return "read"
     const positional = rest.filter((t) => !t.startsWith("-"))
     return positional.length >= 2 ? "write" : "read"
   }
   if (sub === "remote") {
     return /(^|\s)(add|remove|rename|set-url|set-head|prune|update)(\s|$)/.test(" " + restText) ? "write" : "read"
+  }
+  // git stash ohne Unterbefehl ist ein push; -u, -k und -a sind Schreibformen.
+  // Lesend sind nur list und show.
+  if (sub === "stash") {
+    const stashSub = (rest.find((t) => !t.startsWith("-")) ?? "").toLowerCase()
+    return stashSub === "list" || stashSub === "show" ? "read" : "write"
   }
 
   const guard = GIT_READ_ONLY_ARGS[sub]
@@ -617,6 +624,17 @@ function isHelpVersionOnly(s) {
   return HELP_VERSION_ARGS.has(arg) || arg.toLowerCase() === "help" || arg.toLowerCase() === "version"
 }
 
+// New-Object erzeugt beliebige .NET-Objekte. Nur wenige Typen sind rein lesend
+// (Puffer, Zaehler, Listen). WebClient oder StreamWriter koennen Netz nutzen oder
+// Dateien schreiben und bleiben deshalb Rueckfrage.
+const NEW_OBJECT_READ_TYPES =
+  /^(?:system\.)?(?:io\.streamreader|text\.stringbuilder|diagnostics\.stopwatch|collections\.(?:arraylist|hashtable|generic\.list))$/i
+function classifyNewObject(s) {
+  const m = /-typename\s+(\S+)|^\s*new-object\s+(?!-)(\S+)/i.exec(s)
+  const type = (m?.[1] ?? m?.[2] ?? "").replace(/[([].*$/, "")
+  return NEW_OBJECT_READ_TYPES.test(type) ? "read" : "unknown"
+}
+
 function classifyCommand(s, lower, ctx) {
   if (isHelpVersionOnly(s)) return "read"
 
@@ -648,6 +666,7 @@ function classifyCommand(s, lower, ctx) {
   if (NET_CMD_NAMES.has(base)) return classifyNetwork(s)
   if (base === "python" || base === "python.exe" || base === "py" || base === "py.exe") return classifyPython(s, ctx)
 
+  if (lower === "new-object") return classifyNewObject(s)
   if (READ_CMDLETS.has(lower)) return "read"
   if (READ_BINARIES.has(lower)) return "read"
   if (lower === "node" || lower === "node.exe") return classifyNode(s, ctx)
@@ -758,7 +777,10 @@ const MCP_WRITE_VERBS = new Set([
   "call", "manage", "register", "enable", "disable", "configure", "start",
   "stop", "restart", "cancel", "resume", "sleep", "terminate", "archive",
   "unarchive", "grant", "revoke", "invite", "transfer", "pay", "purchase",
-  "buy", "tag", "release", "deploy",
+  "buy", "tag", "release", "deploy", "sync", "save", "export", "import",
+  "share", "merge", "commit", "reserve", "book", "close", "apply", "generate",
+  "build", "restore", "replace", "append", "insert", "upsert", "modify",
+  "change", "schedule", "order",
 ])
 
 // Loeschen und Zerstoeren steht ueber Schreiben: ein Name mit "search" und
@@ -1513,7 +1535,7 @@ function extractTargets(statement, vars) {
   if (copyTargets !== undefined) return copyTargets
 
   let explicit = false
-  for (const m of s.matchAll(/(?<![-\w])-(?:(?:Literal)?Path|Destination|FilePath)\b\s*(?:=|:)?\s*(?:"([^"]*)"|'([^']*)'|([^\s;|()]+))/gi)) {
+  for (const m of s.matchAll(/(?<![-\w])-(?:(?:Literal)?Path|Destination|FilePath|Target)\b\s*(?:=|:)?\s*(?:"([^"]*)"|'([^']*)'|([^\s;|()]+))/gi)) {
     explicit = true
     add(m[1] ?? m[2] ?? m[3])
   }
@@ -1697,13 +1719,25 @@ function updateVarMap(statement, vars) {
   const assignment = /^\$(\w+)\s*(?:=|\+=|-=|\*=|\/=)/.exec(text)
   if (assignment) {
     vars.delete(assignment[1].toLowerCase())
-    return true
+    // Nur ein Literal gilt als reine Bindung. Alles andere (Befehl, Aufruf,
+    // .NET-Methode) wird weiter geprueft, sonst waere "$x = Remove-Item ..."
+    // unsichtbar.
+    const rhs = text.slice(assignment[0].length).trim()
+    return /^(?:-?\d+(?:\.\d+)?|"[^"]*"|'[^']*'|\$[\w:.]+|\$null|\$true|\$false)$/i.test(rhs)
   }
   return false
 }
 
 function hasStateChange(statement) {
   return ANY_LOCATION_RE.test(statement) || ASSIGNMENT_RE.test(statement)
+}
+
+// Zuweisung vor dem Befehl: "$null = Remove-Item ..." hat den Befehl hinter dem
+// "=". Ohne diesen Schnitt erkennt die Ziel- und Loeschpruefung ihn nicht, weil
+// der Befehl nicht am Segmentanfang steht. Nur fuer die Schreibzielpruefung
+// gedacht; die Variablenkarte bleibt unveraendert.
+function stripAssignment(statement) {
+  return String(statement).replace(/^\s*\$[\w:]+(?:\.\w+)*\s*(?:[+\-*/])?=\s*/, "")
 }
 
 function scopeWrites(statements, options) {
@@ -1768,8 +1802,10 @@ function scopeWrites(statements, options) {
     braceDepth = Math.max(0, braceDepth + open - close)
 
     if (classifyStatement(text) !== "filewrite") continue
-    const deletion = deletionCommand(text) !== null
-    const targets = extractTargets(text, vars)
+    // Der Befehl ohne Zuweisung ("$null = Remove-Item ...") fuer Loesch- und Zielpruefung.
+    const command = stripAssignment(text)
+    const deletion = deletionCommand(command) !== null
+    const targets = extractTargets(command, vars)
     if (!targets || !targets.length) {
       return { ok: false, reason: `unpruefbar: Ziel unklar: ${text.slice(0, 60)}` }
     }
@@ -1797,9 +1833,9 @@ function scopeWrites(statements, options) {
       }
     }
 
-    const flags = deletionFlags(statement)
-    const recursive = /-Recurse\b/i.test(statement)
-      || /\brm\s+-[a-z]*r/i.test(statement)
+    const flags = deletionFlags(command)
+    const recursive = /-Recurse\b/i.test(command)
+      || /\brm\s+-[a-z]*r/i.test(command)
       || (flags !== null && flags.has("recurse"))
     if (recursive) {
       for (const abs of resolved) {
@@ -1900,6 +1936,19 @@ const NET_BLOCK_FLAGS = new Set([
 ])
 const NET_SAFE_METHODS = new Set(["get", "head"])
 
+// PowerShell nimmt eindeutige Abkuerzungen von Parameternamen an (-M, -B, -OutF).
+// Ein Flag, das Praefix eines gesperrten Parameters ist, gilt deshalb als dieser
+// Parameter. -M kann auch -MaximumRedirection sein; dann wird der Wert als
+// Methode geprueft und scheitert bei jedem Nicht-GET (fail closed).
+const NET_METHOD_FLAG = "-method"
+function netFlagKind(flag) {
+  if (!flag.startsWith("-") || flag.length < 2) return null
+  if (NET_BLOCK_FLAGS.has(flag)) return "block"
+  for (const blocked of NET_BLOCK_FLAGS) if (blocked.startsWith(flag)) return "block"
+  if (NET_METHOD_FLAG.startsWith(flag)) return "method"
+  return null
+}
+
 function classifyNetwork(statement) {
   const tokens = tokenizeCli(statement)
   for (let i = 1; i < tokens.length; i++) {
@@ -1907,8 +1956,9 @@ function classifyNetwork(statement) {
     const lowerT = t.toLowerCase()
     const eq = lowerT.indexOf("=")
     const flag = eq > 0 ? lowerT.slice(0, eq) : lowerT
-    if (NET_BLOCK_FLAGS.has(flag)) return "unknown"
-    if (flag === "-method") {
+    const kind = netFlagKind(flag)
+    if (kind === "block") return "unknown"
+    if (kind === "method") {
       const value = (eq > 0 ? lowerT.slice(eq + 1) : (tokens[i + 1] ?? "")).toLowerCase()
       if (!value || value.startsWith("-") || !NET_SAFE_METHODS.has(value)) return "unknown"
       if (eq <= 0) i++ // Wert steht als eigenes Token; wird mitgenommen
@@ -2215,6 +2265,51 @@ function classifyGh(statement) {
  *   appData - Windows-Roaming-Konfigurationsordner; nur fuer die enge Ruff-Ausnahme
  * @returns {{decision: "allow" | "ask" | "deny", reason: string, message?: string}}
  */
+// Kommentar ab "#" entfernen, aber nur ausserhalb von Anfuehrungszeichen. Ein
+// "#" in einem String ("a # b") ist Text; der fruehere Schnitt verbarg den Rest
+// der Zeile vor allen Pruefungen. Ein offenes Zitat laesst den Rest stehen
+// (fail closed: mehr Text bleibt sichtbar).
+function stripComment(line) {
+  let quote = null
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (quote) {
+      if (quote === '"' && ch === "`") { i++; continue }
+      if (ch === quote) {
+        if (line[i + 1] === quote) { i++; continue }
+        quote = null
+      }
+      continue
+    }
+    if (ch === '"' || ch === "'") { quote = ch; continue }
+    if (ch === "#" && (i === 0 || /\s/.test(line[i - 1]))) return line.slice(0, i)
+  }
+  return line
+}
+
+// Teilausdruecke, die PowerShell beim Auswerten ausfuehrt: $( ... ) auch in
+// doppelt gequoteten Strings sowie @( ... ) und @{ ... }. stripStrings wuerde
+// sie sonst verbergen. Ein nicht geschlossener Ausdruck liefert keinen Teil
+// und bleibt bei der normalen Pruefung.
+function subexpressions(script) {
+  const found = []
+  // @( und @{ nur als Literal: ein vorangehendes Wort- oder Klammerzeichen macht
+  // es zu einem Index wie stash@{0}, der nichts ausfuehrt.
+  const re = /\$\(|(?<![\w)\]}])@[({]/g
+  let m
+  while ((m = re.exec(script)) !== null) {
+    const start = m.index + m[0].length
+    let depth = 1
+    let i = start
+    for (; i < script.length && depth > 0; i++) {
+      if (script[i] === "(" || script[i] === "{") depth++
+      else if (script[i] === ")" || script[i] === "}") depth--
+    }
+    if (depth === 0) found.push(script.slice(start, i - 1))
+  }
+  return found
+}
+
 export function evaluate(script, options = {}) {
   const raw = String(script ?? "")
   if (!raw.trim()) return { decision: "ask", reason: "leer" }
@@ -2223,10 +2318,19 @@ export function evaluate(script, options = {}) {
     if (rx.test(raw)) return { decision: "deny", reason: `destruktiv: ${rx.source}` }
   }
 
+  // Teilausdruecke werden wie eigene Skripte bewertet; jede Abweichung von
+  // allow schlaegt auf das Ganze durch.
+  for (const inner of subexpressions(raw)) {
+    const r = evaluate(inner, options)
+    if (r.decision !== "allow") {
+      return { decision: r.decision, reason: `Teilausdruck: ${r.reason}`, ...(r.message ? { message: r.message } : {}) }
+    }
+  }
+
   // Kommentare und Here-String-Inhalte sind Daten, keine Befehle.
   const text = stripHereStrings(raw)
     .split(/\r?\n/)
-    .map((line) => line.replace(/(^|\s)#.*$/, ""))
+    .map((line) => stripComment(line))
     .join("\n")
 
   // Destruktive Git-Formen zuerst: Sie sollen auch dann verweigert werden,
@@ -2301,6 +2405,14 @@ export function evaluate(script, options = {}) {
 
   if (!statements.length) return { decision: "allow", reason: "nur Ausgabe" }
 
+  // Aussen-Schreiben verweigern, auch wenn der Rest unlesbar ist. Sonst ginge
+  // der ganze Befehl an das Modell, das ihn auf allow heben koennte.
+  if (kinds.has("filewrite")) {
+    const early = scopeWrites(statements, options)
+    if (!early.ok && /^(ausserhalb des Projekts|geschuetzter Pfad|rekursiv auf|unpruefbar:)/.test(early.reason)) {
+      return { decision: "deny", reason: early.reason }
+    }
+  }
   if (kinds.has("write") || kinds.has("unknown")) {
     return { decision: "ask", reason: `nicht einordenbar: ${unknowns[0] ?? ""}` }
   }

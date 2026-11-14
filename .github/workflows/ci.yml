@@ -26,18 +26,24 @@ jobs:
         node: ["20", "22"]
     steps:
       - name: Auschecken
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Node einrichten
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
+
+      - name: Abhaengigkeiten (npm ci)
+        run: npm ci
 
       - name: Klassifizierer-Tests
         run: node test.mjs
 
       - name: Verdrahtungstest (Fake-git)
         run: node test-wiring.mjs
+
+      - name: Verdrahtung index.js (Plugin)
+        run: node test-index.mjs
 
       - name: MCP-Weiterleitung (33 Faelle)
         run: node bench-mcp.mjs
@@ -52,11 +58,13 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           if grep -RInE '(/Users/[A-Za-z0-9._-]{3,}/|[A-Za-z]:\\+Users\\+[A-Za-z0-9._-]{3,})' \
+               --exclude-dir=node_modules \
                --include='*.js' --include='*.mjs' --include='*.json' --include='*.md' --include='*.ps1' .; then
             echo "::error::Personenbezogener Pfad gefunden."
             exit 1
           fi
           if grep -RInE '(sk-[A-Za-z0-9]{16,}|oc_sk_|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})' \
+               --exclude-dir=node_modules \
                --include='*.js' --include='*.mjs' --include='*.json' --include='*.md' --include='*.ps1' .; then
             echo "::error::Moeglicher Zugangsschluessel gefunden."
             exit 1

@@ -144,6 +144,20 @@ _gate_conf=".githooks/test-gate.conf"
 if [ "${GITHOOKS_TEST_GATE:-1}" = "0" ]; then
   echo "Test-Gate: GITHOOKS_TEST_GATE=0 - uebersprungen."
 elif [ -f "$_gate_conf" ]; then
+  # CRLF macht das Gate still: der letzte Wert endet auf \r, das Praefix passt
+  # nicht mehr und der Testbefehl heisst "...\r". Dann lieber abbrechen.
+  # case statt grep: die Git-Bash-Grep findet ein CR in der Datei nicht.
+  _gate_head="$(cat "$_gate_conf")"
+  case "$_gate_head" in
+    *$'\r'*)
+      echo "" >&2
+      echo "${_gate_label} BLOCKIERT - $_gate_conf enthaelt CRLF-Zeilenenden." >&2
+      echo "  Das Gate wuerde still ueberspringen oder einen Befehl mit '\\r' starten." >&2
+      echo "  Fix: Datei auf LF umstellen (Editor; .gitattributes: .githooks/* text eol=lf)." >&2
+      exit 1
+      ;;
+  esac
+  unset _gate_head
   set +e
   _gate_prefixes=""
   _gate_python=""

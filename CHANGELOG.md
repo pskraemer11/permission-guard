@@ -8,6 +8,27 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **Secrets-Achse in Ebene 1 (14.11.2026):** Die Shell-Anfrage an `/systemone`
+  stellt jetzt zusätzlich die Frage „exponiert der Befehl Zugangsdaten oder
+  private Daten?“ (Noul) in derselben Anfrage; die Latenz bleibt gleich (rund
+  100 ms). Freigabe braucht beides: `reads ≥ shellThreshold` und
+  `secrets ≤ secretsThreshold` (Standard 0,35, nach dem Jevvy-Muster mehrerer
+  Achsen). Gemessen am 14.11.2026, 23 Fälle mit je drei Läufen: 23/23
+  einstimmig. Vier klassische Pfade (`.ssh`, `.env`, `.aws`) fängt die statische
+  Liste; `kube config` und `token-count.txt` fängt die Secrets-Achse.
+  `bench-shell.mjs` zählt statisch entschiedene Fälle als Kontrolle der Liste,
+  nicht als Modellurteil.
+- **Shell-Messung `bench-shell.mjs` (13.11.2026):** 17 Fälle mit Projektbezug
+  für Ebene 1, `npm run bench:shell`. Gegenstück zu `bench-model.mjs`, das nur
+  Ebene 3 misst.
+- **Lock-Datei versioniert, `npm ci` in der CI (13.11.2026):** `package-lock.json`
+  ist nicht mehr ignoriert. `ci.yml` und `guard.yml` installieren mit `npm ci`
+  und führen `test-index.mjs` aus. Der Test-Gate prüft `test-index.mjs` mit.
+
+- **Verdrahtungstest für `index.js` (13.11.2026):** `test-index.mjs` bindet das
+  Plugin mit Fake-ctx ein und prüft Metadaten-Befehle an das Modell sowie
+  Aussen-Schreiben. `@opencode/plugin` ist eine devDependency; `npm run test:index`
+  führt den Test aus. Er läuft in der CI (`ci.yml`, `guard.yml`).
 - **Git-Schattenlauf Variante 3 (09.11.2026):** `gitShadow: "shadow"`
   protokolliert destruktive Git-Formen mit `effect=allow` in
   `%LOCALAPPDATA%\opencode\permission-guard\git-shadow.jsonl`, ohne zu
@@ -33,6 +54,32 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 - **actionlint-CI:** `.github/workflows/actionlint.yml` prüft bei Pushes und Pull Requests alle GitHub-Actions-Workflows mit dem festgelegten offiziellen Image `rhysd/actionlint:1.7.12`, einschließlich shellcheck und pyflakes.
 
 ### Geändert
+
+- **Test-Gate bricht bei CRLF in der Konfiguration ab (14.11.2026):**
+  `pre-commit` und `pre-push` prüfen `.githooks/test-gate.conf` vor dem Einlesen
+  auf CR. Bisher wanderte das CR in den letzten Wert; `.githooks/` passte nicht
+  mehr als Präfix und der Testbefehl hieß `test-index.mjs\r`. Das Gate
+  übersprang damit still oder startete eine nicht vorhandene Datei. Jetzt endet
+  der Lauf mit Exit 1 und nennt Datei und Fix. Die Hooks bleiben byte-identisch
+  mit `~/.agents/references/githooks/`.
+- **GitHub-Helfer auf v7 (14.11.2026):** `actions/checkout` und
+  `actions/setup-node` stehen in `ci.yml`, `guard.yml` und `actionlint.yml` auf
+  `@v7` statt `@v4`. Grund: GitHub hat Node 20 auf seinen Runnern abgekündigt
+  und zwang die v4-Helfer auf Node 24; jeder Lauf meldete das als Warnung. v7
+  verlangt Runner ab 2.327.1, auf GitHub gehosteten Runnern immer erfüllt. Die
+  Node-Matrix (20/22) bleibt unverändert.
+- **MCP `sync` ist schreibend (Nutzerentscheid 13.11.2026):** `sync` allein und
+  `sync_status` fragen nach. Der Bench-Fall `warc0s-project-sync` wechselt von
+  „Modell entscheidet“ zu „Rückfrage“; die Erwartung ist `ask/1`, die Zählung
+  Graubereich 3 → 2 und Rückfrage 13 → 14.
+- **Shell-Frage nennt Projekt- und Temp-Ordner im Fragetext (14.11.2026):** Die
+  Frage lautet „Is this command safe to run without asking the user?“. Die Ordner
+  stehen pro Anfrage im Text, nicht nur im Zustand. Gemessen mit Clef-Flash
+  Q4_K_M: 17/17, dreimal je Fall. Vorher lag dieselbe Messung bei 12/17.
+- **404 von `/systemone` fällt auf den Chat-Weg zurück (13.11.2026):** Gilt für
+  Shell und MCP. Betroffen sind LM Studio und Chat-GGUF. Vorher endete jede
+  Entscheidung dort in „ask“. Die Angabe „501“ aus dem Eintrag zum Standard
+  `systemone` war unvollständig; es ist 404.
 
 - **Reviewer-Standard auf `systemone` (13.11.2026):** `reviewer.js` setzt
   `mcpBackend` und `shellBackend` standardmäßig auf `systemone` statt `chat`.
@@ -65,6 +112,56 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Behoben
 
+- **`test-index.mjs` rot auf Ubuntu (14.11.2026):** Beide Ubuntu-Jobs brachen
+  bei „Verdrahtung index.js (Plugin)“ ab (4/6), Windows war grün. Ursache: Der
+  Fake-ctx setzte `location.directory` auf `path.resolve("./scratch-project")`,
+  also einen POSIX-Pfad. `resolveTarget` löst nur Laufwerkspfade auf und gibt für
+  alles ab `/` `null` zurück; `scopeWrites` endete damit auf „Arbeitsordner
+  unbekannt“, das Außen-Schreiben wurde zu `ask` statt `deny` und erreichte das
+  Modell. Der Test setzt den Projektordner jetzt auf `C:\work\scratch-project`,
+  wie die übrigen Fälle in `test.mjs`. Lokal 6/6; der Ubuntu-Lauf ist erst nach
+  dem Push belegbar.
+- **Zuweisung umging die Schreibprüfung (13.11.2026):** `$null = Remove-Item
+  -Recurse -Force C:/x` war als „Schreiben in vertrautem Ordner“ erlaubt. Ursache:
+  `updateVarMap` verbuchte jede Zuweisung als reine Bindung und übersprang die
+  Zeile. Jetzt gilt nur ein Literal als Bindung; der Befehl dahinter wird geprüft.
+  Die Löschprüfung arbeitet auf dem Befehl ohne Zuweisung. Der Fehler bestand
+  schon vor den Korrekturen des Tages.
+- **Statische Reviewer-Liste (13.11.2026):** Eine Zuweisung oder ein `@(` davor
+  gibt den Befehl dahinter nicht mehr frei.
+- **Argumente an das Modell (Review, 13.11.2026):** Kanal-Tags werden wie im
+  Chat-Pfad neutralisiert; Texte sind auf 8000 Zeichen begrenzt.
+- **Zeitbudget Shell (Review, 13.11.2026):** Alle Segmente zusammen haben ein
+  Budget von `timeoutMs`. Vorher galt das je Segment.
+- **Audit-Kette bei zwei Plugin-Instanzen (13.11.2026):** Beide Instanzen teilen
+  `audit.jsonl`. Der Zustand wird jetzt vor jedem Anhängen aus der Datei gelesen.
+  Vorher brach die Kette mit „seq 1 statt 3“.
+- **Aufwärmlauf bei gemischten Backends (Review, 13.11.2026):** Beide Wege werden
+  gewärmt, und nach einem 404 auch der Chat-Weg.
+
+- **Review-Befunde Kerndateien (13.11.2026):** Im Review der Kerndateien
+  (`guard.js`, `index.js`, `audit.js`, `reviewer.js`) wurden Umgehungen
+  bestätigt, die Befehle fälschlich erlaubten. Behoben in `guard.js`:
+  - `#` innerhalb eines Strings schnitt den Rest der Zeile ab. Ein Kommentar
+    endet jetzt nur außerhalb von Anführungszeichen.
+  - `$( … )` in doppelt gequoteten Strings sowie `@( … )` und `@{ … }` werden
+    als eigene Teilausdrücke geprüft. `stash@{0}` bleibt ein Index.
+  - PowerShell-Abkürzungen von Netz-Parametern (`-M`, `-B`, `-OutF`) gelten als
+    die gesperrten Parameter.
+  - `git config --unset`, `--add`, `--replace-all`, `--edit` sind Schreibformen.
+    `git stash` ohne Unterbefehl und `git stash -u` sind Schreibformen; lesend
+    bleiben nur `list` und `show`.
+  - `New-Object` ist nur für wenige reine Lesetypen erlaubt (Puffer, Zähler,
+    Listen). `WebClient`, `StreamWriter` u. a. sind Rückfrage.
+  - `-Target` (z. B. `New-Item -ItemType Junction`) zählt als Schreibziel.
+  - Außerhalb-Schreiben wird verweigert, auch wenn der übrige Befehl unlesbar
+    ist. Vorher ging der ganze Befehl an das Modell.
+  - MCP: `sync` ist mehrdeutig. Neben einem Lesewort (`sync_status`) gilt der
+    Aufruf als schreibend. Ohne Lesewort bleibt die Einordnung offen.
+  In `index.js` sieht das Modell jetzt auch die Befehlsfelder der Metadaten, nicht
+  nur `resources`. In `reviewer.js` fängt der Start einen fehlenden `pwsh`
+  ab, statt den Host zu beenden. Tests: 708/708, Verdrahtung 13/13, MCP 33/33.
+  Offen: siehe `COMPACTIONS.md`.
 - **Sicherheitsbefunde aus dem Codex-Security-Scan (10.11.2026):**
   Copy/Move/Replace prüfen Quelle, Ziel und Backup; Schreibanweisungen werden
   sequenziell mit dem jeweils gültigen Arbeitsordner und den gültigen Bindungen

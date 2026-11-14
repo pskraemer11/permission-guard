@@ -1,8 +1,8 @@
 // Testregime fuer MCP (Schritt E, 04.11.2026).
 //
 // Prueft das Urteil aus Schritt C gegen eine feste Sammlung von 33 Aufrufen mit
-// vorher festgelegtem Soll (mcp-cases.jsonl): 8 muessen freigegeben, 13
-// zurueckgefragt und 9 aktiv verweigert werden; 3 Faelle gehen ins Modell
+// vorher festgelegtem Soll (mcp-cases.jsonl): 8 muessen freigegeben, 14
+// zurueckgefragt und 9 aktiv verweigert werden; 2 Faelle gehen ins Modell
 // (Graubereich). Neun Verbote sind rund ein Drittel - die Vorgabe des Plans.
 //
 // 9 der 33 Faelle stammen aus dem oeffentlichen Testkatalog von
@@ -75,7 +75,7 @@ if (!cases.length) {
 
 // Der Bestand ist Teil des Regimes: verschwindet ein Fall, muss das auffallen,
 // nicht stillschweigend als "bestanden" durchgehen.
-const EXPECTED = { allow: 8, ask: 13, deny: 9, model: 3 }
+const EXPECTED = { allow: 8, ask: 14, deny: 9, model: 2 }
 const counts = { allow: 0, ask: 0, deny: 0, model: 0 }
 const ids = new Set()
 for (const item of cases) {

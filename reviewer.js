@@ -88,6 +88,11 @@ const DEFAULTS = {
   // Ebene 1 (Shell) nimmt denselben Weg.
   shellBackend: "systemone",
   shellThreshold: 0.7,
+  // Freigabe braucht zusaetzlich, dass der Befehl nach Modellurteil kaum
+  // Zugangsdaten oder private Daten exponiert (Jevvy-Muster: mehrere Achsen,
+  // alle muessen bestehen). Die Frage laeuft in derselben systemone-Anfrage
+  // und kostet damit keine zweite Rundreise. Grenze: secrets <= Schwelle.
+  secretsThreshold: 0.35,
   // Zusaetzliche Risikomuster aus der Projektkonfiguration.
   extraRisky: [],
   // Schattenlauf Variante 3: "off" oder "shadow". Im Schattenmodus werden
@@ -276,6 +281,16 @@ export function neverAutoApprove(raw, extraRisky = []) {
     for (const pattern of RISKY) {
       if (pattern === RISKY[0] && isHarmlessExpression(part.normalized)) continue
       if (pattern.test(part.normalized)) return `Risikomuster: ${pattern.source}`
+    }
+    // Zuweisung oder Array-Literal davor ("$null = Remove-Item ...", "@(rm ...)"):
+    // der Befehl dahinter wird wie ein eigenes Segment geprueft. Die Ausnahme fuer
+    // Ausdruecke (RISKY[0]) gilt hier nicht, sonst bliebe der Befehl ungeprueft.
+    const inner = part.normalized.replace(/^(?:@[({]+|\$[\w:]+(?:\.\w+)*\s*(?:[+\-*/])?=\s*)+/, "")
+    if (inner !== part.normalized) {
+      for (const pattern of RISKY) {
+        if (pattern === RISKY[0]) continue
+        if (pattern.test(inner)) return `Risikomuster: ${pattern.source}`
+      }
     }
     for (const pattern of extraRisky) {
       let rx
@@ -494,30 +509,61 @@ export const MCP_DECISION_QUESTION = {
   },
 }
 
-// Dieselbe Idee fuer Shell-Befehle (Ebene 1). Gemessen 05.11.2026 mit
-// Clef-Flash: Freigabe-Faelle 0,94-0,97, Aenderungen 0,02-0,06 - 14/14 bei
-// jeder Schwelle von 0,5 bis 0,9.
-export const SHELL_DECISION_QUESTION = {
-  type: "choice",
-  instructions: "Does this shell command only read data, or does it change something?",
-  criteria: {
-    reads: "Lists, reads, searches, or displays files, logs, or repository state. It creates, changes, deletes, installs, or sends nothing.",
-    changes: "Creates, modifies, deletes or moves files, installs packages, changes git state, sends data over the network, or executes arbitrary code.",
-  },
+// Shell-Befehle (Ebene 1). Die Ordner stehen im Fragetext selbst, pro Anfrage aus
+// Projekt- und Temp-Ordner. Das Modell gibt nur Wahrscheinlichkeiten aus; "im Projekt
+// erlaubt" laesst sich nicht aus einem Zustandsfeld ableiten, die Frage muss es nennen.
+// Gemessen 13.11.2026 mit Clef-Flash Q4_K_M, 17 Faelle, je Fall dreimal: 17/17.
+// Zum Vergleich: Ordner nur im Zustand und die alte Frage lagen bei 12/17.
+export function shellDecisionQuestion(project = "", temp = "") {
+  const folders = [project, temp].map((folder) => String(folder ?? "").trim()).filter(Boolean)
+  const orList = folders.length ? folders.join(" or ") : "the project folder or the temp folder"
+  const andList = folders.length ? folders.join(" and ") : "the project folder and the temp folder"
+  return {
+    type: "choice",
+    instructions: "Is this command safe to run without asking the user?",
+    criteria: {
+      reads: `Safe: reads or lists anything, or writes only inside ${orList}.`,
+      changes: `Unsafe: writes outside ${andList}, changes system state, installs software, sends data, or reads credentials.`,
+    },
+  }
 }
 
-export function buildShellSystemoneRequest({ command, model = "" }) {
+export const SECRETS_QUESTION = {
+  type: "noul",
+  instructions:
+    "Would running this command expose credentials, API keys, tokens, passwords, or other private data? Reading a file that contains them counts as exposing.",
+}
+
+export function buildShellSystemoneRequest({ command, model = "", project = "", temp = "" }) {
   return {
     model,
-    state: { command: String(command ?? "") },
-    questions: { effect: SHELL_DECISION_QUESTION },
+    state: { command: String(command ?? ""), project: String(project ?? ""), temp: String(temp ?? "") },
+    questions: { effect: shellDecisionQuestion(project, temp), secrets: SECRETS_QUESTION },
   }
+}
+
+// Argumente gehen als Daten ins Modell. Kanal-Tags werden neutralisiert wie im
+// Chat-Pfad; Texte werden auf 8000 Zeichen begrenzt. Die Groessenpruefung (16 KB)
+// bleibt davor in reviewMcp.
+const SYSTEMONE_FIELD_LIMIT = 8000
+export function sanitizeArguments(value, depth = 0) {
+  if (depth > 8) return null
+  if (typeof value === "string") return escapeChannelTags(value).slice(0, SYSTEMONE_FIELD_LIMIT)
+  if (Array.isArray(value)) return value.slice(0, 100).map((item) => sanitizeArguments(item, depth + 1))
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .slice(0, 100)
+        .map(([key, item]) => [key, sanitizeArguments(item, depth + 1)]),
+    )
+  }
+  return value
 }
 
 export function buildSystemoneRequest({ criteria, input, model = "" }) {
   return {
     model,
-    state: { tool: criteria?.action?.tool ?? "", arguments: input ?? {} },
+    state: { tool: criteria?.action?.tool ?? "", arguments: sanitizeArguments(input ?? {}) },
     questions: { effect: MCP_DECISION_QUESTION },
   }
 }
@@ -531,10 +577,10 @@ export function systemoneVerdict(probability, threshold = 0.7) {
   return { decision: "ask", reason: `Modell: veraendert oder unklar (p=${p.toFixed(3)})`, probability: p }
 }
 
-async function requestSystemone(payload, cfg) {
+async function requestSystemone(payload, cfg, timeoutMs = cfg.timeoutMs || 2000) {
   if (typeof fetch !== "function") return { ok: false, reason: "kein fetch" }
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), Math.max(250, cfg.timeoutMs || 2000))
+  const timer = setTimeout(() => controller.abort(), Math.max(250, timeoutMs))
   try {
     const headers = { "content-type": "application/json" }
     if (cfg.apiKeyEnv && process.env[cfg.apiKeyEnv]) {
@@ -546,11 +592,15 @@ async function requestSystemone(payload, cfg) {
       signal: controller.signal,
       body: JSON.stringify({ ...payload, model: cfg.model || payload.model }),
     })
-    if (!response.ok) return { ok: false, reason: `HTTP ${response.status}` }
+    // 404: das Backend kennt /systemone nicht (LM Studio, Chat-GGUF). Der Aufrufer
+    // faellt dann auf den Chat-Weg zurueck, statt jede Frage in "ask" enden zu lassen.
+    if (!response.ok) return { ok: false, unsupported: response.status === 404, reason: `HTTP ${response.status}` }
     const data = await response.json()
     const probability = data?.answers?.effect?.probabilities?.reads
     if (typeof probability !== "number") return { ok: false, reason: "keine Wahrscheinlichkeit" }
-    return { ok: true, probability }
+    // Die Secrets-Frage antwortet mit, wenn der Aufruf sie gestellt hat.
+    const secrets = data?.answers?.secrets?.noul
+    return { ok: true, probability, secrets: typeof secrets === "number" ? secrets : null }
   } catch (error) {
     return { ok: false, reason: String(error?.name ?? "Fehler") }
   } finally {
@@ -594,6 +644,9 @@ export async function ensureRunning(config) {
       ["-NoProfile", "-WindowStyle", "Hidden", "-File", starter, "-Port", port],
       { detached: true, stdio: "ignore", windowsHide: true },
     )
+    // Fehlt pwsh, meldet Node das asynchron als 'error'-Ereignis. Ohne Listener
+    // beendet das den Prozess und mit ihm den OpenCode-Host.
+    child.on("error", () => {})
     child.unref()
     return { ok: true, started: true, port }
   } catch (error) {
@@ -614,6 +667,25 @@ export async function warmup(config) {
   if (typeof fetch !== "function") return { ok: false, reason: "kein fetch" }
 
   const started = Date.now()
+  // Gewaermt wird jeder Weg, den die Konfiguration nutzt. Bei gemischten Backends
+  // (z. B. MCP systemone, Shell Chat) bleibt sonst ein Modell kalt. Antwortet
+  // systemone mit 404, gilt der Chat-Weg als Rueckfall und wird ebenfalls gewaermt.
+  const wantsSystemone = cfg.mcpBackend === "systemone" || cfg.shellBackend === "systemone"
+  const wantsChat = cfg.mcpBackend !== "systemone" || cfg.shellBackend !== "systemone"
+  const results = []
+  if (wantsSystemone) {
+    const first = await warmOne(cfg, "systemone")
+    results.push(first)
+    if (first.unsupported || wantsChat) results.push(await warmOne(cfg, "chat/completions"))
+  } else {
+    results.push(await warmOne(cfg, "chat/completions"))
+  }
+  const failed = results.find((result) => !result.ok)
+  return failed ? { ...failed, ms: Date.now() - started } : { ok: true, ms: Date.now() - started }
+}
+
+async function warmOne(cfg, endpoint) {
+  const started = Date.now()
   const controller = new AbortController()
   // Grosszuegiger als eine Entscheidung: beim Kaltstart muss das Modell erst
   // geladen werden, und dieser Aufruf soll nicht dafuer bestraft werden.
@@ -623,11 +695,9 @@ export async function warmup(config) {
     if (cfg.apiKeyEnv && process.env[cfg.apiKeyEnv]) {
       headers.authorization = `Bearer ${process.env[cfg.apiKeyEnv]}`
     }
-    // Entscheidungsmodelle kennen kein chat/completions; der Aufwaermlauf
-    // nutzt dann denselben Endpunkt wie die Entscheidung.
-    const systemone = cfg.mcpBackend === "systemone" || cfg.shellBackend === "systemone"
     const base = String(cfg.baseUrl).replace(/\/+$/, "")
-    const response = await fetch(`${base}/${systemone ? "systemone" : "chat/completions"}`, {
+    const systemone = endpoint === "systemone"
+    const response = await fetch(`${base}/${endpoint}`, {
       method: "POST",
       headers,
       signal: controller.signal,
@@ -648,7 +718,9 @@ export async function warmup(config) {
             },
       ),
     })
-    if (!response.ok) return { ok: false, reason: `HTTP ${response.status}`, ms: Date.now() - started }
+    if (!response.ok) {
+      return { ok: false, unsupported: systemone && response.status === 404, reason: `HTTP ${response.status}`, ms: Date.now() - started }
+    }
     await response.arrayBuffer()
     return { ok: true, ms: Date.now() - started }
   } catch (error) {
@@ -708,6 +780,33 @@ async function requestCompletion(messages, cfg) {
 }
 
 // Fragt das lokale Modell. Jeder Fehlerpfad endet bei "ask".
+// Jedes Segment einzeln bewerten; das schwaechste Ergebnis zaehlt. Ein harmloses
+// Segment darf ein schreibendes nicht ueberdecken. Ein Zeitbudget gilt fuer alle
+// Segmente zusammen, sonst waeren es bis zu Segmentzahl mal timeoutMs.
+async function shellBySystemone(commands, where, cfg) {
+  const segments = (commands ?? []).map((command) => String(command).trim()).filter(Boolean)
+  if (!segments.length) return { decision: "ask", reason: "leer" }
+  const deadline = Date.now() + Math.max(250, cfg.timeoutMs || 2000)
+  let lowest = 1
+  let highestSecrets = 0
+  for (const command of segments) {
+    const left = deadline - Date.now()
+    if (left <= 0) return { decision: "ask", reason: "Zeitbudget ueberschritten" }
+    const result = await requestSystemone(buildShellSystemoneRequest({ command, model: cfg.model, ...where }), cfg, left)
+    if (result.unsupported) return { unsupported: true }
+    if (!result.ok) return { decision: "ask", reason: result.reason }
+    lowest = Math.min(lowest, result.probability)
+    // Jede Antwort mit hohem Exponierungsrisiko ist Rueckfrage. Fehlt der Wert
+    // (Backend ohne zweite Frage), bleibt es bei der Hauptfrage allein.
+    if (result.secrets !== null) highestSecrets = Math.max(highestSecrets, result.secrets)
+  }
+  if (highestSecrets > (cfg.secretsThreshold ?? 0.35)) {
+    return { decision: "ask", reason: `Modell: exponiert Daten (s=${highestSecrets.toFixed(3)})`, probability: lowest, secrets: highestSecrets }
+  }
+  const verdict = systemoneVerdict(lowest, cfg.shellThreshold)
+  return { ...verdict, secrets: highestSecrets }
+}
+
 export async function review({ commands, project, temp, config }) {
   const cfg = config ?? loadConfig()
   if (!cfg.enabled) return { decision: "ask", reason: "Reviewer deaktiviert" }
@@ -716,17 +815,9 @@ export async function review({ commands, project, temp, config }) {
   if (risky) return { decision: "ask", reason: `statisch: ${risky}` }
 
   if (cfg.shellBackend === "systemone") {
-    // Jedes Segment einzeln bewerten; das schwaechste Ergebnis zaehlt. Ein
-    // harmloses Segment darf ein schreibendes nicht ueberdecken.
-    const segments = (commands ?? []).map((command) => String(command).trim()).filter(Boolean)
-    if (!segments.length) return { decision: "ask", reason: "leer" }
-    let lowest = 1
-    for (const command of segments) {
-      const result = await requestSystemone(buildShellSystemoneRequest({ command, model: cfg.model }), cfg)
-      if (!result.ok) return { decision: "ask", reason: result.reason }
-      lowest = Math.min(lowest, result.probability)
-    }
-    return systemoneVerdict(lowest, cfg.shellThreshold)
+    const verdict = await shellBySystemone(commands, { project, temp }, cfg)
+    if (!verdict.unsupported) return verdict
+    // 404: kein /systemone; unten laeuft der Chat-Weg.
   }
 
   const result = await requestCompletion(buildMessages({ commands, project, temp }), cfg)
@@ -747,8 +838,11 @@ export async function reviewMcp({ criteria, input, project, recent, config }) {
 
   if (cfg.mcpBackend === "systemone") {
     const result = await requestSystemone(buildSystemoneRequest({ criteria, input, model: cfg.model }), cfg)
-    if (!result.ok) return { decision: "ask", reason: result.reason }
-    return systemoneVerdict(result.probability, cfg.mcpThreshold)
+    if (!result.unsupported) {
+      if (!result.ok) return { decision: "ask", reason: result.reason }
+      return systemoneVerdict(result.probability, cfg.mcpThreshold)
+    }
+    // 404: kein /systemone; unten laeuft der Chat-Weg.
   }
 
   const three = cfg.mcpThreeWay === true

