@@ -5,6 +5,12 @@
 // abgefangen und mit einem Shell-Ereignis aufgerufen. fetch ist eine Attrappe,
 // die Modellanfragen mitschreibt. So bleibt der Test ohne laufendes Modell
 // deterministisch.
+//
+// Der Projektordner ist bewusst ein Windows-Pfad. guard.js loest nur
+// Laufwerkspfade auf (resolveTarget: alles ab "/" ist "Unix-Wurzel oder UNC");
+// mit einem POSIX-Pfad kaeme "Arbeitsordner unbekannt" heraus und dieselbe
+// Anweisung endete als "ask" statt "deny". Die Verdrahtung ist damit auf jeder
+// Plattform gleich pruefbar - die Ci-Matrix belegt das.
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -41,7 +47,7 @@ globalThis.fetch = async (url, options = {}) => {
 // Hook einsammeln: setup() ruft ctx.permission.hook("evaluate", fn) auf.
 let evaluateHook = null
 const ctx = {
-  location: { directory: path.resolve("./scratch-project") },
+  location: { directory: "C:\\work\\scratch-project" },
   permission: {
     hook: async (name, fn) => {
       if (name === "evaluate") evaluateHook = fn

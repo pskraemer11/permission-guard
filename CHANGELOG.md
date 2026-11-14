@@ -55,6 +55,12 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **GitHub-Helfer auf v7 (14.11.2026):** `actions/checkout` und
+  `actions/setup-node` stehen in `ci.yml`, `guard.yml` und `actionlint.yml` auf
+  `@v7` statt `@v4`. Grund: GitHub hat Node 20 auf seinen Runnern abgekündigt
+  und zwang die v4-Helfer auf Node 24; jeder Lauf meldete das als Warnung. v7
+  verlangt Runner ab 2.327.1, auf GitHub gehosteten Runnern immer erfüllt. Die
+  Node-Matrix (20/22) bleibt unverändert.
 - **MCP `sync` ist schreibend (Nutzerentscheid 13.11.2026):** `sync` allein und
   `sync_status` fragen nach. Der Bench-Fall `warc0s-project-sync` wechselt von
   „Modell entscheidet“ zu „Rückfrage“; die Erwartung ist `ask/1`, die Zählung
@@ -99,6 +105,15 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Behoben
 
+- **`test-index.mjs` rot auf Ubuntu (14.11.2026):** Beide Ubuntu-Jobs brachen
+  bei „Verdrahtung index.js (Plugin)“ ab (4/6), Windows war grün. Ursache: Der
+  Fake-ctx setzte `location.directory` auf `path.resolve("./scratch-project")`,
+  also einen POSIX-Pfad. `resolveTarget` löst nur Laufwerkspfade auf und gibt für
+  alles ab `/` `null` zurück; `scopeWrites` endete damit auf „Arbeitsordner
+  unbekannt“, das Außen-Schreiben wurde zu `ask` statt `deny` und erreichte das
+  Modell. Der Test setzt den Projektordner jetzt auf `C:\work\scratch-project`,
+  wie die übrigen Fälle in `test.mjs`. Lokal 6/6; der Ubuntu-Lauf ist erst nach
+  dem Push belegbar.
 - **Zuweisung umging die Schreibprüfung (13.11.2026):** `$null = Remove-Item
   -Recurse -Force C:/x` war als „Schreiben in vertrautem Ordner“ erlaubt. Ursache:
   `updateVarMap` verbuchte jede Zuweisung als reine Bindung und übersprang die
