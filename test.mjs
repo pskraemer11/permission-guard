@@ -1483,6 +1483,44 @@ for (const [name, ok] of diagnosticsChecks) {
 }
 console.log("-- Diagnose\n")
 
+// --- Secrets-Achse (14.11.2026): zweite Frage im Shell-systemone-Pfad ------
+// Freigabe braucht reads >= Schwelle UND secrets <= Schwelle. Das Modell
+// antwortet in derselben Anfrage; die Latenz bleibt gleich.
+const secretsChecks = []
+{
+  const saved = globalThis.fetch
+  const systemone = (reads, secrets) =>
+    async (url) => {
+      if (String(url).endsWith("/systemone")) {
+        return { ok: true, status: 200, json: async () => ({ answers: { effect: { probabilities: { reads } }, secrets: { noul: secrets } } }) }
+      }
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "Ja" } }] }) }
+    }
+
+  globalThis.fetch = systemone(0.9, 0.9)
+  const blocked = await review({ commands: ["Get-Content data.txt"], project: "P", temp: "T", config: { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 } })
+  secretsChecks.push(["hohe Exponierung blockt die Freigabe", blocked.decision === "ask" && /exponiert/.test(String(blocked.reason))])
+
+  globalThis.fetch = systemone(0.9, 0.2)
+  const allowed = await review({ commands: ["Get-Content data.txt"], project: "P", temp: "T", config: { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 } })
+  secretsChecks.push(["geringe Exponierung laesst allow zu", allowed.decision === "allow"])
+
+  globalThis.fetch = systemone(0.9, undefined)
+  const missing = await review({ commands: ["Get-Content data.txt"], project: "P", temp: "T", config: { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 } })
+  secretsChecks.push(["fehlender Secrets-Wert bleibt bei der Hauptfrage", missing.decision === "allow"])
+
+  globalThis.fetch = systemone(0.5, 0.1)
+  const low = await review({ commands: ["Get-Content data.txt"], project: "P", temp: "T", config: { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 } })
+  secretsChecks.push(["reads unter Schwelle bleibt Rueckfrage", low.decision === "ask"])
+
+  globalThis.fetch = saved
+}
+for (const [name, ok] of secretsChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- Secrets-Achse\n")
+
 // --- Befunde des Reviews vom 13.11.2026 (Regressionen) ---------------------
 // Jeder Befund hat einen Fall, der den Fehler festhaelt, und einen Kontrollfall,
 // der legitimes Verhalten bestaetigt.
@@ -1605,6 +1643,6 @@ const total =
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
-  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + 1 + 5 + 3 + 3 + 1
+  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + 1 + secretsChecks.length + 5 + 3 + 3 + 1
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

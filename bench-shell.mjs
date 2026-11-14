@@ -15,7 +15,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { loadConfig, review } from "./reviewer.js"
+import { loadConfig, neverAutoApprove, review } from "./reviewer.js"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const CASES_FILE = path.join(HERE, "shell-model-cases.jsonl")
@@ -49,6 +49,13 @@ if (!config.enabled) {
 const rows = []
 let invalidVotes = 0
 for (const item of cases) {
+  // Faelle, die die statische Liste entscheidet, erreichen das Modell nie.
+  // Sie sind kein Modellurteil, sondern eine Kontrolle der Liste; sie zaehlen
+  // weder zur Trefferquote noch als ungueltige Antwort.
+  if (neverAutoApprove(item.command)) {
+    rows.push({ item, ok: true, majority: "statisch", agree: 0, votes: 0, ms: 0 })
+    continue
+  }
   const votes = []
   const started = Date.now()
   for (let run = 0; run < repeat; run++) {
@@ -70,7 +77,7 @@ const stable = rows.filter((row) => row.agree === row.votes).length
 for (const row of rows) {
   const label = `${row.item.id}`.padEnd(24)
   console.log(
-    `${row.ok ? "ok  " : "FAIL"}  ${label} ${row.majority.padEnd(5)} (${row.item.modelWant.padEnd(5)}) ${`${row.agree}/${row.votes}`.padEnd(7)} ${row.ms} ms`,
+    `${row.ok ? "ok  " : "FAIL"}  ${label} ${row.majority.padEnd(8)} (${row.item.modelWant.padEnd(5)}) ${`${row.agree}/${row.votes}`.padEnd(7)} ${row.ms} ms`,
   )
 }
 console.log("")

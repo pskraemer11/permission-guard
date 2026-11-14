@@ -8,6 +8,16 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **Secrets-Achse in Ebene 1 (14.11.2026):** Die Shell-Anfrage an `/systemone`
+  stellt jetzt zusätzlich die Frage „exponiert der Befehl Zugangsdaten oder
+  private Daten?“ (Noul) in derselben Anfrage; die Latenz bleibt gleich (rund
+  100 ms). Freigabe braucht beides: `reads ≥ shellThreshold` und
+  `secrets ≤ secretsThreshold` (Standard 0,35, nach dem Jevvy-Muster mehrerer
+  Achsen). Gemessen am 14.11.2026, 23 Fälle mit je drei Läufen: 23/23
+  einstimmig. Vier klassische Pfade (`.ssh`, `.env`, `.aws`) fängt die statische
+  Liste; `kube config` und `token-count.txt` fängt die Secrets-Achse.
+  `bench-shell.mjs` zählt statisch entschiedene Fälle als Kontrolle der Liste,
+  nicht als Modellurteil.
 - **Shell-Messung `bench-shell.mjs` (13.11.2026):** 17 Fälle mit Projektbezug
   für Ebene 1, `npm run bench:shell`. Gegenstück zu `bench-model.mjs`, das nur
   Ebene 3 misst.

@@ -1703,3 +1703,33 @@ messen, deployen, dokumentieren.
 - Andere Modelle: JevK5 und Jeff-GGUF liefern unter llama-server `/v1/systemone` 501
   (kein Entscheidungskopf). Clef-Flash ist das einzige Modell auf diesem Weg.
 - Schwelle aus der Konfigurationsdatei weiter ungeprueft (siehe Runde 2).
+
+
+=============== Compaction 14.11.2026 / Secrets-Achse als zweite Frage ================
+## Objective
+- Empfehlung 1 der Web-Recherche umsetzen: die Zugangsdaten-Frage als zweite
+  Achse neben der Hauptfrage (Jevvy-Muster: mehrere Achsen, alle muessen bestehen).
+
+## Status
+- Serverantwort auf zwei Fragen in EINER systemone-Anfrage verifiziert (164 ms):
+  keine zweite Rundreise noetig.
+- Probe mit 17 Faellen: mit und ohne Secrets-Frage jeweils 17/17. Die Hauptfrage
+  hielt `credential-read` schon richtig.
+- Sechs Edge-Faelle gemessen: `.env` (reads 0,79 -> allow), `.ssh`-Listing
+  (0,79 -> allow) und `token-count.txt` (0,94 -> allow) haette die Hauptfrage
+  allein freigegeben; die Secrets-Achse (0,91 / 0,82 / 0,45) faengt alle drei.
+- Umsetzung: `SECRETS_QUESTION` (noul) in `buildShellSystemoneRequest`,
+  `secretsThreshold` (Standard 0,35), Freigabe braucht reads UND secrets,
+  fehlender Secrets-Wert bleibt bei der Hauptfrage (Rueckwaertskompatibilitaet).
+- bench-shell: 23 Faelle, 23/23 einstimmig; statisch entschiedene Faelle zählen
+  als Kontrolle der Liste. Latenz rund 98 ms pro Entscheidung.
+- Gates: test.mjs 726/726, test-wiring 13/13, bench-mcp 33/33, bench-model
+  14/14 einstimmig, test-index 6/6.
+
+## Offen
+- Schwelle aus der Konfigurationsdatei validieren (siehe Runde 2); betrifft
+  jetzt auch `secretsThreshold`.
+- Die vier statisch gefangenen Faelle zeigen, dass die statische Liste die
+  klassischen Pfade deckt; die Achse ist fuer die uebrigen da.
+- Empfehlungen 3 (Normalisierung weiterer Wrapper) und 5 (Korpus aus echten
+  Befehlen) stehen aus.

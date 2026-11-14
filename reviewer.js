@@ -88,6 +88,11 @@ const DEFAULTS = {
   // Ebene 1 (Shell) nimmt denselben Weg.
   shellBackend: "systemone",
   shellThreshold: 0.7,
+  // Freigabe braucht zusaetzlich, dass der Befehl nach Modellurteil kaum
+  // Zugangsdaten oder private Daten exponiert (Jevvy-Muster: mehrere Achsen,
+  // alle muessen bestehen). Die Frage laeuft in derselben systemone-Anfrage
+  // und kostet damit keine zweite Rundreise. Grenze: secrets <= Schwelle.
+  secretsThreshold: 0.35,
   // Zusaetzliche Risikomuster aus der Projektkonfiguration.
   extraRisky: [],
   // Schattenlauf Variante 3: "off" oder "shadow". Im Schattenmodus werden
@@ -523,11 +528,17 @@ export function shellDecisionQuestion(project = "", temp = "") {
   }
 }
 
+export const SECRETS_QUESTION = {
+  type: "noul",
+  instructions:
+    "Would running this command expose credentials, API keys, tokens, passwords, or other private data? Reading a file that contains them counts as exposing.",
+}
+
 export function buildShellSystemoneRequest({ command, model = "", project = "", temp = "" }) {
   return {
     model,
     state: { command: String(command ?? ""), project: String(project ?? ""), temp: String(temp ?? "") },
-    questions: { effect: shellDecisionQuestion(project, temp) },
+    questions: { effect: shellDecisionQuestion(project, temp), secrets: SECRETS_QUESTION },
   }
 }
 
@@ -587,7 +598,9 @@ async function requestSystemone(payload, cfg, timeoutMs = cfg.timeoutMs || 2000)
     const data = await response.json()
     const probability = data?.answers?.effect?.probabilities?.reads
     if (typeof probability !== "number") return { ok: false, reason: "keine Wahrscheinlichkeit" }
-    return { ok: true, probability }
+    // Die Secrets-Frage antwortet mit, wenn der Aufruf sie gestellt hat.
+    const secrets = data?.answers?.secrets?.noul
+    return { ok: true, probability, secrets: typeof secrets === "number" ? secrets : null }
   } catch (error) {
     return { ok: false, reason: String(error?.name ?? "Fehler") }
   } finally {
@@ -775,6 +788,7 @@ async function shellBySystemone(commands, where, cfg) {
   if (!segments.length) return { decision: "ask", reason: "leer" }
   const deadline = Date.now() + Math.max(250, cfg.timeoutMs || 2000)
   let lowest = 1
+  let highestSecrets = 0
   for (const command of segments) {
     const left = deadline - Date.now()
     if (left <= 0) return { decision: "ask", reason: "Zeitbudget ueberschritten" }
@@ -782,8 +796,15 @@ async function shellBySystemone(commands, where, cfg) {
     if (result.unsupported) return { unsupported: true }
     if (!result.ok) return { decision: "ask", reason: result.reason }
     lowest = Math.min(lowest, result.probability)
+    // Jede Antwort mit hohem Exponierungsrisiko ist Rueckfrage. Fehlt der Wert
+    // (Backend ohne zweite Frage), bleibt es bei der Hauptfrage allein.
+    if (result.secrets !== null) highestSecrets = Math.max(highestSecrets, result.secrets)
   }
-  return systemoneVerdict(lowest, cfg.shellThreshold)
+  if (highestSecrets > (cfg.secretsThreshold ?? 0.35)) {
+    return { decision: "ask", reason: `Modell: exponiert Daten (s=${highestSecrets.toFixed(3)})`, probability: lowest, secrets: highestSecrets }
+  }
+  const verdict = systemoneVerdict(lowest, cfg.shellThreshold)
+  return { ...verdict, secrets: highestSecrets }
 }
 
 export async function review({ commands, project, temp, config }) {
