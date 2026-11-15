@@ -125,6 +125,14 @@ if [ -f "$_verdicts_tool" ] && [ -f "$_verdicts_db" ] \
   git add "$_verdicts_db"
 fi
 
+# --- 3b) Projektlokaler Zusatz (optional) ----------------------------------
+# Die Datei ist projektspezifisch und nicht Teil dieser Vorlage. Sie laeuft
+# nach den gemeinsamen Pruefungen und vor dem Test-Gate, damit erzeugte
+# Dateien noch in denselben Commit wandern koennen.
+if [ -f .githooks/pre-commit.local ]; then
+  . .githooks/pre-commit.local || exit 1
+fi
+
 # --- 4) Test-Gate (optional, pro Repo konfiguriert) -------------------------
 # Gesteuert ueber .githooks/test-gate.conf im Repo, ein Schluessel=Wert je
 # Zeile ('#' beginnt einen Kommentar):
