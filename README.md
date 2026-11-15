@@ -7,7 +7,8 @@ Dynamische Pfad- und Kommando-Prüfung für Shell-Aufrufe.
 Quelle: `<Projekt>\tools\permission-guard\`.
 Laufzeit: `$HOME\.config\opencode\plugin\permission-guard\` bzw.
 `${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugin/permission-guard` unter
-Linux und macOS.
+Linux und macOS. Dazu kommt seit 15.11.2026 das zweite Ziel
+`$HOME\.codex\hooks\` mit `codex_guard.py` (Codex-Hook).
 
 Das Laufzeitverzeichnis ist bewusst schreibgeschützt (Permission `ask`): kein
 Agent soll seine eigenen Regeln unbemerkt ändern können. Deshalb wird im Projekt
@@ -26,13 +27,15 @@ cd tools/permission-guard
 ```
 
 Unter Windows zeigt `$HOME` in Git Bash und WSL auf das Linux-Home, nicht auf
-das Windows-Profil. Dort entweder `deploy.ps1` nehmen oder das Ziel setzen:
+das Windows-Profil. Dort entweder `deploy.ps1` nehmen oder die Ziele setzen:
 `PERMISSION_GUARD_TARGET=/mnt/c/Users/<name>/.config/opencode/plugin/permission-guard`
-(WSL) bzw. `/c/Users/<name>/...` (Git Bash).
+und `PERMISSION_GUARD_CODEX_TARGET=/mnt/c/Users/<name>/.codex/hooks` (WSL) bzw.
+`/c/Users/<name>/...` (Git Bash).
 
 Eine Rückfrage für den gesamten Vorgang statt einer pro Speichervorgang.
-Beide Deploy-Skripte deployen nicht, wenn `node test.mjs` fehlschlägt, und
-melden jede Byte-Abweichung zwischen Quelle und Laufzeit. Die ortspezifische
+Beide Deploy-Skripte deployen nicht, wenn `node test.mjs` oder
+`python -m pytest tests -q` fehlschlägt, und melden jede Byte-Abweichung
+zwischen Quelle und Laufzeit. Die ortspezifische
 `shell-reviewer.config.json` wird nur beim ersten Mal aus
 `shell-reviewer.config.example.json` erzeugt und danach nie überschrieben.
 
@@ -44,19 +47,28 @@ mit Schreibfreigabe und die Selbstschutzgrenze wäre weg.
 Dieses Verzeichnis ist so geschnitten, dass es als Wurzel eines eigenen
 Repositories funktioniert (`git init` hier, nicht im Monorepo):
 
-| Datei          | Zweck                                                           |
-| -------------- | --------------------------------------------------------------- |
-| `LICENSE`      | MIT                                                             |
-| `package.json` | `"type": "module"`, `npm test`, Node ≥ 20                       |
-| `.gitignore`   | schließt `shell-reviewer.config.json`, Logs, `node_modules` aus |
-| `deploy.sh`    | POSIX-Gegenstück zu `deploy.ps1`                                |
-| `deploy.ps1`   | Windows, mit Testlauf und SHA256-Vergleich                      |
+| Datei                  | Zweck                                                           |
+| ---------------------- | --------------------------------------------------------------- |
+| `LICENSE`              | MIT                                                             |
+| `package.json`         | `"type": "module"`, `npm test`, Node ≥ 20                       |
+| `.gitignore`           | schließt `shell-reviewer.config.json`, Logs, `node_modules` aus |
+| `deploy.sh`            | POSIX-Gegenstück zu `deploy.ps1`                                |
+| `deploy.ps1`           | Windows, mit Testlauf und SHA256-Vergleich, zwei Ziele          |
+| `codex_guard.py`       | Codex-Hook (`PreToolUse`), reine Textprüfung                    |
+| `tests/`               | Pytest-Suite für den Codex-Guard, inkl. `shared-cases.jsonl`    |
+| `requirements-dev.txt` | pytest-Pin für den Codex-Guard                                  |
 
-Beim Herauslösen mitnehmen: `.github/workflows/permission-guard.yml` aus dem
-Monorepo an die neue Repo-Wurzel verschieben und den `working-directory`-Eintrag
-entfernen. Der Workflow prüft auf Windows **und** Linux und bricht ab, wenn eine
-Datei einen Benutzerpfad (`C:\Users\<name>`, `/Users/<name>`) oder ein
-Schlüsselmuster üblicher Anbieter (OpenAI, OpenCode, GitHub, AWS) enthält.
+Beide Programme liegen hier: das OpenCode-Plugin (Node) und der Codex-Guard
+(Python). Die Tests laufen getrennt, weil die Laufzeiten getrennt sind:
+
+```powershell
+node test.mjs                     # OpenCode-Seite, 758 Fälle
+python -m pytest tests -q         # Codex-Seite, 107 Fälle
+```
+
+`ci.yml` prüft beides auf Windows und Linux und bricht ab, wenn eine Datei
+einen Benutzerpfad (`C:\Users\<name>`, `/Users/<name>`) oder ein Schlüsselmuster
+üblicher Anbieter (OpenAI, OpenCode, GitHub, AWS) enthält.
 
 `guard.yml` ist der wiederverwendbare **CI-Testworkflow** (Tests, Paketinhalt,
 Pfad- und Schlüssel-Scan). Er prüft keine Laufzeitaufrufe; der Laufzeitschutz
@@ -501,18 +513,17 @@ einen Umsetzung wirkt nicht auf die andere.
 | Eigenschaft | OpenCode                                                           | Codex                                                     |
 | ----------- | ------------------------------------------------------------------ | --------------------------------------------------------- |
 | Einstieg    | `index.js`: `Plugin.define` mit `permission.hook("evaluate")`      | `PreToolUse`-Hook aus `~/.codex/hooks.json`, 10 s Timeout |
-| Prüfcode    | `guard.js` (rund 100 KB)                                           | `codex_guard.py` im Eltern-Repo (rund 270 Zeilen)         |
+| Prüfcode    | `guard.js` (rund 100 KB)                                           | `codex_guard.py` hier im Repo (rund 270 Zeilen)           |
 | Urteile     | `allow`, `ask`, `deny`                                             | `deny` oder durchlassen                                   |
 | Grundlage   | Shell-Zerlegung, statische Listen, Pfadprüfung, MCP in drei Ebenen | Textmuster auf dem Befehlstext, fester Katalog            |
 | Modell      | ja, Ebene 1/3 für unklare Fälle über `llama-server`                | nein                                                      |
 | Laufzeit    | im OpenCode-Prozess, synchron                                      | eigener Prozess je Aufruf, synchron                       |
 | Fehlerfall  | Ausnahme wird protokolliert; statische Regeln entscheiden          | Hook startet nicht: Codex meldet und lässt laufen         |
-| Tests       | `node test.mjs` (755 Fälle)                                        | `pytest/unit/test_codex_guard.py` (107 Fälle)             |
+| Tests       | `node test.mjs` (758 Fälle)                                        | `python -m pytest tests -q` (107 Fälle)                   |
 
 **Warum getrennt.** Codex kennt kein `ask`; ein Hook kann nur verweigern oder
-durchlassen. Der Codex-Teil liegt als `tools/agents-ebenen/codex_guard.py` im
-Eltern-Repository und ist ein schmaler Katalog harter Fälle; den Rest deckt die
-Sandbox ab. OpenCode kann fragen und dadurch feiner urteilen. Die
+durchlassen. Der Codex-Teil ist ein schmaler Katalog harter Fälle; den Rest
+deckt die Sandbox ab. OpenCode kann fragen und dadurch feiner urteilen. Die
 unterschiedliche Behandlung von `git push` (OpenCode `ask`, Codex `forbidden`)
 steht in `docs/adr/0004-codex-push-verbieten-opencode-fragt.md`.
 
@@ -524,8 +535,9 @@ rekursivem Löschen und `robocopy /MIR` verweigert Codex, während OpenCode frag
 
 **Für die Wartung.** Eine neue Regel muss in beiden Umsetzungen gepflegt
 werden. Für die 29 Fälle in `shared-cases.jsonl` bricht der Test, sobald eine
-Seite abweicht; alles andere bleibt eine stille Lücke. Fehlt das Unter-Repo im
-Eltern-Checkout, überspringt sich der Codex-Teil der gemeinsamen Prüfung.
+Seite abweicht; alles andere bleibt eine stille Lücke. Beide Seiten liegen jetzt
+im selben Repository, deshalb prüft jede der beiden Suiten ihren Teil der Datei
+ohne Überspringen.
 
 ## Git-Muster und Claude-Parität (09.11.2026)
 

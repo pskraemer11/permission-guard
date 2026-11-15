@@ -66,6 +66,13 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Codex-Guard zieht ins Repo (15.11.2026):** `codex_guard.py` und seine
+  Pytest-Suite (`tests/test_codex_guard.py`) liegen jetzt hier statt im
+  Eltern-Repository. `requirements-dev.txt` pinnt `pytest==9.2.0`; `ci.yml` hat
+  dafür einen eigenen Python-Job (Ubuntu und Windows, Python 3.12) und nimmt
+  `*.py` in den Pfad- und Schlüssel-Scan auf. `deploy.ps1` und `deploy.sh`
+  bedienen zwei Ziele und prüfen beide Testreihen. Die Suiten bleiben getrennt:
+  `node test.mjs` (758 Fälle) und `python -m pytest tests -q` (107 Fälle).
 - **Test-Gate bricht bei CRLF in der Konfiguration ab (14.11.2026):**
   `pre-commit` und `pre-push` prüfen `.githooks/test-gate.conf` vor dem Einlesen
   auf CR. Bisher wanderte das CR in den letzten Wert; `.githooks/` passte nicht

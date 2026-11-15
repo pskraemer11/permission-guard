@@ -1,0 +1,4 @@
+# Reproduzierbare Werkzeuge fuer den Python-Test des Codex-Guards.
+# Die Version entspricht requirements-ci.txt im Eltern-Repository, damit beide
+# Suiten mit demselben Pytest-Stand laufen.
+pytest==9.2.0
