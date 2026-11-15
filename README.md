@@ -1173,6 +1173,11 @@ The Python part runs with the same rules as the parent repository:
 pytest and Pyright. Before the first run, once:
 `python -m pip install -r requirements-dev.txt`.
 
+The repository uses the canonical Git hooks from
+`$HOME/.agents/references/githooks/`. `pre-commit` also reads an optional
+`.githooks/pre-commit.local`; this repository has no such file, so the hook runs
+unchanged. Project-specific steps belong there, not in the shared hook.
+
 ## Diagnostics
 
 `%TEMP%\opencode-permission-guard[-<uid>]\guard.log` — one line per decision.

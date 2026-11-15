@@ -77,6 +77,9 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Repo-Hook (15.11.2026):** `.githooks/pre-commit` ist die kanonische Fassung
+  mit optionalem `.githooks/pre-commit.local`; hier ist keine lokale Datei
+  vorhanden. `README.md` und `README_de.md` beschreiben die Konvention.
 - **Ruff prüft nur Python (15.11.2026):** `include = ["*.py", "*.pyi"]` nimmt
   Markdown aus Lint und Formatprüfung. Ruff 0.17 hatte zuvor auch `*.md`
   aufgenommen und Python-Blöcke in der Doku mitformatiert; die Formatprüfung

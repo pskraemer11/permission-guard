@@ -448,3 +448,10 @@ Datei nicht (gemessen). Smoke-Test: CRLF → Exit 1 mit Meldung, LF → Exit 0;
 Offen: Commit und Push dieses Repos; getrennte Commits für `~/.agents`,
 `AI+IDE-Hints` und `python-project-template`; die fünf Nachbar-Repos mit
 eigenem Hook-Stand haben nur die AGENTS.md-Regel, noch kein Laufzeit-Gate.
+
+## Nachtrag 15.11.2026: pre-commit.local
+
+Der gemeinsame `pre-commit` liest optional `.githooks/pre-commit.local`.
+Dieses Repo hat keine solche Datei; die kanonische Fassung läuft unverändert.
+Die Konvention steht in `~/.agents/references/githooks/README.md` und im ADR
+des Eltern-Repos (`docs/adr/0005-projektlokaler-pre-commit-zusatz.md`).

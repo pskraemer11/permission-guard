@@ -1784,3 +1784,28 @@ messen, deployen, dokumentieren.
 - Kein ADR: Die Entscheidung ist leicht rueckgaengig zu machen und betrifft
   nur die Hook-Konfiguration; die Begruendung steht hier und im README. Ein
   `docs/adr/` gibt es in diesem Repo bisher nicht.
+
+================ Compaction 15.11.2026 / 18:30 ================
+## Objective
+- Den gemeinsamen `pre-commit` um einen optionalen `pre-commit.local`-Einstieg
+  erweitern und die Repo-Kopie angleichen.
+## Important Details
+- **Decision:** Die Vorlage bleibt byte-identisch; projektspezifische Schritte
+  liegen in `.githooks/pre-commit.local` und werden gesourct.
+- **Finding:** Dieses Repo braucht keine lokale Datei; der Hook läuft
+  unverändert. Die Konvention ist im Eltern-ADR 0005 dokumentiert.
+## Work State
+### Completed
+- `.githooks/pre-commit` entspricht der Vorlage; README/README_de, CHANGELOG,
+  PLANUNG und COMPACTIONS sind nachgezogen.
+- Belegt: `bash -n` 13/13, SHA256 gleich, `node test.mjs` 770/770,
+  `pytest tests -q` 123 passed.
+### Active
+- Branch `chore/hook-local` ist gepusht; der PR nach `main` steht aus
+  (Ruleset mit fünf Pflicht-Checks).
+## Next Move
+1. PR `chore/hook-local` → `main` erstellen und mergen.
+## Relevant Files
+- `.githooks/pre-commit`: kanonische Fassung mit `pre-commit.local`-Einstieg.
+- `README.md`, `README_de.md`: Abschnitt zu den Repo-Hooks.
+- `CHANGELOG.md`, `PLANUNG.md`, `COMPACTIONS.md`: dieser Stand.
