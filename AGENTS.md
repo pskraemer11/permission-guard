@@ -11,9 +11,10 @@ node bench-mcp.mjs        # 33 feste Fälle, 9 Verbote
 python -m pytest tests -q # Codex-Guard, inkl. shared-cases.jsonl
 ```
 
-Alle vier müssen grün sein, bevor committet wird. Änderungen an `reviewer.js`
-zusätzlich mit `node bench-model.mjs --repeat 3` gegen ein laufendes Modell
-messen.
+Alle vier müssen grün sein, bevor committet wird. Für den Python-Test vorher
+einmalig `python -m pip install -r requirements-dev.txt`. Änderungen an
+`reviewer.js` zusätzlich mit `node bench-model.mjs --repeat 3` gegen ein
+laufendes Modell messen.
 
 ## Deploy
 

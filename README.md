@@ -66,6 +66,9 @@ node test.mjs                     # OpenCode-Seite, 758 Fälle
 python -m pytest tests -q         # Codex-Seite, 107 Fälle
 ```
 
+Der Python-Test braucht einmalig die Entwicklungsabhängigkeit:
+`python -m pip install -r requirements-dev.txt`.
+
 `ci.yml` prüft beides auf Windows und Linux und bricht ab, wenn eine Datei
 einen Benutzerpfad (`C:\Users\<name>`, `/Users/<name>`) oder ein Schlüsselmuster
 üblicher Anbieter (OpenAI, OpenCode, GitHub, AWS) enthält.
