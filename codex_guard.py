@@ -40,6 +40,9 @@ GIT = re.compile(r"^git(\.exe)?$", re.IGNORECASE)
 GIT_FLAGS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--exec-path", "--namespace"}
 GIT_FLAGS_PLAIN = {"--no-pager", "-P", "-p", "--paginate", "--bare", "--literal-pathspecs"}
 GIT_DESTRUCTIVE = {"filter-branch", "filter-repo"}
+# Kurzoptionen von `git commit`, die ein Argument aufnehmen: der Rest des
+# Tokens ist dann das Argument, kein weiterer Schalter (`-mn` = `-m "n"`).
+COMMIT_FLAGS_WITH_VALUE = "mFCctSu"
 DELETE_COMMANDS = {"remove-item", "rm", "ri", "del", "erase", "rd", "rmdir"}
 RECURSIVE_FLAGS = {"-r", "-rf", "-fr", "-recurse", "--recursive"}
 SHELL_RECURSIVE = "/s"
@@ -131,6 +134,29 @@ def is_history_loss(parts: list[str]) -> bool:
         return True
     if sub == "clean":
         return any(token.startswith("-") and "f" in token.lower() for token in rest)
+    if sub == "branch":
+        # `-D` und `--delete --force` loeschen einen Branch ohne Pruefung;
+        # `-d` allein bleibt erlaubt (OpenCode fragt dort nach).
+        lowered = [token.lower() for token in rest]
+        force_delete = any(token.startswith("-D") for token in rest)
+        delete = "--delete" in lowered or any(token.startswith("-d") or token.startswith("-D") for token in rest)
+        force = "--force" in lowered or any(
+            token.startswith("-") and not token.startswith("--") and "f" in token for token in rest
+        )
+        return force_delete or (delete and force)
+    return False
+
+
+def commit_no_verify_short(rest: list[str]) -> bool:
+    """Erkennt ``git commit -n`` und Buendel wie ``-an``; ``-mn`` ist eine Nachricht."""
+    for token in rest:
+        if not token.startswith("-") or token.startswith("--"):
+            continue
+        for char in token[1:]:
+            if char == "n":
+                return True
+            if char in COMMIT_FLAGS_WITH_VALUE:
+                break
     return False
 
 
@@ -168,8 +194,12 @@ def is_mass_deletion(parts: list[str]) -> bool:
 def segment_reason(parts: list[str]) -> str | None:
     """Wendet alle Regeln auf ein Segment an."""
     found = git_subcommand(parts)
-    if found is not None and "--no-verify" in parts:
-        return REASON_NO_VERIFY
+    if found is not None:
+        sub, rest = found
+        # `git commit -n` ist die Kurzform von `--no-verify`; bei anderen
+        # Unterbefehlen bedeutet `-n` etwas anderes (clean und push: --dry-run).
+        if "--no-verify" in parts or (sub.lower() == "commit" and commit_no_verify_short(rest)):
+            return REASON_NO_VERIFY
     if is_push(parts):
         return REASON_PUSH
     if is_history_loss(parts):

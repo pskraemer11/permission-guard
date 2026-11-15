@@ -1,11 +1,13 @@
-# Claude Auto Modus Klassifizierer - handle permission prompts automatically
+# Claude Auto Modus - Klassifizierer und Befehlsprüfer - handle permission prompts automatically
 * Stand 09.11.2026
 
 *Claude:
-Auto mode lets Claude handle permission prompts automatically — Claude checks each tool call for risky actions and prompt injection
-  before executing. Actions Claude identifies as safe are executed, while actions Claude identifies as risky are blocked and Claude may
-  try a different approach. Ideal for long-running tasks. Sessions are slightly more expensive. Claude can make mistakes that allow
-  harmful commands to run, it's recommended to only use in isolated environments. Shift+Tab to change mode.
+`Auto mode` lets Claude handle permission prompts automatically — 
+  ** Claude checks each tool call for risky actions and prompt injection before executing**. 
+  Actions Claude identifies as safe are executed, while actions Claude identifies as risky are blocked and Claude may
+  try a different approach. Ideal for long-running tasks. Sessions are slightly more expensive. 
+  Claude can make mistakes that allow harmful commands to run, **it's recommended to only use in isolated environments**. 
+  Shift+Tab to change mode.
 
 *User:
 > Erkläre mir in deutscher Sprache wie das "Claude handle permission prompts automatically" genau funktioniert. 
@@ -16,13 +18,13 @@ Auto mode lets Claude handle permission prompts automatically — Claude checks 
     try a different approach."
 
 *Claude:
-● Ja, genau das ist der Auto-Modus (auto). Der Klassifikator prüft jeden Tool-Aufruf vor der Ausführung. Die Belege dafür stammen aus der
-  offiziellen Doku (code.claude.com, Seiten „Permissions“ und „Permission modes“).
+● Ja, genau das ist der *Auto-Modus (auto)*. **Der Klassifikator prüft jeden Tool-Aufruf vor der Ausführung.** 
+  Die Belege dafür stammen aus der offiziellen Doku ([code.claude.com], Seiten „Permissions“ und „Permission modes“).
 
-  Ablauf pro Tool-Aufruf:
+  ** Ablauf pro Tool-Aufruf:
 
-  1. Regeln zuerst: Passt ein allow-, ask- oder deny-Eintrag, gilt er sofort. Ausnahmen sind z. B. Schreibzugriffe auf geschützte Pfade
-     wie .git oder .bashrc, die immer zum Klassifikator gehen.
+  1. Regeln zuerst: Passt ein `allow`-, `ask`- oder `deny`-Eintrag, gilt er sofort. Ausnahmen sind z. B. Schreibzugriffe auf geschützte Pfade
+     wie `.git` oder `.bashrc`, die immer zum Klassifikator gehen.
   2. Harmlose Aktionen laufen durch: Lesezugriffe und Edits im Arbeitsverzeichnis werden ohne Klassifikator erlaubt.
   3. Alles andere prüft der Klassifikator: Shell-Befehle, Netzwerkzugriffe und ähnliche Aktionen. Er blockiert unter anderem Eskalation über den
      Auftrag hinaus, Zugriff auf unbekannte Infrastruktur und Aktionen, die offenbar durch feindliche Inhalte aus Dateien oder Webseiten gesteuert
@@ -41,16 +43,17 @@ Auto mode lets Claude handle permission prompts automatically — Claude checks 
 
  ** Grenzen, die du kennen solltest: **
 
-  - Der Klassifikator ist ein Modell, keine feste Garantie. Für harte Grenzen nutzt du Deny-Regeln, Hooks oder Sandboxing. Deny-Regeln gelten auch
-    im Auto-Modus, und ein durch einen PreToolUse-Hook blockierter Aufruf bleibt blockiert.
+  - **Der Klassifikator ist ein Modell, keine feste Garantie**. 
+    Für harte Grenzen nutzt du `Deny-Regeln`, `Hooks` oder **Sandboxing**. 
+    Deny-Regeln gelten auch im Auto-Modus, und ein durch einen `PreToolUse-Hook` blockierter Aufruf bleibt blockiert.
   - Eine Freigabe im Gespräch gilt in der Regel nur für die genannte Aktion. Sagst du z. B. „nicht pushen“, behandelt der Klassifikator das als
     Blocksignal, bis du es aufhebst.
 
-  Plugins, MCP-Tools oder Skills? Nein. Der Auto-Modus ist Teil des Claude-Code-Kerns. Er braucht kein Plugin, kein MCP-Tool und keinen Skill.
-  Konfigurierbar ist er über ~/.claude/settings.json:
-
-  - permissions.defaultMode: "auto" setzt den Startmodus. In Projekt-Settings wird auto ignoriert.
-  - permissions.disableAutoMode: "disable": schaltet den Auto-Modus ab, typischerweise in Managed Settings.
+  Plugins, MCP-Tools oder Skills? Nein. **Der Auto-Modus ist Teil des Claude-Code-Kerns**. Er braucht kein Plugin, kein MCP-Tool und keinen Skill.
+  
+  Konfigurierbar ist er über `~/.claude/settings.json`:
+  - `permissions.defaultMode`: "auto" setzt den Startmodus. In Projekt-Settings wird auto ignoriert.
+  - `permissions.disableAutoMode: "disable"`: schaltet den Auto-Modus ab, typischerweise in Managed Settings.
   - autoMode.environment und autoMode.allow: vertrauenswürdige Repos, Buckets und Services sowie Regelüberschreibungen.
   - env.CLAUDE_CODE_AUTO_MODE_MODEL: legt das Klassifikator-Modell fest.
   - claude auto-mode defaults zeigt die vollständigen Standardregeln als JSON.
@@ -491,13 +494,18 @@ Als Konfiguration würde ich nicht `loadConfig()` mit Defaults nehmen (die setze
 Die Grenze ist die gleiche wie bei Jev: „treat the risk list, not the `threshold`, as the security boundary“ — die statische Liste bleibt die harte Kante, deny braucht sie nicht, weil der Hook nie etwas verbietet. 
 Deine bestehenden `PreToolUse`-Hooks (`block-dangerous-git.sh`) greifen weiterhin davor.
 
-Soll ich den Adapter in Schritt 2 anlegen — erst nur als Datei, ohne `settings.json`-Eintrag, testbar per echo … | node?
+Soll ich den Adapter in Schritt 2 anlegen — erst nur als Datei, ohne `settings.json`-Eintrag, testbar per `echo … | node`?
 
 *User:
  Ok, Du hast es auch schon gefunden: Decision Modelle brauchen systemone. Ich hatte den Namen vergessen.
-  Variante A ist auch mein Favorit.
-  Bevor Du umsetzt und Dateien änderst: Bitte erst einen sauberen Projektstatus in permission-guard herstellen, d.h. comitten, dann push durch mich.
-  Ich habe im Repo einige Dokumente leicht umformatiert (Zeilenumbrüche, Tabellen), aber nicht inhaltlich geändert. Dabei ist mir aufgefallen, dass einige Dokumente nicht aktuell sind, z.B. beim verwendeten Modell Clef-flash oder dem Backend (llama stat LM Studio), das gilt mindestens für die README.md als auch die reviewer.js, möglicherweise auch andere Dateien. Aktualisiere CHANGELOG, COMPACTION.md. Prüfe/Aktualisiere das noch vor dem Committ.
+ 
+ Variante A ist auch mein Favorit.
+ Bevor Du umsetzt und Dateien änderst: Bitte erst einen sauberen Projektstatus in `permission-guard` herstellen, d.h. comitten, dann push durch mich.
+ 
+ Ich habe im Repo einige Dokumente leicht umformatiert (Zeilenumbrüche, Tabellen), aber nicht inhaltlich geändert. 
+ Dabei ist mir aufgefallen, dass einige Dokumente nicht aktuell sind, z.B. beim verwendeten Modell Clef-flash oder dem Backend (llama stat LM Studio), 
+ das gilt mindestens für die README.md als auch die reviewer.js, möglicherweise auch andere Dateien. 
+ Aktualisiere `CHANGELOG, COMPACTION.md`. Prüfe/Aktualisiere das noch vor dem Committ.
 
 *Claude:
 
@@ -507,11 +515,11 @@ Soll ich den Adapter in Schritt 2 anlegen — erst nur als Datei, ohne `settings
 Verstanden. Ich stoppe hier und übergebe den Stand. Kurzfassung:
 
 Was bereits geändert ist (Tabelle):
-Datei	Stand
-reviewer.js	DEFAULTS auf Betriebsfall: model: "clef", mcpBackend/shellBackend: "systemone"; Kopfkommentare auf Clef-Flash/llama.cpp aktualisiert
-README.md	Modell- und Backend-Abschnitte aktualisiert (Clef-Flash als Betriebsstandard, Gemma-Tabelle als historisch markiert, start-reviewer.ps1-Kommentar, Testzahl 686)
-docs/entscheidungsgrundlage-…md	drei Gemma-Stellen auf Clef-Flash bzw. „lokales Modell“ umgestellt, Datum ergänzt
-CHANGELOG.md, COMPACTIONS.md	nur deine bestehenden Einträge, von mir noch nichts angehängt
+Datei	                          | Stand
+`reviewer.js`	                  | DEFAULTS auf Betriebsfall: model: "clef", mcpBackend/shellBackend: "systemone"; Kopfkommentare auf Clef-Flash/llama.cpp aktualisiert
+`README.md`	                      | Modell- und Backend-Abschnitte aktualisiert (Clef-Flash als Betriebsstandard, Gemma-Tabelle als historisch markiert, start-reviewer.ps1-Kommentar, Testzahl 686)
+`docs/entscheidungsgrundlage-…md` | drei Gemma-Stellen auf Clef-Flash bzw. „lokales Modell“ umgestellt, Datum ergänzt
+`CHANGELOG.md, COMPACTIONS.md`	  | nur deine bestehenden Einträge, von mir noch nichts angehängt
 
 Was noch offen ist
 - Widersprüchlicher Kommentar in reviewer.js:59-63 — dort steht noch „blieben die Ebenen auf chat“, obwohl die DEFAULTS jetzt systemone sind. Muss vor dem Commit korrigiert werden.
@@ -543,17 +551,99 @@ Was wir schon richtig machen: Statische Regeln kommen vor dem Modell, Denies wer
 
 Konkrete Hinweise, nach Nutzen geordnet:
 
-1. Zweite Frage für Zugangsdaten und private Daten (Jevvy). Jevvy fragt getrennt nach „schädlich“ (Schwelle ≤ 0,35), „sensibel“ (≤ 0,5), „unbekannter Code“ (≤ 0,5) und „verschleiert“ (≤ 0,5). Die Achsen werden einzeln geprüft, und alle müssen bestehen. Das ist genau die Lücke bei token.json. Eine eigene Frage „gibt das Zugangsdaten oder private Daten preis?“ würde den Fall unabhängig von der Hauptfrage abfangen. Kosten: eine zweite Anfrage pro Segment, also mehr Latenz bei -np 1. Das muss man messen.
-2. Die Ordnung der Prüfung (OpenRouter-Cookbook). Der Cookbook-Text nennt als Vorgehen: Wenn eine falsche Freigabe passiert, zuerst das Muster in die statische Liste aufnehmen und erst danach die Schwelle verschärfen. Die Liste ist die Sicherheitsgrenze, nicht die Schwelle. Das passt zu unserem Vorgehen beim $null-Fehler.
-3. Zuweisungen vor der Prüfung abtrennen (Cookbook). Das Cookbook entfernt Variablenzuweisungen, Wrapper und Pfadpräfixe, bevor geprüft wird, und behandelt nicht Lesbares als riskant. Das ist genau die Stelle, an der unser $null = Remove-Item-Fehler lag. Unsere Korrektur geht in dieselbe Richtung. Es lohnt sich, die Normalisierung des Reviewers gezielt gegen weitere Wrapper zu prüfen.
-4. Schwelle und Wortlaut testen (Cookbook). Der Cookbook-Text warnt, dass Scores je nach Formulierung um einige Hundertstel schwanken und man nach jedem Modellwechsel neu messen muss. Das bestätigt unsere Messung. Wir sollten die Messung so betreiben, dass jeder Wechsel von Frage, Modell oder Quantisierung wiederholt wird.
-5. Kalibrierungskorpus mit Pflicht-„ask“-Fällen (Jevvy). Jevvy zählt einen Lauf als ungültig, sobald ein Fall, der nachfragen muss, freigegeben wird. Unser bench-shell hat schon 17 Fälle mit diesem Prinzip. Ausbauen sollten wir den Korpus um mehr Grenzfälle. Die Fälle sollten aus echten Befehlen des Agenten stammen, nicht nur aus meinen Beispielen.
-6. Der Host-Text ist nicht vertrauenswürdig (Jevvy zu Codex). Codex füllt tool_input.description mit einer Freigabefrage, und das Modell bewertet sie schlecht. Wir nutzen den Text nicht, das ist richtig. Wichtig wird das, falls wir den Reviewer später als Hook in Claude oder Codex einbauen.
-7. Fail-closed nicht blind übernehmen (Claude-Hook). Claude erlaubt onFailure: "block", und dann wird bei einem Fehler verweigert. Für einen reinen Freigabe-Filter wäre das zu streng. Richtig ist, bei einem Fehler in die normale Rückfrage zu fallen. Das ist das Verhalten, das wir schon haben.
-8. Ein eigenes Verbots-Layer (OpenCode). OpenCode trennt eine Richtliniensicht, die nur hart verweigern darf, von den Freigaben. Das entspricht unserer Regel „deny nie überschreiben“. Wir könnten die Verbote in einer eigenen, klar benannten Liste führen, damit sie leichter zu prüfen sind.
-9. Externe Verzeichnisse nicht auf Host-Standards verlassen (OpenCode). Dort ist der Zugriff außerhalb des Projekts standardmäßig erlaubt, solange man keine Regel setzt. Unser Guard verweigert das selbst, das ist gut. Wir sollten sicherstellen, dass kein Pfad auf den Standard der Host-Konfiguration angewiesen ist.
-10. Audit ohne Argumentwerte (Jevvy). Jevvy warnt, dass Befehle Geheimnisse enthalten können, und speichert deshalb Limits und Rotation. Unser Audit schreibt keine Argumentwerte und hat eine Hash-Kette, das ist stärker. Eine Obergrenze für die Größe fehlt uns noch.
+1. Zweite Frage für Zugangsdaten und private Daten (Jevvy). Jevvy fragt getrennt nach „schädlich“ (Schwelle ≤ 0,35), „sensibel“ (≤ 0,5), 
+„unbekannter Code“ (≤ 0,5) und „verschleiert“ (≤ 0,5). Die Achsen werden einzeln geprüft, und alle müssen bestehen. 
+Das ist genau die Lücke bei token.json. Eine eigene Frage „gibt das Zugangsdaten oder private Daten preis?“ würde den Fall unabhängig von der Hauptfrage abfangen. 
+Kosten: eine zweite Anfrage pro Segment, also mehr Latenz bei -np 1. Das muss man messen.
+
+2. Die Ordnung der Prüfung (OpenRouter-Cookbook). Der Cookbook-Text nennt als Vorgehen: Wenn eine falsche Freigabe passiert, 
+zuerst das Muster in die statische Liste aufnehmen und erst danach die Schwelle verschärfen. 
+Die Liste ist die Sicherheitsgrenze, nicht die Schwelle. Das passt zu unserem Vorgehen beim $null-Fehler.
+
+3. Zuweisungen vor der Prüfung abtrennen (Cookbook). Das Cookbook entfernt Variablenzuweisungen, Wrapper und Pfadpräfixe, bevor geprüft wird, 
+und behandelt nicht Lesbares als riskant. Das ist genau die Stelle, an der unser $null = Remove-Item-Fehler lag. 
+Unsere Korrektur geht in dieselbe Richtung. Es lohnt sich, die Normalisierung des Reviewers gezielt gegen weitere Wrapper zu prüfen.
+
+4. Schwelle und Wortlaut testen (Cookbook). Der Cookbook-Text warnt, dass Scores je nach Formulierung um einige Hundertstel schwanken und 
+man nach jedem Modellwechsel neu messen muss. Das bestätigt unsere Messung. 
+Wir sollten die Messung so betreiben, dass jeder Wechsel von Frage, Modell oder Quantisierung wiederholt wird.
+
+5. Kalibrierungskorpus mit Pflicht-„ask“-Fällen (Jevvy). Jevvy zählt einen Lauf als ungültig, sobald ein Fall, der nachfragen muss, freigegeben wird. 
+Unser bench-shell hat schon 17 Fälle mit diesem Prinzip. Ausbauen sollten wir den Korpus um mehr Grenzfälle. 
+Die Fälle sollten aus echten Befehlen des Agenten stammen, nicht nur aus meinen Beispielen.
+
+6. Der Host-Text ist nicht vertrauenswürdig (Jevvy zu Codex). Codex füllt tool_input.description mit einer Freigabefrage, und das Modell bewertet sie schlecht. 
+Wir nutzen den Text nicht, das ist richtig. Wichtig wird das, falls wir den Reviewer später als Hook in Claude oder Codex einbauen.
+
+7. Fail-closed nicht blind übernehmen (Claude-Hook). Claude erlaubt onFailure: "block", und dann wird bei einem Fehler verweigert. 
+Für einen reinen Freigabe-Filter wäre das zu streng. Richtig ist, bei einem Fehler in die normale Rückfrage zu fallen. Das ist das Verhalten, das wir schon haben.
+
+8. Ein eigenes Verbots-Layer (OpenCode). OpenCode trennt eine Richtliniensicht, die nur hart verweigern darf, von den Freigaben. 
+Das entspricht unserer Regel „deny nie überschreiben“. Wir könnten die Verbote in einer eigenen, klar benannten Liste führen, damit sie leichter zu prüfen sind.
+
+9. Externe Verzeichnisse nicht auf Host-Standards verlassen (OpenCode). Dort ist der Zugriff außerhalb des Projekts standardmäßig erlaubt, 
+solange man keine Regel setzt. Unser Guard verweigert das selbst, das ist gut. 
+Wir sollten sicherstellen, dass kein Pfad auf den Standard der Host-Konfiguration angewiesen ist.
+
+10. Audit ohne Argumentwerte (Jevvy). Jevvy warnt, dass Befehle Geheimnisse enthalten können, und speichert deshalb Limits und Rotation. 
+Unser Audit schreibt keine Argumentwerte und hat eine Hash-Kette, das ist stärker. Eine Obergrenze für die Größe fehlt uns noch.
 
 Was ich nicht übernehmen würde: Jevvys Verzicht auf eine statische Verbotsliste. Dort gibt es nur die Wahrscheinlichkeit, und das ist für einen Guard zu wenig.
 
-Mein Vorschlag für die nächste Runde: Punkt 1 als Messung umsetzen, also die Zugangsdaten-Frage als zweite Frage testen. Danach die Schwelle festlegen und mit dem Korpus aus Punkt 5 prüfen. Soll ich damit anfangen?
+Mein Vorschlag für die nächste Runde: Punkt 1 als Messung umsetzen, also die Zugangsdaten-Frage als zweite Frage testen. 
+Danach die Schwelle festlegen und mit dem Korpus aus Punkt 5 prüfen. Soll ich damit anfangen?
+
+*User: ja, umsetzen
+
+*CLAUDE
+23/23 getroffen, aber 12 Antworten ohne Modellurteil: Sechs neue Fälle laufen in die statische Liste des Reviewers (`.ssh, .env, .aws, credentials`), 
+und der Bench zählt sie als unbrauchbar. Das ist eigentlich eine gute Nachricht: 
+Die statische Liste fängt die klassischen Zugangsdaten-Pfade bereits ab, diese Fälle erreichen das Modell gar nicht. 
+Der Bench darf sie nur nicht als Modellmessung werten. 
+Ich passe bench-shell.mjs an: Statisch entschiedene Fälle werden als „statisch“ markiert und nicht als Modellurteil gezählt.
+
+Die Messung ist sauber: 23/23. Wichtig ist die Verteilung: Vier klassische Zugangsdaten-Fälle fängt die statische Liste (`.ssh-Ordner, .env`, privater Schlüssel, `AWS`). 
+Zwei Fälle laufen zum Modell und werden dort von der Secrets-Achse gefangen: `kube-config` und `token-count.txt`. 
+Beide Achsen tragen also. Latenz bleibt bei rund 98 ms.
+
+Alle Gates sind grün. Jetzt dokumentiere ich die Änderung und committe die fünf Dateien. 
+Den Chat-Mitschnitt in docs/Claude Auto Modus… lasse ich draußen, der gehört zu deiner Dokumentation.
+
+Die Secrets-Achse ist umgesetzt, gemessen und lokal committet. Das Test-Gate lief beim Commit mit durch.
+
+** Was die Messung ergeben hat
+
+Der Server beantwortet zwei Fragen in einer Anfrage (verifiziert: 164 ms statt 2 × ~100 ms). Damit kostet die zweite Achse keine doppelte Latenz.
+
+- Mit den ursprünglichen 17 Fällen ändert die Secrets-Frage nichts: 17/17 mit und ohne. Die Hauptfrage hielt credential-read bereits.
+- Die Edge-Fälle zeigen den wahren Wert. Drei Befehle hätte die Hauptfrage allein freigegeben: `Get-Content C:/proj/.env` (reads 0,79), 
+`Get-ChildItem …/.ssh` (0,79) und Get-Content token-count.txt (0,94). Die Secrets-Achse fängt alle drei (0,91 / 0,82 / 0,45).
+- Vier klassische Pfade (`.ssh-Ordner, .env`, privater Schlüssel, `.aws/credentials`) fängt bereits die statische Liste, sie erreichen das Modell nie. 
+`bench-shell` zählt solche Fälle jetzt als Kontrolle der Liste, nicht als Modellurteil.
+
+** Umsetzung in reviewer.js
+- `SECRETS_QUESTION` (Noul) geht mit jeder Shell-systemone-Anfrage mit.
+- Freigabe braucht: reads ≥ shellThreshold und secrets ≤ secretsThreshold (Standard 0,35, nach Jevvys „harm“-Achse).
+- Fehlender Secrets-Wert (Backend ohne die Frage) bleibt bei der Hauptfrage — rückwärtskompatibel.
+- Jedes Segment zählt: der höchste Secrets-Wert entscheidet.
+
+** Prüfungen (alle grün)
+- `test.mjs` 726/726 (vier neue Secrets-Checks mit Mock: hohe Exponierung blockt, geringe lässt zu, fehlender Wert fällt auf die Hauptfrage)
+- `test-wiring` 13/13, bench-mcp 33/33, bench-model --repeat 3 14/14 einstimmig
+- `test-index` 6/6, bench-shell --repeat 3 23/23 einstimmig bei rund 98 ms pro Entscheidung
+
+Commit: `a7e6b3b`, das Repo liegt jetzt acht Commits vor `origin/main`. 
+Nicht committet ist nur dein Chat-Mitschnitt unter `docs/Claude Auto Modus ….md`.
+
+**Nächste Schritte aus der Recherche (offen)
+- Empfehlung 3: Normalisierung des Reviewers gegen weitere Wrapper prüfen
+- Empfehlung 5: Kalibrierungskorpus aus echten Befehlen erweitern
+- Schwelle der Konfigurationsdatei validieren (jetzt auch secretsThreshold)
+
+Push wie gewohnt erst auf einen Test-Branch, dann nach main, sobald die fünf Pflicht-Checks grün sind. 
+Sag Bescheid, wenn ich die Push-Befehle nochmal komplett haben willst, oder ob ich mit Empfehlung 3 oder 5 weitermachen soll.
+
+※ recap: Ziel: permission-guard härten, Review-Befunde und Recherche-Empfehlungen umsetzen.
+Secrets-Achse ist gemessen (23/23) und als Commit a7e6b3b lokal vor origin/main. 
+Nächster Schritt: pushen oder Empfehlung 3/5 angehen. (disable recaps in /config)
+

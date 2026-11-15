@@ -534,6 +534,13 @@ const gitGuardrails = [
   ["git commit --no-verify -m x", "deny"],
   ["git push --no-verify", "deny"],
   ["git -C C:\\p commit --no-verify -m x", "deny"],
+  // `-n` ist die Kurzform von --no-verify; gebuendelt von links gelesen.
+  // `-mn` ist dagegen die Nachricht "n" und bleibt erlaubt.
+  ["git commit -n -m x", "deny"],
+  ["git commit -an -m x", "deny"],
+  ["git commit -nm x", "deny"],
+  ["git commit -mn x", "allow"],
+  ["git push -n", "ask"],
   ["git reset --hard HEAD~1", "deny"],
   ["git clean -f", "deny"],
   ["git clean -fd", "deny"],

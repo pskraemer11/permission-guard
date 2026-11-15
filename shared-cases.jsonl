@@ -27,3 +27,10 @@
 {"id":"allow-checkout-file","command":"git checkout -- README.md","codex":"allow","opencode":"ask"}
 {"id":"allow-delete-staging","command":"Remove-Item -Recurse staging/hooktest","codex":"allow","opencode":"ask"}
 {"id":"allow-delete-temp","command":"rm -rf ./temp/build","codex":"allow","opencode":"ask"}
+{"id":"commit-no-verify-short","command":"git commit -n -m x","codex":"deny","opencode":"deny"}
+{"id":"commit-no-verify-bundled","command":"git commit -an -m x","codex":"deny","opencode":"deny"}
+{"id":"commit-no-verify-bundled-order","command":"git commit -nm x","codex":"deny","opencode":"deny"}
+{"id":"allow-commit-message-n","command":"git commit -mn x","codex":"allow","opencode":"allow"}
+{"id":"branch-force-delete","command":"git branch -D backup","codex":"deny","opencode":"deny"}
+{"id":"branch-delete-force-long","command":"git branch --delete --force backup","codex":"deny","opencode":"deny"}
+{"id":"branch-delete-force-short","command":"git branch -d -f backup","codex":"deny","opencode":"deny"}

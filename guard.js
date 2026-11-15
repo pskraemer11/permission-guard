@@ -345,6 +345,26 @@ function gitExecutableName(token) {
   return String(token).toLowerCase().split(/[\\/]/).pop()
 }
 
+// Kurzoptionen von `git commit`, die ein Argument aufnehmen: der Rest des
+// Tokens ist dann das Argument, kein weiterer Schalter (`-mn` = `-m "n"`).
+const COMMIT_FLAGS_WITH_VALUE = "mFCctSu"
+
+// `git commit -n` ist die Kurzform von `--no-verify` (Nutzerentscheid
+// 15.11.2026). Gebuendelte Kurzoptionen werden von links gelesen; nach einem
+// Buchstaben mit Argument endet die Suche. `-n` bei anderen Unterbefehlen
+// bedeutet etwas anderes (clean und push: `--dry-run`), deshalb gilt die Regel
+// nur fuer commit.
+function commitNoVerifyShort(rest) {
+  for (const token of rest) {
+    if (!/^-[^-]/.test(token)) continue
+    for (const ch of token.slice(1)) {
+      if (ch === "n") return true
+      if (COMMIT_FLAGS_WITH_VALUE.includes(ch)) break
+    }
+  }
+  return false
+}
+
 function gitDestructiveInStatement(statement) {
   let s = statement.trim().replace(/^[({]+/, "").trim()
   if (!s) return null
@@ -378,8 +398,9 @@ function gitDestructiveInStatement(statement) {
   if (!sub) return null
 
   // --no-verify umgeht die Projekt-Gates (Nutzerentscheid 15.11.2026).
-  // Gilt fuer jeden Unterbefehl; "-n" bei commit bleibt vorerst offen.
-  if (rest.includes("--no-verify")) {
+  // `git commit -n` ist die Kurzform; bei anderen Unterbefehlen bedeutet `-n`
+  // etwas anderes (clean und push: `--dry-run`).
+  if (rest.includes("--no-verify") || (sub === "commit" && commitNoVerifyShort(rest))) {
     return {
       pattern: "no-verify",
       reason: "git --no-verify umgeht die Projekt-Gates",

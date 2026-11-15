@@ -30,7 +30,7 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 TARGET=${PERMISSION_GUARD_TARGET:-"${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugin/permission-guard"}
 CODEX_TARGET=${PERMISSION_GUARD_CODEX_TARGET:-"$HOME/.codex/hooks"}
 
-FILES="guard.js index.js audit.js diagnostics.js reviewer.js shadow.js git-shadow-report.mjs test.mjs README.md start-reviewer.ps1 smoke-reviewer.mjs bench-reviewer.ps1 bench-quality.ps1 shared-cases.jsonl"
+FILES="guard.js index.js audit.js diagnostics.js reviewer.js shadow.js git-shadow-report.mjs test.mjs README.md README_de.md start-reviewer.ps1 smoke-reviewer.mjs bench-reviewer.ps1 bench-quality.ps1 shared-cases.jsonl"
 CODEX_FILES="codex_guard.py"
 CONFIG_NAME="shell-reviewer.config.json"
 CONFIG_EXAMPLE="shell-reviewer.config.example.json"

@@ -59,6 +59,7 @@ $files = @(
     "shared-cases.jsonl",
     "test.mjs",
     "README.md",
+    "README_de.md",
     "start-reviewer.ps1",
     "smoke-reviewer.mjs",
     "bench-reviewer.ps1",

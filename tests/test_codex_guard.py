@@ -35,6 +35,7 @@ BLOCKED = [
     "git push",
     "git push origin master",
     "git push --force-with-lease",
+    "git push -n",
     "git.exe push",
     "git -C /tmp/repo push",
     "& git push",
@@ -57,9 +58,16 @@ BLOCKED = [
     "git clean --force",
     "git filter-branch --tree-filter x",
     "git filter-repo --path src",
+    "git branch -D backup",
+    "git branch --delete --force backup",
+    "git branch -d -f backup",
     # Gates umgehen
     "git commit --no-verify -m x",
     "git push --no-verify",
+    # `git commit -n` ist die Kurzform von --no-verify; gebuendelt von links.
+    "git commit -n -m x",
+    "git commit -an -m x",
+    "git commit -nm x",
     # Massenloeschung ausserhalb cache/staging/tmp/temp
     "Remove-Item -Recurse docs",
     "Remove-Item -Recurse -Force .git",
@@ -82,6 +90,8 @@ ALLOWED = [
     "git log --oneline -5",
     'echo "git push"',
     "git commit -m 'push later'",
+    "git commit -mn x",
+    "git branch -d backup",
     "git reset HEAD -- CHANGELOG.md",
     "git checkout -- README.md",
     "git restore --staged README.md",
@@ -114,6 +124,7 @@ def test_allows(command: str) -> None:
 def test_reason_matches_category() -> None:
     assert guard.first_reason("git push") == guard.REASON_PUSH
     assert guard.first_reason("git reset --hard") == guard.REASON_HISTORY
+    assert guard.first_reason("git branch -D backup") == guard.REASON_HISTORY
     assert guard.first_reason("git commit --no-verify -m x") == guard.REASON_NO_VERIFY
     assert guard.first_reason("Remove-Item -Recurse docs") == guard.REASON_DELETE
     assert guard.first_reason("robocopy C:/a C:/b /MIR") == guard.REASON_MIRROR
