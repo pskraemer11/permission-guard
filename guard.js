@@ -377,6 +377,15 @@ function gitDestructiveInStatement(statement) {
   const rest = tokens.slice(i + 1)
   if (!sub) return null
 
+  // --no-verify umgeht die Projekt-Gates (Nutzerentscheid 15.11.2026).
+  // Gilt fuer jeden Unterbefehl; "-n" bei commit bleibt vorerst offen.
+  if (rest.includes("--no-verify")) {
+    return {
+      pattern: "no-verify",
+      reason: "git --no-verify umgeht die Projekt-Gates",
+    }
+  }
+
   if (sub === "reset" && rest.includes("--hard")) {
     return {
       pattern: "reset-hard",

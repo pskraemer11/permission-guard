@@ -8,6 +8,17 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **Gemeinsame Falldatei mit dem Codex-Guard (15.11.2026):** `shared-cases.jsonl`
+  hält 29 Befehle mit dem je Seite erwarteten Urteil. `node test.mjs` prüft die
+  OpenCode-Seite, `pytest/unit/test_codex_guard.py` im Eltern-Repository die
+  Codex-Seite; beide lesen dieselbe Datei. Zahlen: 758/758 hier, 107 Fälle dort.
+  `deploy.ps1` und `deploy.sh` rollen die Datei mit aus, weil `test.mjs` sie
+  relativ zu sich liest; im Laufzeitverzeichnis läuft die Suite mit 758/758.
+- **`--no-verify` verweigert (15.11.2026, Nutzerentscheid):** `git commit
+  --no-verify` und `git push --no-verify` sind jetzt `deny` (vorher `allow` bzw.
+  `ask`). Grund: Das Flag umgeht die Projekt-Gates; Codex blockierte es bereits.
+  Die Regel greift bei jedem Unterbefehl und hinter globalen Optionen (`-C`,
+  `-c`). `git commit -n` ist die Kurzform dazu und bleibt vorerst offen.
 - **Secrets-Achse in Ebene 1 (14.11.2026):** Die Shell-Anfrage an `/systemone`
   stellt jetzt zusätzlich die Frage „exponiert der Befehl Zugangsdaten oder
   private Daten?“ (Noul) in derselben Anfrage; die Latenz bleibt gleich (rund
@@ -173,6 +184,12 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Dokumentiert
 
+- **Zwei Implementierungen (15.11.2026):** `README.md` hat den Abschnitt „Zwei
+  Implementierungen: OpenCode und Codex“ zwischen „Was nicht erlaubt wird“ und
+  „Git-Muster“. Er stellt beide Programme gegenüber (Einstieg, Prüfcode,
+  Urteile, Grundlage, Modell, Laufzeit, Fehlerfall, Tests), nennt die gemeinsam
+  gesperrten Muster und den Wartungshinweis, dass es keinen gemeinsamen Katalog
+  gibt. Zahlen: 726/726 Fälle hier, 77 Fälle im Codex-Guard. Keine Codeänderung.
 - **Befehlszerlegung und Befehlsstil (12.11.2026):** `README.md` hat einen neuen
   Abschnitt „Befehlszerlegung und Befehlsstil“ vor „Ebene 1“. Er beschreibt die
   Segmentierung, die Modellprüfung je Segment und die Einordnung der

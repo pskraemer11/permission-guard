@@ -49,6 +49,7 @@ $files = @(
     "mcp-report.mjs",
     "bench-model.mjs",
     "mcp-model-cases.jsonl",
+    "shared-cases.jsonl",
     "test.mjs",
     "README.md",
     "start-reviewer.ps1",

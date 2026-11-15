@@ -8,7 +8,7 @@ import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMc
 import { buildShellSystemoneRequest, buildSystemoneRequest, sanitizeArguments, systemoneVerdict } from "./reviewer.js"
 import { parseLine, summarize } from "./stats.mjs"
 import { createHash } from "node:crypto"
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { spawnSync } from "node:child_process"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -530,6 +530,10 @@ const gitGuardrails = [
   // sind seit Option B (09.11.2026) "deny"; push bleibt "ask".
   ["git push origin main", "ask"],
   ["git push --force origin main", "ask"],
+  // --no-verify umgeht die Projekt-Gates (Nutzerentscheid 15.11.2026).
+  ["git commit --no-verify -m x", "deny"],
+  ["git push --no-verify", "deny"],
+  ["git -C C:\\p commit --no-verify -m x", "deny"],
   ["git reset --hard HEAD~1", "deny"],
   ["git clean -f", "deny"],
   ["git clean -fd", "deny"],
@@ -631,6 +635,33 @@ run(denyForms, undefined, "Verweigerung & Geheimnis-Ersetzung")
 run(py, undefined, "python eng freigegeben")
 run(interp, interpOptions, "Interpreters: node-Selbstskripte, python im Projekt")
 run(ruffConfigBootstrap, ruffConfigOptions, "Ruff-Konfigurationsbootstrap, exakt begrenzt")
+
+// --- Gemeinsame Faelle mit dem Codex-Guard ---------------------------------
+// shared-cases.jsonl haelt den Stand beider Umsetzungen fest: je Befehl das
+// Urteil, das hier und im Codex-Hook erwartet wird. Eine Aenderung auf einer
+// Seite bricht den Test, bis der Wert in der Datei bewusst nachgezogen wird.
+// Gelesen wird die Datei auch von pytest/unit/test_codex_guard.py im
+// Eltern-Repository; fehlt der Ordner dort, ueberspringt sich jener Test.
+const sharedPath = join(dirname(fileURLToPath(import.meta.url)), "shared-cases.jsonl")
+const sharedChecks = []
+if (!existsSync(sharedPath)) {
+  sharedChecks.push(["shared-cases.jsonl vorhanden", false])
+} else {
+  const sharedLines = readFileSync(sharedPath, "utf8").split(/\r?\n/).filter((line) => line.trim())
+  for (const line of sharedLines) {
+    const item = JSON.parse(line)
+    const got = evaluate(item.command, options)
+    const ok = got.decision === item.opencode
+    if (!ok) console.log(`      ${item.command}: erwartet ${item.opencode}, erhalten ${got.decision} (${got.reason})`)
+    sharedChecks.push([`shared ${item.id}`, ok])
+  }
+}
+console.log("-- Gemeinsame Faelle (OpenCode-Seite)")
+for (const [name, ok] of sharedChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("")
 
 // --- Git-Meldungen (Option B) --------------------------------------------
 // ask und deny nennen Muster und Befehl; bei Geheimnisverdacht bleibt der
@@ -1636,7 +1667,7 @@ const total =
   base.length + scoped.length + gitGuardrails.length + cli.length + helpVersion.length + gitleaks.length +
   readOnlyCli.length +
   net.length + denyForms.length + py.length + interp.length +
-  ruffConfigBootstrap.length + messageChecks.length +
+  ruffConfigBootstrap.length + sharedChecks.length + messageChecks.length +
   shadowChecks.length + shadowReportChecks.length + shadowPathChecks.length +
   mcpObs.length + mcpKeys.length + mcpSecChecks.length +
   mcpCritIntentChecks.length + mcpCritResourceChecks.length + mcpCritChecks.length +

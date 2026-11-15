@@ -1,0 +1,29 @@
+{"id":"push-basic","command":"git push","codex":"deny","opencode":"ask"}
+{"id":"push-branch","command":"git push origin master","codex":"deny","opencode":"ask"}
+{"id":"push-force-lease","command":"git push --force-with-lease","codex":"deny","opencode":"ask"}
+{"id":"push-no-verify","command":"git push --no-verify","codex":"deny","opencode":"deny"}
+{"id":"reset-hard","command":"git reset --hard HEAD~1","codex":"deny","opencode":"deny"}
+{"id":"checkout-dot","command":"git checkout .","codex":"deny","opencode":"deny"}
+{"id":"restore-dot","command":"git restore .","codex":"deny","opencode":"deny"}
+{"id":"clean-fd","command":"git clean -fd","codex":"deny","opencode":"deny"}
+{"id":"filter-branch","command":"git filter-branch --tree-filter x","codex":"deny","opencode":"ask"}
+{"id":"filter-repo","command":"git filter-repo --path src","codex":"deny","opencode":"ask"}
+{"id":"no-verify-commit","command":"git commit --no-verify -m x","codex":"deny","opencode":"deny"}
+{"id":"delete-recurse","command":"Remove-Item -Recurse docs","codex":"deny","opencode":"ask"}
+{"id":"delete-rm-rf","command":"rm -rf src","codex":"deny","opencode":"ask"}
+{"id":"mirror-robocopy","command":"robocopy C:/a C:/b /MIR","codex":"deny","opencode":"ask"}
+{"id":"wrap-pwsh","command":"pwsh -NoProfile -Command \"git push\"","codex":"deny","opencode":"ask"}
+{"id":"wrap-bash","command":"bash -lc \"git add . && git push\"","codex":"deny","opencode":"ask"}
+{"id":"wrap-cmd","command":"cmd /c \"git push\"","codex":"deny","opencode":"ask"}
+{"id":"chain-push","command":"git status; git push","codex":"deny","opencode":"ask"}
+{"id":"allow-status","command":"git status --short","codex":"allow","opencode":"allow"}
+{"id":"allow-log","command":"git log --oneline -5","codex":"allow","opencode":"allow"}
+{"id":"allow-read","command":"Get-Content README.md","codex":"allow","opencode":"allow"}
+{"id":"allow-pytest","command":"python -m pytest -q","codex":"allow","opencode":"allow"}
+{"id":"allow-delete-file","command":"Remove-Item file.txt","codex":"allow","opencode":"allow"}
+{"id":"allow-pull","command":"git pull","codex":"allow","opencode":"ask"}
+{"id":"allow-clean-dry","command":"git clean -n","codex":"allow","opencode":"ask"}
+{"id":"allow-reset-soft","command":"git reset HEAD -- CHANGELOG.md","codex":"allow","opencode":"ask"}
+{"id":"allow-checkout-file","command":"git checkout -- README.md","codex":"allow","opencode":"ask"}
+{"id":"allow-delete-staging","command":"Remove-Item -Recurse staging/hooktest","codex":"allow","opencode":"ask"}
+{"id":"allow-delete-temp","command":"rm -rf ./temp/build","codex":"allow","opencode":"ask"}

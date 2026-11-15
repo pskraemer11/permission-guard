@@ -475,6 +475,7 @@ Version ist ein Flag (`--version`), Status liefert `stats`.
 | `git branch -d`                                                                   | `ask`; auf Windows ebenfalls `deny`               |
 | ↳                                                                                 | (case-insensitive `-D`-Regel)                     |
 | `git commit --amend`                                                              | `ask`                                             |
+| `git commit --no-verify`                                                          | `deny` (Entscheidung 15.11.2026)                  |
 | `npm install`, `pip install`, `winget`, `npx`, `Start-Process`                    | `ask`                                             |
 | `Invoke-WebRequest`/`-RestMethod` mit Speicher-, Sende- oder Credential-Plan      | `ask` (Details oben)                              |
 | `git config <key> <value>`                                                        | `ask`                                             |
@@ -491,6 +492,40 @@ Version ist ein Flag (`--version`), Status liefert `stats`.
 
 Alles, was der Klassifizierer nicht kennt, bleibt bei `ask` (fail closed).
 Seit 25.10.2026 geht diesem `ask` ein lokaler Entscheider voraus (Ebene 1).
+
+## Zwei Implementierungen: OpenCode und Codex
+
+Derselbe Schutz existiert zweimal, mit getrenntem Code. Eine Änderung an der
+einen Umsetzung wirkt nicht auf die andere.
+
+| Eigenschaft | OpenCode                                                           | Codex                                                     |
+| ----------- | ------------------------------------------------------------------ | --------------------------------------------------------- |
+| Einstieg    | `index.js`: `Plugin.define` mit `permission.hook("evaluate")`      | `PreToolUse`-Hook aus `~/.codex/hooks.json`, 10 s Timeout |
+| Prüfcode    | `guard.js` (rund 100 KB)                                           | `codex_guard.py` im Eltern-Repo (rund 270 Zeilen)         |
+| Urteile     | `allow`, `ask`, `deny`                                             | `deny` oder durchlassen                                   |
+| Grundlage   | Shell-Zerlegung, statische Listen, Pfadprüfung, MCP in drei Ebenen | Textmuster auf dem Befehlstext, fester Katalog            |
+| Modell      | ja, Ebene 1/3 für unklare Fälle über `llama-server`                | nein                                                      |
+| Laufzeit    | im OpenCode-Prozess, synchron                                      | eigener Prozess je Aufruf, synchron                       |
+| Fehlerfall  | Ausnahme wird protokolliert; statische Regeln entscheiden          | Hook startet nicht: Codex meldet und lässt laufen         |
+| Tests       | `node test.mjs` (755 Fälle)                                        | `pytest/unit/test_codex_guard.py` (107 Fälle)             |
+
+**Warum getrennt.** Codex kennt kein `ask`; ein Hook kann nur verweigern oder
+durchlassen. Der Codex-Teil liegt als `tools/agents-ebenen/codex_guard.py` im
+Eltern-Repository und ist ein schmaler Katalog harter Fälle; den Rest deckt die
+Sandbox ab. OpenCode kann fragen und dadurch feiner urteilen. Die
+unterschiedliche Behandlung von `git push` (OpenCode `ask`, Codex `forbidden`)
+steht in `docs/adr/0004-codex-push-verbieten-opencode-fragt.md`.
+
+**Gemeinsam geprüft.** `shared-cases.jsonl` hält 29 Befehle mit dem je Seite
+erwarteten Urteil fest; `node test.mjs` und der Pytest-Lauf lesen dieselbe
+Datei. Deckungsgleich verweigern beide `reset --hard`, `checkout .`, `restore .`,
+`clean -f` und `--no-verify`. Bei `git push`, `filter-branch`, `filter-repo`,
+rekursivem Löschen und `robocopy /MIR` verweigert Codex, während OpenCode fragt.
+
+**Für die Wartung.** Eine neue Regel muss in beiden Umsetzungen gepflegt
+werden. Für die 29 Fälle in `shared-cases.jsonl` bricht der Test, sobald eine
+Seite abweicht; alles andere bleibt eine stille Lücke. Fehlt das Unter-Repo im
+Eltern-Checkout, überspringt sich der Codex-Teil der gemeinsamen Prüfung.
 
 ## Git-Muster und Claude-Parität (09.11.2026)
 
