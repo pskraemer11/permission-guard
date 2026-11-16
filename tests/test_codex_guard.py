@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -45,6 +48,11 @@ BLOCKED = [
     'pwsh.exe -Command "cd repo; git push origin main"',
     'bash -lc "git add . && git push"',
     'cmd /c "git push"',
+    # Ein einzelnes & trennt Befehle (Review 17.11.2026)
+    "echo ok & git push",
+    "echo ok& git push",
+    "git status & git push",
+    'bash -lc "echo ok & git push"',
     # Arbeit und Geschichte verwerfen
     "git reset --hard",
     "git reset --hard HEAD~1",
@@ -81,7 +89,20 @@ BLOCKED = [
     "Remove-Item -Recurse *",
     'pwsh -Command "Remove-Item -Recurse docs"',
     "robocopy C:/a C:/b /MIR",
+    # Nur freigegebene Wurzeln: Unterordner des Projektordners und das
+    # tatsaechliche System-Temp. `..` und absolute Ziele ausserhalb werden
+    # abgelehnt (Review 17.11.2026).
+    "rm -rf staging/../src",
+    "rm -rf ./temp/../.git",
+    "rm -rf staging/ok /etc",
+    "rm -rf /etc",
+    "rm -rf C:/Windows/System32",
+    "cd repo && rm -rf staging/x",
+    "bash -c 'rm -rf staging/../src'",
+    'pwsh -Command "rm -rf staging/x"',
 ]
+
+TEMP_ROOT = Path(tempfile.gettempdir()).resolve()
 
 ALLOWED = [
     "",
@@ -89,6 +110,9 @@ ALLOWED = [
     "git pull",
     "git log --oneline -5",
     'echo "git push"',
+    'echo "a & b"',
+    "make 2>&1",
+    "Get-Content x 2>&1",
     "git commit -m 'push later'",
     "git commit -mn x",
     "git branch -d backup",
@@ -104,7 +128,7 @@ ALLOWED = [
     "Remove-Item -Recurse tmp/build",
     "Remove-Item -Recurse .\\cache\\npm",
     "rm -rf ./temp/build",
-    "rm -rf C:/Users/x/AppData/Local/Temp/foo",
+    f"rm -rf {TEMP_ROOT}/foo",
     "python -m pytest -q",
     "python -m ruff check .",
     "Get-Content README.md",
@@ -143,6 +167,48 @@ def test_decide_returns_deny_shape() -> None:
     assert output["hookEventName"] == "PreToolUse"
     assert output["permissionDecision"] == "deny"
     assert output["permissionDecisionReason"] == guard.REASON_PUSH
+
+
+def run_hook(payload: dict[str, object]) -> str:
+    """Hook-Aufruf wie Codex: JSON auf stdin, Ausgabe auf stdout."""
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT)],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.stdout
+
+
+def test_hook_json_over_stdin_denies_ampersand_push() -> None:
+    """Der Hook liest das JSON von stdin - auch fuer den Trenner `&`."""
+    out = run_hook({"tool_name": "Bash", "tool_input": {"command": "echo ok & git push"}})
+    decision = json.loads(out)
+    assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert decision["hookSpecificOutput"]["permissionDecisionReason"] == guard.REASON_PUSH
+
+
+def test_hook_json_over_stdin_stays_silent_without_reason() -> None:
+    out = run_hook({"tool_name": "Bash", "tool_input": {"command": "git status --short"}})
+    assert out.strip() == ""
+
+
+def test_delete_uses_project_root() -> None:
+    """Relative Loeschziele gelten gegen den uebergebenen Projektordner."""
+    root = Path("C:/work/repo")
+    assert guard.first_reason("rm -rf staging/x", root=root) is None
+    assert guard.first_reason("rm -rf src", root=root) is not None
+    assert guard.first_reason("cd repo && rm -rf staging/x", root=root) is not None
+
+
+def test_hook_json_over_stdin_uses_execution_folder() -> None:
+    """Der Ausfuehrungsordner im Hook-Eingang ist der Projektanker."""
+    allowed = run_hook({"tool_name": "Bash", "tool_input": {"command": "rm -rf staging/x", "cwd": "C:/work/repo"}})
+    assert allowed.strip() == ""
+    denied = run_hook({"tool_name": "Bash", "tool_input": {"command": "rm -rf src", "cwd": "C:/work/repo"}})
+    decision = json.loads(denied)
+    assert decision["hookSpecificOutput"]["permissionDecisionReason"] == guard.REASON_DELETE
 
 
 PROTECTED_PATCHES = [

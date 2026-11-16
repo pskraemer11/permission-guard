@@ -158,6 +158,42 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Behoben
 
+- **Skriptblock galt als Lesen (Review 17.11.2026):** `guard.js` bewertete
+  `Get-ChildItem | ForEach-Object { Remove-Item -Recurse -Force C:/Windows/x }`
+  als „nur lesend“, weil nur der Cmdlet-Name geprüft wurde. Ein Block hinter
+  `ForEach-Object`, `Where-Object`, `Select-Object`, `Sort-Object`,
+  `Group-Object` oder `Measure-Object` (auch Aliase `%`, `?`, `select`, `sort`,
+  `group`, `measure`) ist jetzt `ask` mit eigenem Grund und erreicht das Modell
+  nicht (`PIPELINE_BLOCK_CMDLETS`, `hasScriptBlock()`; Zweig `block` in
+  `evaluate()`). Kontrollblöcke (`if`, `foreach`, `while`) werden weiterhin Satz
+  für Satz geprüft. Zwei bisherige Testerwartungen (harmlose
+  `Where-Object`-/`ForEach-Object`-Blöcke) sind bewusst auf `ask` gezogen.
+- **`1>` und `2>` wurden nicht als Umleitung erkannt (Review 17.11.2026):**
+  `Get-Content a.txt 1> C:/Windows/x.txt` war „nur lesend“, weil die Ziffer vor
+  dem `>` als Wortzeichen galt. `hasRedirection()` erkennt die Ziffer jetzt als
+  Teil des Operators; `2>&1`, `*>&1` und `2>$null` bleiben ausgenommen, und
+  `extractTargets()` prüft das Ziel. Damit greift die Zielprüfung in
+  `scopeWrites()` auch für `1>`/`2>`.
+- **Einzelnes `&` trennte keine Befehle (Review 17.11.2026):** In `guard.js`
+  galt `Get-Content a.txt & Remove-Item -Recurse -Force C:/Windows/x` als ein
+  Segment und damit als „nur lesend“. `splitStatements()` trennt jetzt an einem
+  einzelnen `&`; in `2>&1` und in Anführungszeichen bleibt es Text. Am
+  Segmentanfang bleibt `&` der Call-Operator und verweigert - auch ohne
+  Leerzeichen (`&$cmd`), die Prüfung ist von `/^&\s/` auf `/^&/` erweitert.
+- **Einzelnes `&` umging die Codex-Regeln (Review 17.11.2026):**
+  `codex_guard.py` zerlegte nur an `;`, `|`, `&&` und Zeilenenden; `echo ok &
+  git push` war ein Segment und kam durch. `split_segments()` trennt jetzt
+  zusätzlich am einzelnen `&`, außerhalb von Zitaten und außerhalb von
+  `>&`/`<&`; Shell-Hüllen werden wie bisher rekursiv geprüft.
+- **Rekursives Löschen prüfte nur Pfadbestandteile (Review 17.11.2026):**
+  `codex_guard.py` erlaubte jedes Ziel, in dem irgendwo `cache`, `staging`,
+  `tmp` oder `temp` stand, und ließ absolute POSIX-Ziele aus. Jetzt entscheidet
+  der aufgelöste Pfad gegen die freigegebenen Wurzeln (diese vier Ordner im
+  Projektordner plus das tatsächliche System-Temp); `..` im Ziel, absolute
+  Ziele außerhalb und relative Ziele in einer Kette oder Shell-Hülle werden
+  abgelehnt. Projektanker ist der Ausführungsordner aus dem Hook-Eingang
+  (`cwd`), sonst der Ordner des Hook-Prozesses. `shared-cases.jsonl` wächst von
+  36 auf 40 Fälle; `node test.mjs` 797/797, `pytest tests -q` 146 passed.
 - **`test-index.mjs` rot auf Ubuntu (14.11.2026):** Beide Ubuntu-Jobs brachen
   bei „Verdrahtung index.js (Plugin)“ ab (4/6), Windows war grün. Ursache: Der
   Fake-ctx setzte `location.directory` auf `path.resolve("./scratch-project")`,

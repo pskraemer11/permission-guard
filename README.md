@@ -5,8 +5,8 @@ Dynamic path and command checking for shell calls.
 ## Origin and deploy
 
 Source: `<project>\tools\permission-guard\`.
-Runtime: `$HOME\.config\opencode\plugin\permission-guard\` or
-`${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugin/permission-guard` on Linux
+Runtime: `$HOME\.config\opencode\plugins\permission-guard\` or
+`${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins/permission-guard` on Linux
 and macOS. Since 15.11.2026 there is a second target, `$HOME\.codex\hooks\`,
 holding `codex_guard.py` (the Codex hook).
 
@@ -28,7 +28,7 @@ cd tools/permission-guard
 
 On Windows, `$HOME` in Git Bash and WSL points to the Linux home, not to the
 Windows profile. Use `deploy.ps1` there, or set both targets explicitly:
-`PERMISSION_GUARD_TARGET=/mnt/c/Users/<name>/.config/opencode/plugin/permission-guard`
+`PERMISSION_GUARD_TARGET=/mnt/c/Users/<name>/.config/opencode/plugins/permission-guard`
 and `PERMISSION_GUARD_CODEX_TARGET=/mnt/c/Users/<name>/.codex/hooks` (WSL) or
 `/c/Users/<name>/...` (Git Bash).
 
@@ -66,8 +66,8 @@ Both programs live here: the OpenCode plugin (Node) and the Codex guard
 (Python). The tests run separately because the runtimes are separate:
 
 ```powershell
-node test.mjs                     # OpenCode side, 770 cases
-python -m pytest tests -q         # Codex side, 123 cases
+node test.mjs                     # OpenCode side, 797 cases
+python -m pytest tests -q         # Codex side, 146 cases
 python -m ruff check .            # lint of the Python part
 python -m pyright                 # type check of the Python part
 ```
@@ -158,6 +158,15 @@ as:
 - help and version calls: a program name with exactly one help word
   (`gitleaks --version`, `ruff --help`, `node --version`, `version` as a word)
 - control blocks (`if`, `foreach`, `try`) whose body also only reads
+
+**Script blocks are code of their own.** A block behind a read-only pipeline
+cmdlet (`ForEach-Object`, `Where-Object`, `Select-Object`, `Sort-Object`,
+`Group-Object`, `Measure-Object` and their aliases `%`, `?`, `select`, `sort`,
+`group`, `measure`) is not evaluated: the line stays `ask` and never reaches the
+model (review 17.11.2026). Previously
+`Get-ChildItem | ForEach-Object { Remove-Item -Recurse -Force C:\Windows\x }`
+counted as "read-only". Control blocks (`if`, `foreach`, `while`) are still
+checked statement by statement.
 
 **Writing inside the project:** Additionally allowed when every target is
 resolvable and lies inside a trusted folder:
@@ -530,7 +539,7 @@ implementation does not affect the other.
 | Model       | yes, level 1/3 for unclear cases via `llama-server`                | no                                                         |
 | Runtime     | inside the OpenCode process, synchronous                           | own process per call, synchronous                          |
 | Failure     | exception is logged; static rules decide                           | hook does not start: Codex reports and lets it run         |
-| Tests       | `node test.mjs` (770 cases)                                        | `python -m pytest tests -q` (123 cases)                    |
+| Tests       | `node test.mjs` (797 cases)                                        | `python -m pytest tests -q` (146 cases)                    |
 
 **Why separate.** Codex has no `ask`; a hook can only deny or let through. The
 Codex part is a narrow catalogue of hard cases; the sandbox covers the rest.
@@ -538,14 +547,23 @@ OpenCode can ask and therefore judge more finely. The differing treatment of
 `git push` (OpenCode `ask`, Codex `forbidden`) is documented in
 `docs/adr/0004-codex-push-verbieten-opencode-fragt.md`.
 
-**Checked together.** `shared-cases.jsonl` holds 36 commands with the verdict
+**Checked together.** `shared-cases.jsonl` holds 40 commands with the verdict
 expected on each side; `node test.mjs` and the Pytest run read the same file.
 Both deny `reset --hard`, `checkout .`, `restore .`, `clean -f` and
 `--no-verify` (including the short form `git commit -n`). For `git push`, `filter-branch`, `filter-repo`, recursive
-deletion and `robocopy /MIR`, Codex denies while OpenCode asks.
+deletion and `robocopy /MIR`, Codex denies while OpenCode asks. Since
+17.11.2026 Codex also denies `echo ok & git push` and `rm -rf staging/../src`;
+OpenCode asks there.
+
+**Deletion roots in the Codex guard.** Recursive deletion is only allowed under
+`cache/`, `staging/`, `tmp/` and `temp/` in the project folder and in the actual
+system temp. The resolved path decides: `staging/../src`, `./temp/../.git`,
+absolute targets outside and relative targets in a chain or shell wrapper are
+denied (review 17.11.2026). The project anchor is the execution folder from the
+hook input, otherwise the folder of the hook process.
 
 **For maintenance.** A new rule must be maintained in both implementations. For
-the 36 cases in `shared-cases.jsonl` the test breaks as soon as one side
+the 40 cases in `shared-cases.jsonl` the test breaks as soon as one side
 diverges; everything else remains a silent gap. Both sides now live in the same
 repository, so each suite checks its half of the file without skipping.
 
@@ -620,6 +638,11 @@ A shell call is split into segments before checking. The segments come from the
 scanner (`event.resources`). The split respects quotes so that a separator
 inside an argument does not create a separate execution.
 
+A single `&` also separates commands (review 17.11.2026); previously
+`Get-Content a.txt & Remove-Item …` counted as one segment. At the start of a
+segment `&` remains the call operator and denies (`& $cmd`, also without a space
+as `&$cmd`). Inside `2>&1` and inside quotes `&` is text.
+
 In the model check with `shellBackend: "systemone"`, each segment is assessed
 individually. The weakest result decides, and a harmless segment cannot mask a
 writing one (`reviewer.js`, function `review`).
@@ -629,8 +652,11 @@ According to the code, redirections are classified like this:
 - standard handle redirections such as `2>&1`, `*>&1`, `1>&2`, `2>$null` and
   `2>NUL` count neither as obfuscation nor as writing (`guard.js`,
   `hasRedirection`; `reviewer.js`, comment on `OPERATOR_CHARS`).
-- file redirections (`>`, `>>`) count as writing. In the model path they are
-  obfuscating operators.
+- file redirections (`>`, `>>`, `1>`, `2>`) count as writing. In the model path
+  they are obfuscating operators. `1>` and `2>` have been checked against the
+  target since 17.11.2026; before, they went unnoticed because the digit before
+  the `>` counted as a word character (`Get-Content a.txt 1> C:\Windows\x.txt`
+  was "read-only").
 - backtick, `<` and `$(` are obfuscating operators in the model path.
 
 The style rule for agent commands is in `~/AGENTS.md`: one command per tool
@@ -803,7 +829,7 @@ The index serves pre-selection; our own 18-command set remains authoritative.
 .\start-reviewer.ps1                       # llama-server, Clef-Flash, port 8080
 .\start-reviewer.ps1 -ModelPath "D:\…\anderes.gguf" -Port 8081
 node smoke-reviewer.mjs                    # 9 cases against the running configuration
-node test.mjs                              # 770 unit tests
+node test.mjs                              # 797 unit tests
 node test-wiring.mjs                       # 13 wiring tests (fake git)
 .\start-reviewer.ps1 -Stop
 ```
@@ -1148,21 +1174,21 @@ node test.mjs
 node test-wiring.mjs            # fake git: deny prevents execution
 node test-index.mjs             # plugin wiring
 node bench-mcp.mjs              # 33 fixed MCP cases
-python -m pytest tests -q      # Codex guard, 123 cases
+python -m pytest tests -q      # Codex guard, 146 cases
 python -m ruff check .         # Python lint
 python -m pyright              # Python type check
 node replay.mjs                # measurement: how many commands run without a prompt
 node analyze.mjs               # point-8 analysis: where exactly "not classifiable" comes from
 ```
 
-770 cases in the groups without/with project reference, CLI allowlists, help and
+797 cases in the groups without/with project reference, CLI allowlists, help and
 version, gitleaks, sqlite3/gh, network reads, denial & secret replacement,
 python, interpreters, Ruff bootstrap, reviewer (risk list, false alarms,
 answer format, structure), MCP (detection, keys, secret suspicion, criteria,
 three-layer verdict including emergency brake, intent from arguments, data
 exfiltration, unresolved targets, switch, prompt channels and model call with
 replacement `fetch`), audit chain, skill verdict file, evaluation, decision
-model and statistics. Added to that are 36 shared cases with the Codex guard,
+model and statistics. Added to that are 40 shared cases with the Codex guard,
 whose target values are kept in `shared-cases.jsonl`. Exit code 1 on deviation.
 The classifier (`guard.js`) is a pure function and needs neither OpenCode nor
 network. `replay.mjs` and `analyze.mjs` stay in the project and are not
@@ -1187,6 +1213,7 @@ file are private on POSIX (0700/0600).
 ## Changeability
 
 - Allowed commands: `READ_CMDLETS`, `READ_BINARIES`, `READ_GIT` in `guard.js`
+- script blocks (always `ask`): `PIPELINE_BLOCK_CMDLETS`, `hasScriptBlock()`
 - reading .NET types and methods: `TYPE_READ`, `SAFE_METHODS` — every addition
   needs a test case evidenced from the log (`analyze.mjs`)
 - redirection search/string masking: `maskStrings()`, `hasRedirection()`

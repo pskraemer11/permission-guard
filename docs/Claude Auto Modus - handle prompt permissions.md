@@ -54,8 +54,8 @@
   Konfigurierbar ist er über `~/.claude/settings.json`:
   - `permissions.defaultMode`: "auto" setzt den Startmodus. In Projekt-Settings wird auto ignoriert.
   - `permissions.disableAutoMode: "disable"`: schaltet den Auto-Modus ab, typischerweise in Managed Settings.
-  - autoMode.environment und autoMode.allow: vertrauenswürdige Repos, Buckets und Services sowie Regelüberschreibungen.
-  - env.CLAUDE_CODE_AUTO_MODE_MODEL: legt das Klassifikator-Modell fest.
+  - `autoMode.environment` und `autoMode.allow`: vertrauenswürdige Repos, Buckets und Services sowie Regelüberschreibungen.
+  - `env.CLAUDE_CODE_AUTO_MODE_MODEL`: legt das Klassifikator-Modell fest.
   - claude auto-mode defaults zeigt die vollständigen Standardregeln als JSON.
 
   Der fewer-permission-prompts-Skill hilft außerdem, eine Allowlist für häufige, harmlose Befehle aufzubauen. Dann muss der Klassifikator seltener

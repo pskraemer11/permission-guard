@@ -14,11 +14,16 @@ Geprüft werden vier Kategorien:
 1. ``git push`` in jeder Form, auch durch eine Shell umhüllt.
 2. Git-Kommandos, die Arbeit oder Geschichte vernichten.
 3. ``--no-verify``, das projektweit nur mit ausdrücklicher Freigabe erlaubt ist.
-4. Massenlöschung, außer unter ``cache/``, ``staging/``, ``tmp/`` und ``temp/``.
+4. Massenlöschung, außer unter ``cache/``, ``staging/``, ``tmp/`` und ``temp/``
+   im Projektordner sowie im tatsächlichen System-Temp. Maßgeblich ist der
+   aufgelöste Pfad; ``..`` im Ziel und relative Ziele in einer Kette oder
+   Shell-Hülle werden abgelehnt.
 
 Grenze: Der Guard liest Text, er führt nichts aus. ``apply_patch``-Löschungen,
-``Start-Process``, ``xargs``, fremde Skripte und Aliase bleiben unsichtbar. Fehler
-im Hook sind fail-open: Startet das Skript nicht, führt Codex den Befehl aus.
+``Start-Process``, ``xargs``, fremde Skripte und Aliase bleiben unsichtbar. Ein
+Symlink-Rennen kann den aufgelösten Pfad verändern, nachdem er geprüft wurde.
+Fehler im Hook sind fail-open: Startet das Skript nicht, führt Codex den Befehl
+aus.
 
 Aufruf durch Codex (stdin: Hook-JSON, stdout: Entscheidung):
 
@@ -30,9 +35,10 @@ from __future__ import annotations
 import json
 import re
 import sys
+import tempfile
 from collections.abc import Iterable
+from pathlib import Path
 
-SEPARATORS = re.compile(r"&&|\|\||[;|\n\r]")
 LEADING = re.compile(r"^[\s&{}()\[\]]+")
 SHELLS = {"pwsh", "pwsh.exe", "powershell", "powershell.exe", "bash", "bash.exe", "sh", "cmd", "cmd.exe"}
 CMD_FLAGS = {"/c", "/k", "/s"}
@@ -51,8 +57,11 @@ DELETE_PATTERN = re.compile(r"^\*\*\* Delete File:\s*(.+?)\s*$", re.MULTILINE)
 PROTECTED_PATH_PARTS = {".git", ".codex", ".githooks"}
 PROTECTED_FILES = {"agents.md"}
 MAX_PATCH_DELETIONS = 5
-# Loeschen ist nur unter diesen Pfadbestandteilen erlaubt.
+# Loeschen ist nur unter diesen Ordnern des Projektordners erlaubt.
 ALLOWED_DELETE_PARTS = {"cache", "staging", "tmp", "temp"}
+# Ein Schalter der Windows-Shell (/s, /q) ist kein Pfad. Erst ab drei Zeichen
+# gilt ein /-Wort als Pfad, damit /etc nicht als Schalter verschwindet.
+PATH_FLAG = re.compile(r"^/[a-z]{1,2}$", re.IGNORECASE)
 
 REASON_PUSH = "Remote-Pushes bleiben beim Nutzer. Der Push wurde von einem Hook blockiert."
 REASON_HISTORY = "Das Kommando verwirft Arbeit oder Geschichte. Bitte vom Nutzer ausführen lassen."
@@ -74,6 +83,58 @@ REASON_PATCH_BULK = (
 def clean(token: str) -> str:
     """Entfernt Anfuehrungs- und Klammerzeichen an den Raendern."""
     return token.strip().strip("\"'`{}()[]")
+
+
+def split_segments(command: str) -> list[str]:
+    """Zerlegt einen Befehlstext in Segmente.
+
+    Getrennt wird an ``;``, ``|``, ``||``, ``&&``, Zeilenenden und einem
+    einzelnen ``&`` (Review 17.11.2026). Ein ``&`` in Zitaten oder in einer
+    Stream-Umleitung (``2>&1``) bleibt Text. Frueher galt ``echo ok & git push``
+    als ein Segment und kam deshalb ungeprueft durch.
+    """
+    segments: list[str] = []
+    current: list[str] = []
+    quote: str | None = None
+    index = 0
+    while index < len(command):
+        char = command[index]
+        if quote is not None:
+            current.append(char)
+            if char == quote:
+                quote = None
+            index += 1
+            continue
+        if char in "\"'":
+            quote = char
+            current.append(char)
+            index += 1
+            continue
+        if char == "&":
+            following = command[index + 1] if index + 1 < len(command) else ""
+            previous = command[index - 1] if index > 0 else ""
+            if following == "&":
+                segments.append("".join(current))
+                current = []
+                index += 2
+                continue
+            if previous in (">", "<"):
+                current.append(char)
+                index += 1
+                continue
+            segments.append("".join(current))
+            current = []
+            index += 1
+            continue
+        if char in ";|\n\r":
+            segments.append("".join(current))
+            current = []
+            index += 1
+            continue
+        current.append(char)
+        index += 1
+    segments.append("".join(current))
+    return segments
 
 
 def tokens(segment: str) -> list[str]:
@@ -160,11 +221,46 @@ def commit_no_verify_short(rest: list[str]) -> bool:
     return False
 
 
-def is_allowed_delete_target(token: str) -> bool:
-    """Meldet, ob ein Loeschziel unter cache/, staging/, tmp/ oder temp/ liegt."""
-    normalized = token.replace("\\", "/").strip().lower()
-    parts = [part for part in normalized.split("/") if part not in ("", ".")]
-    return bool(parts) and any(part in ALLOWED_DELETE_PARTS for part in parts)
+def is_allowed_delete_target(token: str, roots: list[Path], root: Path | None, relative_ok: bool) -> bool:
+    """Meldet, ob ein Loeschziel unter einer freigegebenen Wurzel liegt.
+
+    Geprueft wird der aufgeloeste Pfad gegen die freigegebenen Wurzeln. ``..``
+    im Ziel und relative Ziele ohne eindeutigen Arbeitsordner werden abgelehnt
+    (Review 17.11.2026).
+    """
+    raw = token.strip().strip("\"'`")
+    if not raw:
+        return False
+    parts = [part for part in raw.replace("\\", "/").split("/") if part not in ("", ".")]
+    if not parts or ".." in parts:
+        return False
+    path = Path(raw)
+    if not path.is_absolute():
+        if not relative_ok or root is None:
+            return False
+        path = root / path
+    try:
+        resolved = path.resolve()
+    except OSError:
+        return False
+    return any(resolved == base or resolved.is_relative_to(base) for base in roots)
+
+
+def delete_roots(root: Path | None) -> list[Path]:
+    """Freigegebene Wurzeln fuer rekursives Loeschen.
+
+    Nur die vier freigegebenen Unterordner des Projektordners und das
+    tatsaechliche System-Temp. Frueher genuegte ein Pfadbestandteil wie
+    ``staging`` irgendwo im Ziel.
+    """
+    roots: list[Path] = []
+    if root is not None:
+        roots.extend(root / name for name in sorted(ALLOWED_DELETE_PARTS))
+    try:
+        roots.append(Path(tempfile.gettempdir()).resolve())
+    except OSError:
+        pass
+    return roots
 
 
 def is_robocopy_mirror(parts: list[str]) -> bool:
@@ -174,8 +270,8 @@ def is_robocopy_mirror(parts: list[str]) -> bool:
     return any(token.lower().lstrip("/-") == "mir" for token in parts[1:])
 
 
-def is_mass_deletion(parts: list[str]) -> bool:
-    """Prueft, ob rekursiv geloescht wird, ohne erlaubtes Ziel."""
+def is_mass_deletion(parts: list[str], root: Path | None, relative_ok: bool) -> bool:
+    """Prueft, ob rekursiv geloescht wird, ohne freigegebenes Ziel."""
     if not parts:
         return False
     name = parts[0].lower().removesuffix(".exe")
@@ -185,13 +281,16 @@ def is_mass_deletion(parts: list[str]) -> bool:
     recursive = bool(flags & RECURSIVE_FLAGS) or SHELL_RECURSIVE in flags
     if not recursive:
         return False
-    targets = [part for part in parts[1:] if not part.startswith("-") and not part.startswith("/")]
+    # Schalter der Windows-Shell (/s, /q) sind keine Ziele; ein absolutes
+    # POSIX-Ziel wie /etc dagegen schon (Review 17.11.2026).
+    targets = [part for part in parts[1:] if not part.startswith("-") and not PATH_FLAG.match(part)]
     if not targets:
         return True
-    return not all(is_allowed_delete_target(target) for target in targets)
+    roots = delete_roots(root)
+    return not all(is_allowed_delete_target(target, roots, root, relative_ok) for target in targets)
 
 
-def segment_reason(parts: list[str]) -> str | None:
+def segment_reason(parts: list[str], root: Path | None, relative_ok: bool) -> str | None:
     """Wendet alle Regeln auf ein Segment an."""
     found = git_subcommand(parts)
     if found is not None:
@@ -206,24 +305,34 @@ def segment_reason(parts: list[str]) -> str | None:
         return REASON_HISTORY
     if is_robocopy_mirror(parts):
         return REASON_MIRROR
-    if is_mass_deletion(parts):
+    if is_mass_deletion(parts, root, relative_ok):
         return REASON_DELETE
     return None
 
 
-def first_reason(command: str, depth: int = 0) -> str | None:
+def first_reason(command: str, depth: int = 0, root: Path | None = None) -> str | None:
     """Liefert den ersten Ablehnungsgrund eines Befehlstexts."""
     if not command.strip():
         return None
-    for raw in SEPARATORS.split(command):
+    if root is None:
+        try:
+            root = Path.cwd().resolve()
+        except OSError:
+            root = None
+    segments = [segment for segment in split_segments(command) if segment.strip()]
+    # Ein relativer Loeschpfad ist nur in einem einzelnen, nicht umhuellten
+    # Befehl eindeutig: in einer Kette oder Shell-Huelle ist der Arbeitsordner
+    # nicht der Projektordner (Review 17.11.2026).
+    relative_ok = depth == 0 and len(segments) == 1
+    for raw in segments:
         parts = tokens(LEADING.sub("", raw))
         if not parts:
             continue
-        reason = segment_reason(parts)
+        reason = segment_reason(parts, root, relative_ok)
         if reason is not None:
             return reason
         if depth < 3 and parts[0].lower() in SHELLS:
-            nested = first_reason(inner_text(parts), depth + 1)
+            nested = first_reason(inner_text(parts), depth + 1, root)
             if nested is not None:
                 return nested
     return None
@@ -259,6 +368,29 @@ def patch_reason(patch: str) -> str | None:
     return None
 
 
+def hook_root(payload: dict[str, object]) -> Path | None:
+    """Projektordner fuer relative Pfade.
+
+    Codex liefert bei lokalen ``exec_command``-Aufrufen den Ausfuehrungsordner
+    im Hook-Eingang; fehlt er, gilt der Ordner des Hook-Prozesses. Unbekannt
+    bleibt unbekannt - dann werden relative Loeschziele abgelehnt.
+    """
+    for container in (payload.get("tool_input"), payload):
+        if not isinstance(container, dict):
+            continue
+        for key in ("cwd", "workdir", "working_directory"):
+            value = container.get(key)
+            if isinstance(value, str) and value.strip():
+                try:
+                    return Path(value).resolve()
+                except OSError:
+                    return None
+    try:
+        return Path.cwd().resolve()
+    except OSError:
+        return None
+
+
 def decide(payload: dict[str, object]) -> dict[str, object] | None:
     """Liefert die Ablehnung fuer ein Hook-Ereignis oder ``None``."""
     tool_name = payload.get("tool_name")
@@ -269,7 +401,7 @@ def decide(payload: dict[str, object]) -> dict[str, object] | None:
     if not isinstance(command, str):
         return None
     if tool_name == "Bash":
-        reason = first_reason(command)
+        reason = first_reason(command, root=hook_root(payload))
     elif tool_name == "apply_patch":
         reason = patch_reason(command)
     else:

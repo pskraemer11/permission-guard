@@ -36,9 +36,11 @@ const base = [
   ["cd \"C:\\p\"\n\"=== Commits ===\"\ngit rev-list --count HEAD\ngit log --oneline | Select-Object -First 5", "allow"],
   ["Get-Content CHANGELOG.md -Tail 40", "allow"],
   ["$rows | Format-Table -AutoSize | Out-String -Width 160", "allow"],
-  ["Get-Content file.txt | Where-Object { $_ -match 'x' } | Measure-Object", "allow"],
+  // Skriptblock hinter einem lesenden Pipeline-Cmdlet: eigener Code, deshalb
+  // Rueckfrage (Review 17.11.2026). Ein Block kann alles enthalten.
+  ["Get-Content file.txt | Where-Object { $_ -match 'x' } | Measure-Object", "ask"],
   ["$x = Get-Content file.txt\n$x.Count", "allow"],
-  ["Select-String -Path CHANGELOG.md -Pattern \"Git-Identitaet\" | ForEach-Object { \"$($_.LineNumber)\" }", "allow"],
+  ["Select-String -Path CHANGELOG.md -Pattern \"Git-Identitaet\" | ForEach-Object { \"$($_.LineNumber)\" }", "ask"],
   ["git status", "allow"],
   ["git diff --stat", "allow"],
   ["git config core.autocrlf", "allow"],
@@ -1597,6 +1599,43 @@ const reviewFixesScoped = [
 ]
 run(reviewFixesScoped, options, "Review 13.11.2026: mit Projektbezug")
 
+// --- Review 17.11.2026: Skriptbloecke, Dateiumleitungen, einzelnes & ------
+// Drei Luecken: ein Skriptblock hinter einem lesenden Cmdlet galt als "read",
+// 1> und 2> wurden nicht als Umleitung erkannt, und ein einzelnes & trennte
+// keine Befehle. Jede Gruppe hat Gegenproben, die legitimes Verhalten haelt.
+const reviewBlock = [
+  // Der Block ist eigener Code; die Zeile bleibt Rueckfrage (kein Modell).
+  ["Get-ChildItem | ForEach-Object { Remove-Item -Recurse -Force C:/Windows/x }", "ask"],
+  ["ForEach-Object { Remove-Item -Recurse -Force C:/Windows/x }", "ask"],
+  ["% { Remove-Item -Recurse -Force C:/Windows/x }", "ask"],
+  ["? { Remove-Item -Recurse -Force C:/Windows/x }", "ask"],
+  ["Get-ChildItem | Where-Object { Remove-Item -Recurse -Force C:/Windows/x }", "ask"],
+  ["Get-ChildItem | Select-Object { Remove-Item -Recurse -Force C:/Windows/x }", "ask"],
+  ["Get-ChildItem | ForEach-Object { $_ } | Where-Object { Remove-Item -Recurse -Force C:/Windows/x }", "ask"],
+  // Ein vorangehendes erlaubtes Schreiben aendert daran nichts.
+  ["Set-Content C:/p/a.txt \"x\"\nGet-ChildItem | ForEach-Object { $_ }", "ask"],
+  // Gegenproben: Kontrollbloecke, Parameter und Hashtables bleiben erlaubt.
+  ["foreach ($f in @(\"a.txt\")) { Get-Content $f }", "allow"],
+  ["Get-ChildItem | Select-Object @{n='Name';e={$_.Name}}", "allow"],
+  ["Get-ChildItem | Where-Object Length -gt 1000", "allow"],
+  // 1> und 2> schreiben in eine Datei; 2>&1 und 2>$null nicht.
+  ["Get-Content a.txt 1> C:/Windows/x.txt", "deny"],
+  ["Get-Content a.txt 2> C:/Windows/x.txt", "deny"],
+  ["Get-Content a.txt 1> C:/p/x.txt", "allow"],
+  ["Get-Content a.txt 2>&1", "allow"],
+  ["Get-Content a.txt 2>$null", "allow"],
+  ["Get-Content a.txt > b.txt 2>$null", "allow"],
+  ["Write-Output \"2 > 1 ist wahr\"", "allow"],
+  // Ein einzelnes & trennt Befehle; in Zitaten und in >& bleibt es Text.
+  ["Get-Content a.txt & Remove-Item -Recurse -Force C:/Windows/x", "deny"],
+  ["Get-Content a.txt & Get-ChildItem", "allow"],
+  // Ein fuehrendes & bleibt Call-Operator und verweigert, auch ohne Leerzeichen.
+  ["& Get-ChildItem", "deny"],
+  ["&$cmd", "deny"],
+  ["Write-Output \"a & b\"", "allow"],
+]
+run(reviewBlock, options, "Review 17.11.2026: Skriptbloecke, Umleitungen, &")
+
 // Ohne pwsh im PATH darf der Reviewer-Start den Prozess nicht abbrechen.
 // Vorher beendete das ein unbehandeltes 'error'-Ereignis den Node-Prozess.
 const reviewerProbe = spawnSync(
@@ -1681,6 +1720,6 @@ const total =
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
-  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + 1 + secretsChecks.length + 5 + 3 + 3 + 1
+  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + reviewBlock.length + 1 + secretsChecks.length + 5 + 3 + 3 + 1
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

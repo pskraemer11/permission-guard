@@ -17,6 +17,9 @@ bench-results*.json
 guard.log
 *.tgz
 
+# Review reports
+.full-review/
+
 # Lokale Modell- und Serverpfade, falls jemand Skripte kopiert
 *.local.ps1
 

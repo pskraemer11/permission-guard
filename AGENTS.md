@@ -22,7 +22,7 @@ laufendes Modell messen.
 
 Nur über `deploy.ps1` (Windows) oder `deploy.sh`. Das Skript prüft die Tests,
 kopiert und vergleicht SHA256. Es gibt zwei Ziele:
-`~/.config/opencode/plugin/permission-guard` (OpenCode-Plugin) und
+`~/.config/opencode/plugins/permission-guard` (OpenCode-Plugin) und
 `~/.codex/hooks` (Codex-Guard). Beide Laufzeitkopien sind schreibgeschützt;
 einzelne Dateien werden nicht dorthin geschrieben.
 
