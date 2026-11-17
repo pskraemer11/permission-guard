@@ -1917,3 +1917,47 @@ messen, deployen, dokumentieren.
 - Letzte Nachabnahme pruefte nur den benannten Zielumfang, nicht alle denkbaren
   Shellformen. Deploy meldet automatisches Neuladen per Dateiwatcher; ein
   separater Logbeleg des Live-Reloads wurde nicht erhoben.
+
+================ Compaction 17.11.2026 / 19:11 ================
+## Objective
+- **Current:** Den abgelehnten Push ueber den Regelsatz hinaus bis zu gruenen
+  Pflicht-Checks bringen.
+- **Completed:** Ursache der Push-Ablehnung und der zwei roten CI-Jobs belegt;
+  die Privacy-Verletzung in den Testpfaden ist lokal korrigiert.
+
+## Important Details
+- **Decisions:** Kein Regelsatz-Lockern und kein Force-Push. Derselbe Commit
+  laeuft zuerst auf `ci/0abac44`; nach gruenen Pflicht-Checks geht `main` per
+  Fast-Forward-Push nach.
+- **Bug / Finding:** Ein direkter Push auf `main` wird abgewiesen, weil vor dem
+  Push keine Check-Registrierung existiert ("5 of 5 required status checks are
+  expected"). Auf dem Pruef-Branch liefen danach alle Windows- und Python-Jobs
+  gruen; nur die beiden Ubuntu-Node-Jobs scheiterten am Privacy-Scan. Ursache
+  waren drei synthetische Testziele `C:/Users/Public/...`, nicht Produktivcode.
+  Sie heissen jetzt `C:/outside/...`; die Deny-Erwartungen sind unveraendert.
+- **Architecture:** Keine. Nur Testdaten plus Chronik.
+
+## Work State
+### Completed
+- `git grep` mit dem CI-Muster findet keinen Benutzerpfad mehr.
+- 873/873 Unit, 17/17 Integration, 13/13 Wiring, 33/33 MCP; 146 Python-Tests
+  plus 1 Skip; Ruff, Pyright und Diff-Check gruen.
+### Active
+- Folgecommit fuer den Testpfad-Fix; danach derselbe Pruef-Branch erneut
+  aktualisieren.
+### Blocked
+- Kein fachlicher Blocker. Dependabot-Alert 2 (moderate, minimatch) bleibt
+  bewusst offen; er ist nicht Ursache der roten Jobs.
+
+## Next Move
+1. Folgecommit erstellen und `main:ci/0abac44` fast-forward pushen.
+2. Nach 5/5 gruenen Pflicht-Checks `main` pushen und den Pruef-Branch loeschen.
+
+## Relevant Files
+- `test.mjs`: drei neutrale Aussenziele statt Benutzerpfaden.
+- `CHANGELOG.md`, `PLANUNG.md`: Nachtrag zu Push-Regel und CI-Privacy.
+
+## Important Context
+- `gh run list --commit ...` kann direkt nach dem Push kurz "no runs found"
+  melden; die Registrierung ist verzoegert. Der Lauf existiert spaeter unter
+  derselben Commit-Kurzform.

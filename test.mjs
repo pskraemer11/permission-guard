@@ -1847,12 +1847,12 @@ const pipelineBlocks = [
   ["if ($false) { Write-Output 1 } else { Set-Content C:/Windows/out.txt y }", "deny"],
   ["Write-Output 1 | ForEach-Object { if ($true) { Set-Location C:/Windows -PassThru } } | ForEach-Object { Set-Content escape.txt y }", "ask"],
   // Gueltige PowerShell-Syntax mit inneren Zitaten im Teilausdruck.
-  ['Write-Output "text $(Write-Output "safe"; Set-Content -Path C:/Users/Public/guard-review-nicht-schreiben.txt -Value y)"', "deny"],
+  ['Write-Output "text $(Write-Output "safe"; Set-Content -Path C:/outside/guard-review-nicht-schreiben.txt -Value y)"', "deny"],
   ["Write-Output 1 | ForEach-Object -Begin { Write-Output $(node -e 'void 0') } -Process { Set-Content C:/Windows/out.txt y }", "deny"],
   // Auch ein schreibendes Hauptverb (git push) darf ein Pfadverbot nicht
   // durch eine fruehere Rueckfrage verdecken.
-  ["Write-Output $(git push); Set-Content C:/Users/Public/guard-review-nicht-schreiben.txt y", "deny"],
-  ["Write-Output $(git push https://token@example.invalid/repo main); Set-Content C:/Users/Public/guard-review-nicht-schreiben.txt y", "deny"],
+  ["Write-Output $(git push); Set-Content C:/outside/guard-review-nicht-schreiben.txt y", "deny"],
+  ["Write-Output $(git push https://token@example.invalid/repo main); Set-Content C:/outside/guard-review-nicht-schreiben.txt y", "deny"],
 ]
 run(pipelineBlocks, options, "Pipeline-Bloecke: Block als eigenes Skript")
 
