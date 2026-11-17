@@ -1,8 +1,20 @@
 # Zeilenenden: Hooks laufen in der Bash und brauchen LF. Quelltext bleibt LF,
-# unabhaengig von core.autocrlf der jeweiligen Maschine.
+# unabhaengig von core.autocrlf der jeweiligen Maschine. Ohne den Pin schreibt
+# Git bei core.autocrlf=true beim naechsten Checkout CRLF in die Arbeitskopie.
 .githooks/* text eol=lf
 *.js text eol=lf
 *.mjs text eol=lf
 *.json text eol=lf
+*.jsonl text eol=lf
 *.md text eol=lf
+*.ps1 text eol=lf
+*.py text eol=lf
 *.sh text eol=lf
+*.toml text eol=lf
+*.txt text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.conf text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+LICENSE text eol=lf
