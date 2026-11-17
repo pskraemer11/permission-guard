@@ -1,0 +1,6 @@
+# Reproduzierbare Werkzeuge fuer den Python-Teil (Codex-Guard und seine Tests).
+# Die Versionen entsprechen requirements-ci.txt im Eltern-Repository, damit
+# beide Suiten mit demselben Stand laufen.
+pytest==9.2.0
+ruff==0.17.4
+pyright==1.1.414

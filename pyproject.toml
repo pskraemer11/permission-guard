@@ -1,0 +1,52 @@
+# Zentrale Tool-Konfiguration fuer den Python-Teil (Codex-Guard).
+#
+# Die Werte entsprechen pyproject.toml im Eltern-Repository, damit Gate und CI
+# hier dieselben Regeln und dieselbe Ruff-Version pruefen.
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+cache-dir = ".ruff_cache"
+
+# Nur Python pruefen. Ruff 0.17 nimmt sonst auch `*.md` auf und formatiert
+# Python-Bloecke in der Doku; das ist hier kein Pruefziel.
+include = ["*.py", "*.pyi"]
+
+# Eine Version fuer alle Aufrufer: python -m ruff, uvx ruff, CI. Bei Abweichung
+# bricht Ruff mit einer Meldung ab, statt still anders zu pruefen.
+required-version = "==0.17.4"
+
+extend-exclude = [
+    "node_modules",
+    "**/__pycache__",
+]
+
+[tool.ruff.lint]
+# Fehler und Korrektheit, kein Stil. Grundlage: F und die Default-Gruppen
+# E4/E7/E9, dazu Bugbear, Import-Sortierung und veraltete Syntax.
+select = [
+    "F",      # Pyflakes: undefinierte Namen, ungenutzte Importe
+    "E4",     # pycodestyle: Import-Reihenfolge
+    "E7",     # pycodestyle: Syntax
+    "E9",     # pycodestyle: Laufzeitfehler
+    "B",      # flake8-bugbear
+    "I",      # isort
+    "UP",     # pyupgrade
+]
+ignore = [
+    # Zeilenlaenge: die Urteilstexte im Guard sind bewusst lang.
+    "E501",
+]
+
+[tool.pyright]
+pythonVersion = "3.12"
+pythonPlatform = "All"
+typeCheckingMode = "basic"
+include = [
+    "codex_guard.py",
+    "tests",
+]
+exclude = [
+    "**/__pycache__",
+    "node_modules",
+]

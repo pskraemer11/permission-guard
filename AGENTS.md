@@ -5,21 +5,26 @@ Arbeitsregeln für Agenten in diesem Repository.
 ## Prüfen
 
 ```powershell
-node test.mjs        # vollständige Suite, Exitcode 1 bei Abweichung
-node test-wiring.mjs # Fake-git: deny verhindert Ausführung
-node bench-mcp.mjs   # 33 feste Fälle, 9 Verbote
+node test.mjs             # vollständige Suite, Exitcode 1 bei Abweichung
+node test-wiring.mjs      # Fake-git: deny verhindert Ausführung
+node bench-mcp.mjs        # 33 feste Fälle, 9 Verbote
+python -m pytest tests -q # Codex-Guard, inkl. shared-cases.jsonl
+python -m ruff check .    # Python-Lint
+python -m pyright         # Python-Typprüfung
 ```
 
-Alle drei müssen grün sein, bevor committet wird. Änderungen an `reviewer.js`
-zusätzlich mit `node bench-model.mjs --repeat 3` gegen ein laufendes Modell
-messen.
+Alle sechs müssen grün sein, bevor committet wird. Für den Python-Teil vorher
+einmalig `python -m pip install -r requirements-dev.txt`. Änderungen an
+`reviewer.js` zusätzlich mit `node bench-model.mjs --repeat 3` gegen ein
+laufendes Modell messen.
 
 ## Deploy
 
 Nur über `deploy.ps1` (Windows) oder `deploy.sh`. Das Skript prüft die Tests,
-kopiert und vergleicht SHA256. Die Laufzeitkopie unter
-`~/.config/opencode/plugin/permission-guard` ist schreibgeschützt; einzelne
-Dateien werden nicht dorthin geschrieben.
+kopiert und vergleicht SHA256. Es gibt zwei Ziele:
+`~/.config/opencode/plugin/permission-guard` (OpenCode-Plugin) und
+`~/.codex/hooks` (Codex-Guard). Beide Laufzeitkopien sind schreibgeschützt;
+einzelne Dateien werden nicht dorthin geschrieben.
 
 ## Regeln
 

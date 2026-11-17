@@ -1,25 +1,31 @@
 #Requires -Version 7
 <#
 .SYNOPSIS
-    Deployt permission-guard aus dem Projekt in das Laufzeitverzeichnis.
+    Deployt permission-guard aus dem Projekt in die Laufzeitverzeichnisse.
 
 .DESCRIPTION
-    Quelle ist dieses Verzeichnis (tools/permission-guard im Projekt), Ziel ist
-    ~/.config/opencode/plugin/permission-guard.
+    Quelle ist dieses Verzeichnis (tools/permission-guard im Projekt). Es gibt
+    zwei Ziele:
 
-    Das Ziel bleibt absichtlich schreibgeschuetzt (permission: ask): Kein Agent
-    soll seine eigenen Regeln unbemerkt aendern koennen. Dieses Skript ist der
-    einzige Weg dorthin und kostet genau eine Rueckfrage - deshalb wird hier
+      - ~/.config/opencode/plugin/permission-guard   (OpenCode-Plugin, Node)
+      - ~/.codex/hooks                               (Codex-Guard, Python)
+
+    Beide Ziele bleiben absichtlich schreibgeschuetzt (permission: ask): Kein
+    Agent soll seine eigenen Regeln unbemerkt aendern koennen. Dieses Skript ist
+    der einzige Weg dorthin und kostet genau eine Rueckfrage - deshalb wird hier
     gebuendelt statt einzeln gespeichert.
 
 .PARAMETER Check
-    Nichts kopieren, nur Quell- und Laufzeitstand vergleichen.
+    Nichts kopieren, nur Quell- und Laufzeitstand beider Ziele vergleichen.
 
 .PARAMETER SkipTests
     Testlauf ueberspringen (nur fuer reine Kommentar-Aenderungen sinnvoll).
 
 .PARAMETER Target
-    Abweichendes Zielverzeichnis (zum Testen des Skripts).
+    Abweichendes Zielverzeichnis fuer das OpenCode-Plugin (zum Testen).
+
+.PARAMETER CodexTarget
+    Abweichendes Zielverzeichnis fuer den Codex-Guard (zum Testen).
 
 .EXAMPLE
     pwsh -File .\tools\permission-guard\deploy.ps1
@@ -31,7 +37,8 @@
 param(
     [switch]$Check,
     [switch]$SkipTests,
-    [string]$Target = (Join-Path $HOME ".config\opencode\plugin\permission-guard")
+    [string]$Target = (Join-Path $HOME ".config\opencode\plugin\permission-guard"),
+    [string]$CodexTarget = (Join-Path $HOME ".codex\hooks")
 )
 
 $ErrorActionPreference = "Stop"
@@ -49,13 +56,20 @@ $files = @(
     "mcp-report.mjs",
     "bench-model.mjs",
     "mcp-model-cases.jsonl",
+    "shared-cases.jsonl",
     "test.mjs",
     "README.md",
+    "README_de.md",
     "start-reviewer.ps1",
     "smoke-reviewer.mjs",
     "bench-reviewer.ps1",
     "bench-quality.ps1",
     "stats.mjs"
+)
+# Der Codex-Guard ist ein einzelnes Programm; sein Hook in ~/.codex/hooks.json
+# ruft es ueber %USERPROFILE% auf.
+$codexFiles = @(
+    "codex_guard.py"
 )
 
 # Die Laufzeitkonfiguration ist ortsabhaengig (Backend, Modell, Port). Sie wird
@@ -64,14 +78,41 @@ $files = @(
 $configName = "shell-reviewer.config.json"
 $configExample = "shell-reviewer.config.example.json"
 
-if (-not (Test-Path -LiteralPath $Target)) {
-    throw "Zielverzeichnis fehlt: $Target"
+foreach ($dir in @($Target, $CodexTarget)) {
+    if (-not (Test-Path -LiteralPath $dir)) {
+        throw "Zielverzeichnis fehlt: $dir"
+    }
 }
 
 function Get-FileHashOrNull {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+}
+
+function Copy-DeployFiles {
+    param([string[]]$Names, [string]$To)
+    foreach ($file in $Names) {
+        Copy-Item -LiteralPath (Join-Path $source $file) -Destination (Join-Path $To $file) -Force
+        Write-Host "  $file"
+    }
+}
+
+function Compare-DeployFiles {
+    param([string[]]$Names, [string]$To)
+    $mismatch = 0
+    foreach ($file in $Names) {
+        $a = Get-FileHashOrNull (Join-Path $source $file)
+        $b = Get-FileHashOrNull (Join-Path $To $file)
+        if ($a -eq $b) {
+            Write-Host ("  {0,-24} identisch" -f $file)
+        }
+        else {
+            Write-Host ("  {0,-24} ABWEICHUNG" -f $file) -ForegroundColor Red
+            $mismatch++
+        }
+    }
+    return $mismatch
 }
 
 # 1. Tests: nur deployen, was gruen ist.
@@ -81,15 +122,16 @@ if (-not $Check -and -not $SkipTests) {
     if ($LASTEXITCODE -ne 0) {
         throw "Tests fehlgeschlagen (Exitcode $LASTEXITCODE) - kein Deploy."
     }
+    & python -m pytest (Join-Path $source "tests") -q
+    if ($LASTEXITCODE -ne 0) {
+        throw "Python-Tests fehlgeschlagen (Exitcode $LASTEXITCODE) - kein Deploy."
+    }
 }
 
 # 2. Kopieren.
 if (-not $Check) {
     Write-Host "`n== Kopieren nach $Target =="
-    foreach ($file in $files) {
-        Copy-Item -LiteralPath (Join-Path $source $file) -Destination (Join-Path $Target $file) -Force
-        Write-Host "  $file"
-    }
+    Copy-DeployFiles -Names $files -To $Target
 
     $configTarget = Join-Path $Target $configName
     if (-not (Test-Path -LiteralPath $configTarget)) {
@@ -99,23 +141,19 @@ if (-not $Check) {
     else {
         Write-Host "  $configName bleibt erhalten (ortsspezifisch)"
     }
+
+    Write-Host "`n== Kopieren nach $CodexTarget =="
+    Copy-DeployFiles -Names $codexFiles -To $CodexTarget
 }
 
-# 3. Byte-Vergleich: das laufende Plugin muss identisch mit der Quelle sein.
-Write-Host "`n== Vergleich (SHA256) =="
-$mismatch = 0
-foreach ($file in $files) {
-    $a = Get-FileHashOrNull (Join-Path $source $file)
-    $b = Get-FileHashOrNull (Join-Path $Target $file)
-    if ($a -eq $b) {
-        Write-Host ("  {0,-12} identisch" -f $file)
-    } else {
-        Write-Host ("  {0,-12} ABWEICHUNG" -f $file) -ForegroundColor Red
-        $mismatch++
-    }
-}
+# 3. Byte-Vergleich: die laufenden Kopien muessen identisch mit der Quelle sein.
+Write-Host "`n== Vergleich (SHA256): OpenCode =="
+$mismatch = Compare-DeployFiles -Names $files -To $Target
 
-# 4. Zusatzdateien im Ziel, die es in der Quelle nicht gibt.
+Write-Host "`n== Vergleich (SHA256): Codex =="
+$mismatch += Compare-DeployFiles -Names $codexFiles -To $CodexTarget
+
+# 4. Zusatzdateien im OpenCode-Ziel, die es in der Quelle nicht gibt.
 $extra = Get-ChildItem -LiteralPath $Target -File |
     Where-Object { $files -notcontains $_.Name }
 if ($extra) {

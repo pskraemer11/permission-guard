@@ -6,6 +6,10 @@ shell-reviewer.config.json
 node_modules/
 npm-debug.log*
 
+# Python (Codex-Guard-Test)
+__pycache__/
+.pytest_cache/
+
 # Logs und Messartefakte
 *.log
 *.log.*

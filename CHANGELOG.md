@@ -8,6 +8,28 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **`git commit -n` verweigert (15.11.2026, Nutzerentscheid):** Die Kurzform
+  von `--no-verify` ist jetzt in beiden Guards `deny`. Gebündelte Kurzoptionen
+  werden von links gelesen; `-an` und `-nm` verweigern, `-mn` ist dagegen die
+  Nachricht „n“ und bleibt `allow`. Die Regel gilt nur für `commit`: Bei `clean`
+  und `push` bedeutet `-n` `--dry-run`. `shared-cases.jsonl` wächst von 29 auf
+  36 Fälle; `node test.mjs` 770/770, `pytest tests -q` 123 passed.
+- **Codex verweigert `branch -D` (15.11.2026):** `git branch -D`,
+  `git branch --delete --force` und `git branch -d -f` sind im Codex-Guard jetzt
+  `deny` wie im OpenCode-Guard. `git branch -d` allein bleibt `allow`; OpenCode
+  fragt dort weiterhin nach.
+- **Gemeinsame Falldatei mit dem Codex-Guard (15.11.2026):** `shared-cases.jsonl`
+  hält 29 Befehle mit dem je Seite erwarteten Urteil. `node test.mjs` prüft die
+  OpenCode-Seite, `pytest/unit/test_codex_guard.py` im Eltern-Repository die
+  Codex-Seite; beide lesen dieselbe Datei. Zahlen: 770/770 hier, 123 Fälle dort.
+  `deploy.ps1` und `deploy.sh` rollen die Datei mit aus, weil `test.mjs` sie
+  relativ zu sich liest; im Laufzeitverzeichnis läuft die Suite mit 758/758.
+- **`--no-verify` verweigert (15.11.2026, Nutzerentscheid):** `git commit
+  --no-verify` und `git push --no-verify` sind jetzt `deny` (vorher `allow` bzw.
+  `ask`). Grund: Das Flag umgeht die Projekt-Gates; Codex blockierte es bereits.
+  Die Regel greift bei jedem Unterbefehl und hinter globalen Optionen (`-C`,
+  `-c`). `git commit -n` ist die Kurzform dazu und ist seit demselben Tag
+  ebenfalls `deny`.
 - **Secrets-Achse in Ebene 1 (14.11.2026):** Die Shell-Anfrage an `/systemone`
   stellt jetzt zusätzlich die Frage „exponiert der Befehl Zugangsdaten oder
   private Daten?“ (Noul) in derselben Anfrage; die Latenz bleibt gleich (rund
@@ -55,6 +77,27 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Ruff prüft nur Python (15.11.2026):** `include = ["*.py", "*.pyi"]` nimmt
+  Markdown aus Lint und Formatprüfung. Ruff 0.17 hatte zuvor auch `*.md`
+  aufgenommen und Python-Blöcke in der Doku mitformatiert; die Formatprüfung
+  meldet jetzt 2 statt 14 Dateien.
+- **Python-Teil vollständig geprüft (15.11.2026):** `pyproject.toml` pinnt Ruff
+  (`==0.17.4`) und beschreibt Pyright; `requirements-dev.txt` ergänzt pytest,
+  Ruff und Pyright. Der Python-Job in `ci.yml` läuft mit `ruff check .`,
+  `ruff format --check .`, `pyright` und `pytest tests -q` auf Ubuntu und
+  Windows. Belegt: lokal 13 Dateien formatiert, 0 Pyright-Fehler, 107 passed.
+- **README zweisprachig (15.11.2026):** `README.md` ist englisch,
+  `README_de.md` die deutsche Fassung. `deploy.ps1` und `deploy.sh` kopieren
+  beide mit. Die deutsche Fassung enthielt einen Tabellenfehler in der
+  Step-E-Übersicht (`project_sync` hatte drei statt vier Zellen); er ist
+  korrigiert.
+- **Codex-Guard zieht ins Repo (15.11.2026):** `codex_guard.py` und seine
+  Pytest-Suite (`tests/test_codex_guard.py`) liegen jetzt hier statt im
+  Eltern-Repository. `requirements-dev.txt` pinnt `pytest==9.2.0`; `ci.yml` hat
+  dafür einen eigenen Python-Job (Ubuntu und Windows, Python 3.12) und nimmt
+  `*.py` in den Pfad- und Schlüssel-Scan auf. `deploy.ps1` und `deploy.sh`
+  bedienen zwei Ziele und prüfen beide Testreihen. Die Suiten bleiben getrennt:
+  `node test.mjs` (770 Fälle) und `python -m pytest tests -q` (123 Fälle).
 - **Test-Gate bricht bei CRLF in der Konfiguration ab (14.11.2026):**
   `pre-commit` und `pre-push` prüfen `.githooks/test-gate.conf` vor dem Einlesen
   auf CR. Bisher wanderte das CR in den letzten Wert; `.githooks/` passte nicht
@@ -173,6 +216,12 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Dokumentiert
 
+- **Zwei Implementierungen (15.11.2026):** `README.md` hat den Abschnitt „Zwei
+  Implementierungen: OpenCode und Codex“ zwischen „Was nicht erlaubt wird“ und
+  „Git-Muster“. Er stellt beide Programme gegenüber (Einstieg, Prüfcode,
+  Urteile, Grundlage, Modell, Laufzeit, Fehlerfall, Tests), nennt die gemeinsam
+  gesperrten Muster und den Wartungshinweis, dass es keinen gemeinsamen Katalog
+  gibt. Zahlen: 726/726 Fälle hier, 77 Fälle im Codex-Guard. Keine Codeänderung.
 - **Befehlszerlegung und Befehlsstil (12.11.2026):** `README.md` hat einen neuen
   Abschnitt „Befehlszerlegung und Befehlsstil“ vor „Ebene 1“. Er beschreibt die
   Segmentierung, die Modellprüfung je Segment und die Einordnung der
