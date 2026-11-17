@@ -543,7 +543,8 @@ einen Umsetzung wirkt nicht auf die andere.
 durchlassen. Der Codex-Teil ist ein schmaler Katalog harter Fälle; den Rest
 deckt die Sandbox ab. OpenCode kann fragen und dadurch feiner urteilen. Die
 unterschiedliche Behandlung von `git push` (OpenCode `ask`, Codex `forbidden`)
-steht in `docs/adr/0004-codex-push-verbieten-opencode-fragt.md`.
+steht im ADR 0004 des Eltern-Projekts
+(`docs/adr/0004-codex-push-verbieten-opencode-fragt.md`).
 
 **Gemeinsam geprüft.** `shared-cases.jsonl` hält 40 Befehle mit dem je Seite
 erwarteten Urteil fest; `node test.mjs` und der Pytest-Lauf lesen dieselbe

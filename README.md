@@ -544,8 +544,8 @@ implementation does not affect the other.
 **Why separate.** Codex has no `ask`; a hook can only deny or let through. The
 Codex part is a narrow catalogue of hard cases; the sandbox covers the rest.
 OpenCode can ask and therefore judge more finely. The differing treatment of
-`git push` (OpenCode `ask`, Codex `forbidden`) is documented in
-`docs/adr/0004-codex-push-verbieten-opencode-fragt.md`.
+`git push` (OpenCode `ask`, Codex `forbidden`) is documented in ADR 0004 of the
+parent project (`docs/adr/0004-codex-push-verbieten-opencode-fragt.md`).
 
 **Checked together.** `shared-cases.jsonl` holds 40 commands with the verdict
 expected on each side; `node test.mjs` and the Pytest run read the same file.

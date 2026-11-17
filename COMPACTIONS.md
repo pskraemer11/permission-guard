@@ -1782,8 +1782,9 @@ messen, deployen, dokumentieren.
 
 ## Important Context
 - Kein ADR: Die Entscheidung ist leicht rueckgaengig zu machen und betrifft
-  nur die Hook-Konfiguration; die Begruendung steht hier und im README. Ein
-  `docs/adr/` gibt es in diesem Repo bisher nicht.
+  nur die Hook-Konfiguration; die Begruendung steht hier und im README.
+  `docs/adr/` gab es zu diesem Zeitpunkt nicht; es besteht seit 17.11.2026
+  (Beginn: `docs/adr/0001-pflicht-checks-ohne-aktuell-zwang.md`).
 
 ================ Compaction 15.11.2026 / 18:30 ================
 ## Objective

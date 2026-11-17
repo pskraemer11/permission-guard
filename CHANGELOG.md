@@ -77,6 +77,16 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Merge ohne aktuellen Branch (17.11.2026, Nutzerentscheid):** Der Regelsatz
+  `baseline` verlangt die fünf Jobs weiter, aber nicht mehr
+  `strict_required_status_checks_policy` (jetzt `false`, gesetzt 13:47). Damit
+  entfallen Zwischen-Merges wie `61ad1f0`; `deletion` und `non_fast_forward`
+  bleiben. Die Einstellung liegt auf GitHub, nicht im Repo. Neu:
+  `docs/adr/0001-pflicht-checks-ohne-aktuell-zwang.md` (erstes ADR dieses
+  Repos, mit Begründung und Grenzen). `PLANUNG.md` ergänzt Entscheidung 9;
+  `README.md` und `README_de.md` nennen ADR 0004 jetzt ausdrücklich als ADR des
+  Eltern-Projekts; `COMPACTIONS.md` korrigiert die Aussage, es gebe hier kein
+  `docs/adr/`.
 - **Repo-Hook (15.11.2026):** `.githooks/pre-commit` ist die kanonische Fassung
   mit optionalem `.githooks/pre-commit.local`; hier ist keine lokale Datei
   vorhanden. `README.md` und `README_de.md` beschreiben die Konvention.

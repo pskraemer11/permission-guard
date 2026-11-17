@@ -387,6 +387,7 @@ Festgelegt:
 | 5   | G              | zunächst nur annotieren                                          |
 | 6   | npm            | GitHub-only für v0.1.0, `"private": true` (05.11.2026)           |
 | 7   | Kriterien F    | 7 verschiedene Tage, ≥ 50 Aufrufe, ≥ 3 Werkzeuge, davon ≥ 1 schreibend (05.11.2026) |
+| 9   | Merge-Regel    | Pflicht-Checks bleiben, Zwang „Branch aktuell“ entfällt          |
 
 Offen:
 
