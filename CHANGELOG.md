@@ -8,6 +8,19 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **Optionaler CPU-Start des Reviewers (17.11.2026):** `start-reviewer.ps1`
+  kennt `-Cpu` und setzt dann `-ngl 0`. Ohne den Schalter bleibt `-ngl all`
+  und damit der bisherige CUDA-Standard unverändert. `README.md` und
+  `README_de.md` nennen den passenden CPU-only-Server, das nötige höhere
+  `timeoutMs` und die Messwerte. `--no-op-offload` gehört nicht zum
+  Empfehlungsweg: Im Smoke-Lauf lagen damit zwei Aufrufe über 6000 ms.
+- **Nachwärmen nach Reviewer-Timeout (17.11.2026):** Bricht eine Modellanfrage
+  wegen Zeitüberschreitung ab, startet `reviewer.js` im Hintergrund genau einen
+  Aufwärmlauf. Die aktuelle Entscheidung bleibt ohne Wiederholung und ohne
+  zusätzliche Wartezeit `ask`; gleichzeitige Abbrüche teilen sich denselben
+  Aufwärmlauf, und dessen Fehler bleiben folgenlos. Andere Server- und
+  Netzwerkfehler lösen kein Nachwärmen aus. Alle vier Entscheidungswege
+  (Shell/MCP, systemone/chat) sind angeschlossen.
 - **`git commit -n` verweigert (15.11.2026, Nutzerentscheid):** Die Kurzform
   von `--no-verify` ist jetzt in beiden Guards `deny`. Gebündelte Kurzoptionen
   werden von links gelesen; `-an` und `-nm` verweigern, `-mn` ist dagegen die
@@ -168,6 +181,81 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Behoben
 
+- **URL-Zugangsdaten in Git-Meldungen (17.11.2026):** Benutzerinfo vor `@`
+  wird unabhängig vom Aufbau und unabhängig von einem Tokenwort aus
+  `gitRuleMessage()` und `gitAskMessage()` entfernt. Ein undurchsichtiger
+  synthetischer Testwert erscheint dadurch nicht mehr im Rückfrage- oder
+  Verweigerungstext. Bei quotierten URL-Fragmenten bleibt nur der Musterkopf,
+  weil die Benutzerinfo statisch nicht sicher trennbar ist. Alle drei
+  Regressionstests waren vorher rot.
+- **Schreibende Hauptverben und Geheimnisse verdeckten Pfadverbote
+  (17.11.2026):** Diese Rückfragen werden erst vor einer Freigabe angewendet.
+  `git push` allein bleibt mit Meldung `ask`; zusammen mit einem Schreibzugriff
+  außerhalb des Projekts gewinnt `deny`, auch wenn die URL Geheimnisverdacht
+  auslöst. Unauflösbare Ziele mit einem Geheimnis-Ausdruck als Wert bleiben
+  `ask`; echte Pfadverbote werden davon nicht abgeschwächt. Die Regressionen
+  waren vor der Korrektur rot; Meldungstests für `git push`, Branch-Löschen und
+  URL mit Geheimnisverdacht bleiben erhalten.
+- **Innere Zitate in `$()` (fünfte Review-Runde, 17.11.2026):** Der Scanner
+  verwechselte ein inneres `"safe"` mit dem Ende der äußeren Zeichenkette und
+  übersah den folgenden Schreibbefehl. Die Klammerauswertung unterscheidet jetzt
+  innere und äußere Zitate. Die Regression verwendet einen Befehl mit inneren
+  Zitaten und einem nachfolgenden Schreibzugriff; der PowerShell-Parser meldet
+  dafür 0 Syntaxfehler. Eine frühere, syntaktisch ungültige Probe wurde
+  verworfen.
+- **Vierte Review-Runde an Ausdruck und Zielauflösung (17.11.2026):**
+  `else`/`catch`-Folgezweige werden geprüft, verschachtelte Ortswechsel bleiben
+  sichtbar und `)` in verschachtelten Strings beendet `$()` nicht vorzeitig.
+  `ask` aus einem Teilausdruck wird erst vor einer Freigabe angewendet, damit
+  spätere Verbote Vorrang behalten. `scopeWrites()` löst Ziele physisch auf;
+  dabei bleibt die Laufwerkswurzel `C:\` vom laufwerksrelativen `C:` getrennt.
+  Beide README-Fassungen beschreiben die rekursive Blockprüfung.
+- **Dritte Review-Runde an Block- und Pfadgrenzen (17.11.2026):**
+  `splitStatements()` schneidet nicht mehr innerhalb eines Skriptblocks;
+  Blöcke behalten Arbeitsordner und ursprüngliche Schutzwurzel, während
+  absolute Verbote Vorrang vor einer Arbeitsordner-Rückfrage haben.
+  Klammerausdrücke in Anführungszeichen bleiben Text. `scopeEdit()` löst
+  vorhandene Pfadteile physisch auf; ein echter Windows-Junction-Test weist
+  nach, dass ein Ziel ausserhalb des Projekts verweigert wird.
+- **Sechs weitere Review-Fälle an Blöcken und Editor-Zielen (17.11.2026):**
+  Ortswechsel in einem Block machen folgende relative Schreibzugriffe zur
+  Rückfrage; Hashtables verdecken keine weiteren Blöcke mehr; alle Blöcke
+  werden gelesen und ein späteres `deny` schlägt ein früheres `ask`.
+  Laufwerksrelative Pfade wie `C:.git\config` werden abgelehnt. Leere
+  Edit-Ressourcen bleiben Rückfrage, ohne andere Ziele zu überspringen.
+  Edit-Gründe enthalten keine Zielpfade oder Benutzernamen mehr.
+- **Vier Review-Fälle am neuen Block-/Warmup-Weg (17.11.2026):**
+  Klammerausdrücke in Pipeline-Blöcken werden ebenfalls bewertet; eine
+  Umleitung hinter dem Block behält ihr Ziel; `cd` wird für jeden Block zum
+  tatsächlichen Ausführungszeitpunkt statt erst am Skriptende ausgewertet.
+  Start- und Timeout-Aufwärmlauf verwenden in `index.js` jetzt dieselbe Sperre
+  und laufen nicht doppelt. Alle vier Fälle waren vor der Korrektur als rote
+  Tests reproduziert.
+- **Editor-Ziele umgingen die Schutzpfade (17.11.2026):** `index.js` behandelte
+  nur Shell-Aktionen; `edit`/`write`/`patch` erreichten die Pfadprüfung nicht.
+  Ergibt die statische OpenCode-Regel jetzt `ask`, prüft der neue Export
+  `scopeEdit()` alle Zielpfade gegen dieselben geschützten und vertrauten
+  Ordner wie Shell-Schreibzugriffe. Ein geschütztes oder außerhalb liegendes
+  Ziel verweigert den gesamten Aufruf; Platzhalter bleiben Rückfrage. Statische
+  `allow`- und `deny`-Ergebnisse bleiben ausdrücklich unverändert
+  (Nutzerentscheid 17.11.2026).
+- **Pipeline-Skriptblöcke werden einzeln geprüft (17.11.2026):** `guard.js`
+  bewertet die Rümpfe hinter `ForEach-Object`, `Where-Object`, `Select-Object`,
+  `Sort-Object`, `Group-Object`, `Measure-Object` und ihren Aliasen jetzt als
+  eigene Skripte. Lesende Blöcke und Schreibzugriffe innerhalb des Projekts
+  können dadurch durchlaufen; `ask` und `deny` aus dem Block werden mit dessen
+  Grund durchgereicht. Das gilt auch für einen Pipeline-Block innerhalb eines
+  Kontrollblocks. Hashtables und berechnete Eigenschaften bleiben unverändert.
+- **`@{u}` galt als Teilausdruck (17.11.2026):** `git rev-list --left-right
+  --count 'HEAD...@{u}'` blieb bei `ask` („Teilausdruck: nicht einordenbar:
+  u“), weil `subexpressions()` in `guard.js` jedes `@{` ohne Wortzeichen davor
+  als PowerShell-Block las; das `.` der Refschreibweise `HEAD...@{u}` fehlte in
+  der Ausnahmeliste. Sie enthält jetzt zusätzlich `.`, `'` und `"`, damit auch
+  `'@{u}..HEAD'` durchläuft. `$(` bleibt unverändert geprüft - nur dort führt
+  PowerShell Inhalt in einem String aus. Belegt mit `node test.mjs` (800/800,
+  drei neue Fälle), `node test-index.mjs` (8/8), `node test-wiring.mjs`
+  (13/13), `node bench-mcp.mjs` (33/33), `pytest tests -q` (146 passed, 1
+  übersprungen), `ruff check`, `ruff format --check` und `pyright` (0 Fehler).
 - **Löschprüfung war plattformabhängig (17.11.2026):** Unter Linux lehnte
   `codex_guard.py` zwei Fälle ab, die unter Windows erlaubt waren:
   `Remove-Item -Recurse .\cache\npm` (Backslashes sind unter POSIX
@@ -277,6 +365,14 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Dokumentiert
 
+- **Abschluss der Guard- und CPU-Arbeiten (17.11.2026):** `README.md` und
+  `README_de.md` beschreiben nun auch die rekursive Blockprüfung,
+  `scopeEdit()` samt physischer Link-Auflösung und das Nachwärmen nach einem
+  Timeout; beide nennen 873 Unit- und 17 Integrationsfälle. `PLANUNG.md` hält
+  die Review- und Messkette, den GPU-Standard und den Abschlussstand fest.
+  `COMPACTIONS.md` dokumentiert Entscheidungen und nächsten Schritt. Der Stand
+  wurde über `deploy.ps1` übertragen und per SHA256 verglichen; kein neuer ADR,
+  weil die Betriebsentscheidungen reversibel sind.
 - **Zwei Implementierungen (15.11.2026):** `README.md` hat den Abschnitt „Zwei
   Implementierungen: OpenCode und Codex“ zwischen „Was nicht erlaubt wird“ und
   „Git-Muster“. Er stellt beide Programme gegenüber (Einstieg, Prüfcode,

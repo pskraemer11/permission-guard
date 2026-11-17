@@ -3,6 +3,7 @@
 #   .\start-reviewer.ps1                    # Clef-Flash (Entscheidungsmodell) auf Port 8080
 #   .\start-reviewer.ps1 -Port 8081         # anderer Port
 #   .\start-reviewer.ps1 -ModelPath <pfad>  # anderes GGUF
+#   .\start-reviewer.ps1 -Cpu -Server <cpu-llama-server>  # ohne GPU-Offload
 #   .\start-reviewer.ps1 -Stop              # beendet den Prozess auf diesem Port
 #
 # Der Reviewer ist optional: laeuft er nicht, bleibt jede nicht einordenbare
@@ -16,6 +17,7 @@ param(
   [string]$ModelPath = "D:\LLM-Modelle\Llama-GGUF\ggml-org\Clef-Flash-GGUF\Clef-Flash-Q4_K_M.gguf",
   [string]$Server = "C:\Program Files\llama.cpp\llama-server.exe",
   [string]$DraftPath = "",
+  [switch]$Cpu,
   [switch]$Stop
 )
 
@@ -66,7 +68,11 @@ try {
 if ($alive) { "Port $Port ist bereits belegt - laeuft der Reviewer schon?"; exit 0 }
 
 $log = Join-Path $env:TEMP "permission-guard-reviewer-$Port.log"
-$serverArgs = @('-m', $ModelPath, '-c', '4096', '-np', '1', '--port', "$Port", '--no-webui', '-ngl', 'all', '--jinja')
+# Standard bleibt CUDA/GPU. -Cpu ist fuer einen separaten CPU-Build ohne CUDA
+# gedacht. --no-op-offload gehoert nicht dazu: Er bremst auch den reinen
+# CPU-Build (Smoke 17.11.2026, zwei Aufrufe ueber 6000 ms).
+$gpuLayers = $Cpu ? '0' : 'all'
+$serverArgs = @('-m', $ModelPath, '-c', '4096', '-np', '1', '--port', "$Port", '--no-webui', '-ngl', $gpuLayers, '--jinja')
 if ($DraftPath) { $serverArgs += @('--model-draft', $DraftPath) }
 $proc = Start-Process -FilePath $Server -WindowStyle Hidden -ArgumentList $serverArgs `
   -PassThru -RedirectStandardOutput $log -RedirectStandardError "$log.err"

@@ -534,3 +534,136 @@ Belegt: `pytest tests -q` 146 passed und 1 übersprungen unter Windows,
 
 Grenze: Ein Symlink-Rennen nach der Prüfung bleibt möglich; der `cwd`-Anker
 stammt weiterhin aus dem Codex-Quelltext, nicht aus einem Live-Lauf.
+
+## Nachtrag 17.11.2026: `@{u}` als Ref statt Teilausdruck
+
+`git rev-list --left-right --count 'HEAD...@{u}'` blieb bei `ask`
+(„Teilausdruck: nicht einordenbar: u“), weil `subexpressions()` in `guard.js`
+jedes `@{` ohne Wortzeichen davor als PowerShell-Block las. Das `.` der
+Refschreibweise `HEAD...@{u}` fehlte in der Ausnahmeliste.
+
+Geändert: Die Ausnahmeliste vor `@[({]` enthält zusätzlich `.`, `'` und `"`.
+Damit laufen `HEAD...@{u}` (roh und in Anführungszeichen) und `'@{u}..HEAD'`
+durch. In einem String führt PowerShell kein `@(` aus, nur `$(`; dieses Muster
+ist von der Änderung nicht betroffen.
+
+Belegt: `node test.mjs` 800/800 (drei neue Fälle), `node test-index.mjs` 8/8,
+`node test-wiring.mjs` 13/13, `node bench-mcp.mjs` 33/33,
+`pytest tests -q` 146 passed und 1 übersprungen, `ruff check`,
+`ruff format --check`, `pyright` 0 Fehler.
+
+Nebenbei reproduziert: Das offene P3-Problem „Suchmuster mit Befehlsnamen
+(`iex`) löst Verweigerung aus“ ist live bestätigt - `Select-String` mit dem
+Suchmuster `iex|Invoke-Expression` wurde als `deny` blockiert, obwohl nur
+gelesen wurde.
+
+## Nachtrag 17.11.2026: Nachwärmen und Pipeline-Blöcke
+
+Nach einem echten Zeitabbruch startet `reviewer.js` genau einen Aufwärmlauf im
+Hintergrund. Die aktuelle Entscheidung bleibt `ask` und wartet nicht; parallele
+Abbrüche benutzen denselben Aufwärmlauf. Server- und Netzwerkfehler lösen kein
+Nachwärmen aus. Fehler dabei werden abgefangen und erzeugen keine unbehandelte
+Promise-Ablehnung.
+
+`guard.js` bewertet Pipeline-Skriptblöcke jetzt rekursiv mit `evaluate()`. Nur
+`allow` lässt die äußere Prüfung weiterlaufen; `ask` und `deny` kommen mit dem
+Grund aus dem Block zurück. Eine verschachtelte Rückfrage in einem
+Kontrollblock wird ebenfalls durchgereicht. Hashtable-Literale werden nicht
+selbst als Befehl gewertet; enthaltene berechnete Eigenschaften und spätere
+Blöcke werden mitgeprüft. Gegenprobe mit dem vorherigen Stand:
+`if ($true) { Where-Object { node script.js } }` war `allow` und ist jetzt
+`ask`; der neue Regressionstest war vor der Korrektur rot.
+
+Belegt nach Integration: `node test.mjs` 873/873, `node test-index.mjs` 17/17,
+`node test-wiring.mjs` 13/13, `node bench-mcp.mjs` 33/33,
+`pytest tests -q` 146 passed und 1 übersprungen, `ruff check`,
+`ruff format --check` und `pyright` ohne Fehler. Der vorgeschriebene Live-Lauf
+`node bench-model.mjs --repeat 3` lief gegen den reinen CPU-Reviewer: 14/14
+Fälle getroffen, 14/14 einstimmig.
+
+## Nachtrag 17.11.2026: Editor-Schutz und Python-Skriptpfade
+
+Bestätigte Lücke: `index.js` behandelt im Permission-Hook nur Shell-Aktionen.
+Eine `edit`-Aktion auf `~/.config/opencode/opencode.jsonc` erreicht die
+Pfadprüfung aus `guard.js` deshalb nicht. Der beobachtete Edit war zusätzlich
+durch die statische OpenCode-Rückfrage und deren manuelle Freigabe möglich;
+Shell-Schreiben an derselben Stelle wird dagegen vom Guard verweigert.
+
+Nach Nutzerentscheid vom 17.11.2026 ist die Lücke nur für vorhandene
+`ask`-Ergebnisse geschlossen: `scopeEdit()` prüft alle Ressourcen einer
+`edit`-Aktion gegen dieselben Wurzeln und Schutzpfade wie Shell-Schreibzugriffe.
+Ein einzelnes verweigertes Ziel verweigert auch einen Patch mit mehreren
+Dateien. Statische `allow`- und `deny`-Ergebnisse bleiben unverändert. Die
+Verdrahtung benutzt weiterhin den Permission-Hook, keinen zusätzlichen
+`execute.before`-Hook und keinen Reviewer-Aufruf. Vorhandene Pfadteile werden
+physisch aufgelöst, damit Junctions und Symlinks ihr Ziel nicht verbergen.
+Edit-Gründe nennen keine Zielpfade oder Benutzernamen.
+
+Python aus `.venv-inspect` ist bereits unauffällig: Der Interpreter wird am
+Dateinamen erkannt. Die Rückfrage betrifft ein Skript außerhalb des Projekts
+oder Inline-Code, nicht das venv. Empfohlene Lösung ohne Guard-Änderung:
+Hilfsskripte unter `staging/` im Projekt ablegen und den Interpreter direkt,
+also ohne PowerShell-`&`, aufrufen. `%TEMP%` nicht pauschal für Python-Skripte
+freigeben: Der bisherige Grund ist die fehlende Reviewbarkeit unversionierter
+Temp-Dateien. Falls Temp-Skripte dauerhaft nötig sind, wäre eine Freigabe mit
+geprüftem SHA256 der einzelnen Datei die tragfähige Erweiterung, keine
+Ordnerpauschale.
+
+## Nachtrag 17.11.2026: CPU-Betrieb des Reviewers gemessen
+
+Gemessen unter Windows/PowerShell mit dem GGUF-Modell
+`Clef-Flash-Q4_K_M.gguf`, Kontext 4096, einem Slot und acht CPU-Threads. Die
+Entscheidungsaufrufe nutzen `/systemone` (144 Eingabetoken, keine
+Textgenerierung); die vollständige Reihe lief mit `temperature: 0` und drei
+Wiederholungen je Fall. Der Testserver auf Port 8081 wurde nach jedem Lauf
+beendet; Port 8080 und die produktive Konfiguration blieben unverändert.
+
+- Native CUDA-Exe mit `-ngl 0`, aber weiter ausgelagerten Operationen: fünf
+  einfache Aufrufe in 439–648 ms; 0/33 Modellschichten und 0 MiB KV-Puffer auf
+  der GPU, aber 285,26 MiB CUDA-Arbeitspuffer. Die Gesamtbelegung stieg um rund
+  423 MiB. `--no-kv-offload` wäre hier wirkungslos, weil der KV-Puffer bereits
+  bei null liegt.
+- Dieselbe Exe mit `-ngl 0 --no-op-offload`: Bereitschaft nach 1627 ms, fünf
+  Aufrufe in 1657–1786 ms. Kein CUDA-Arbeitspuffer mehr, aber noch rund 117 MiB
+  GPU-Differenz für Kontext/Overhead.
+- Reiner CPU-Build aus dem bereits installierten LM-Studio-Backend
+  `llama.cpp-win-x86_64-avx2-2.73.0`: Bereitschaft nach 3640–3663 ms, fünf
+  einfache Aufrufe in 2831–3125 ms; GPU-Differenz nur 2–3 MiB. Die vollständige
+  Reihe `node bench-model.mjs --repeat 3` traf mit Timeout 5000 ms 14/14 Fälle,
+  alle einstimmig; 3771–4160 ms je Fall.
+
+Folge: Für eine praktisch freie GPU ist der reine CPU-Build mit 8000 ms
+Reviewer-Timeout geeignet. Die vollständige Modellreihe lief mit 5000 ms ohne
+Fehler; der spätere Smoke-Lauf zeigte mit 6015 ms Gesamtdauer, dass 6000 ms
+zu knapp sind. Das bisherige Timeout von 2000 ms reicht dafür nicht. Das
+automatische Nachwärmen behebt nur den Kaltstart, nicht die längere Dauer
+jeder CPU-Entscheidung.
+
+Nutzerentscheid 17.11.2026: Der GPU-Betrieb bleibt Standard. `-Cpu` setzt
+lediglich `-ngl 0` und ist die optionale Betriebsart für Rechner ohne
+NVIDIA-Grafikkarte; die produktive Konfiguration dieses Rechners wird nicht
+umgestellt. Beide README-Fassungen beschreiben den CPU-only-Server und das
+höhere Timeout. Der erste Smoke-Lauf mit zusätzlichem `--no-op-offload` fiel
+durch: Zwei Aufrufe brauchten über 6000 ms und endeten mit `AbortError`.
+Deshalb gehört diese Option nicht zum CPU-Empfehlungsweg. Ohne sie bestand
+derselbe Smoke-Lauf mit Timeout 6000 ms alle Fälle; ein Aufruf lag bei
+6015 ms Gesamtdauer, deshalb ist die veröffentlichte Empfehlung 8000 ms.
+
+## Abschlussstand 17.11.2026
+
+Die mehrstufige Review-Kette ist abgeschlossen. Die letzte unabhängige
+Nachabnahme bestand alle sechs Zielfälle und meldete keine offenen Blocker im
+geprüften Umfang. Danach wurde der Stand über `deploy.ps1` übertragen; alle
+Laufzeitdateien sind per SHA256 identisch. Die ortsspezifische
+`shell-reviewer.config.json` blieb unverändert, CUDA/GPU bleibt Standard.
+
+Abschließender Beleg: `node test.mjs` 873/873, `node test-index.mjs` 17/17,
+`node test-wiring.mjs` 13/13, `node bench-mcp.mjs` 33/33,
+`pytest tests -q` 146 passed und 1 übersprungen, Ruff-Lint und -Format,
+Pyright 0 Fehler, PowerShell-Parser 0 Fehler. CPU-Smoke bestanden;
+`node bench-model.mjs --repeat 3` 14/14 einstimmig.
+
+Der nächste Schritt ist der vom Nutzer ausgeführte Push auf `main`. Ein neuer
+ADR ist nicht nötig: GPU-Standard, optionaler CPU-Betrieb und die
+`ask`-begrenzte Editor-Prüfung sind reversible Betriebsentscheidungen; ihre
+Begründungen stehen hier, in `COMPACTIONS.md` und in den README-Fassungen.

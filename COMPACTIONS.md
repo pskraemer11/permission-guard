@@ -1860,3 +1860,60 @@ messen, deployen, dokumentieren.
   (9.2.0 unter `~/.local`, kein Systemeingriff).
 - Offen ausserhalb dieses Repos: `audit-dependencies.ps1` im Eltern-Repo ist
   angelegt und geprueft, aber nicht committet.
+
+================ Compaction 17.11.2026 / 19:00 ================
+## Objective
+- **Current:** Die Guard-Arbeiten abschliessen und den geprueften Stand fuer
+  den Nutzer-Push dokumentieren.
+- **Completed:** Fehlalarme reduzieren, Timeout-Nachwaermen, Block- und
+  Editor-Schutz, optionaler CPU-Betrieb, Review-Kette, Deploy und Doku.
+
+## Important Details
+- **Decisions:** CUDA/GPU bleibt Standard; `-Cpu` ist die reversible Option
+  fuer Rechner ohne NVIDIA. Editor-Ziele werden nur bei statischem `ask`
+  geprueft, ausdrueckliche `allow`/`deny` bleiben unangetastet. Temp-Python
+  wird nicht pauschal freigegeben; projektnahe `staging/`-Skripte bleiben der
+  Weg. Kein neuer ADR, weil diese Betriebsentscheidungen reversibel sind.
+- **Bug / Finding:** Die vielen Rückfragen kamen nicht vom venv, sondern von
+  Temp-/Inline-Skripten, `&` und dem `@{u}`-Parser. Der Reviewer entlud sein
+  Modell auch ohne Benchmarking; nach einem echten Abort waermt eine gemeinsame
+  Sperre jetzt genau einmal nach. Die Blockrekursion brauchte mehrere
+  Reviewrunden, weil Satzgrenzen, Ortswechsel, Zitate und `deny`-Vorrang
+  zunaechst unvollstaendig waren. Editor-Ziele brauchten physische
+  Link-Aufloesung und geheimnisfreie Meldungen.
+- **Architecture:** `guard.js` entscheidet, `index.js` verdrahtet,
+  `reviewer.js` waermt nach; keine neuen Abhaengigkeiten. `scopeEdit()` nutzt
+  dieselben Schutzwurzeln wie Shell-Schreibzugriffe.
+
+## Work State
+### Completed
+- Review-Gate PASS: letzte Nachabnahme 6/6 ohne offene Blocker im Zielumfang.
+- Tests: 873/873 Unit, 17/17 Integration, 13/13 Wiring, 33/33 MCP,
+  146 Python-Tests plus 1 Skip; Ruff, Pyright, PowerShell-Parser und
+  `git diff --check` ohne Fehler. CPU-Smoke bestanden; Modellreihe 14/14
+  einstimmig. CPU-Vollreihe 3,8–4,2 s, Empfehlung `timeoutMs` 8000.
+- `deploy.ps1` abgeschlossen; alle kopierten Dateien per SHA256 identisch.
+  GPU-Standard und lokale Reviewer-Konfiguration blieben unveraendert.
+- README/README_de, CHANGELOG, PLANUNG und diese Compaction sind nachgezogen.
+### Active
+- Finaler Commit im Unterrepository `tools/permission-guard`.
+### Blocked
+- Kein fachlicher Blocker. Das Eltern-Repo und dessen fremde Aenderungen
+  bleiben ausdruecklich unangetastet; Push und CI-Auswertung bleiben offen.
+
+## Next Move
+1. Nutzer pusht `main`; danach die GitHub-Checks des konkreten Commits pruefen.
+2. Bei neuen Shell- oder Parserbefunden separate Regressionen statt stiller
+   Erweiterung des bereits geprueften Stands.
+
+## Relevant Files
+- `guard.js`: Block-, Pfad-, Geheimnis- und Deny-Prioritaet.
+- `index.js`, `reviewer.js`: Editor-Hook und geteiltes Nachwaermen.
+- `start-reviewer.ps1`: optionaler `-Cpu`-Start bei unveraendertem GPU-Standard.
+- `test.mjs`, `test-index.mjs`: Regressionen inklusive echter Windows-Junction.
+- `README.md`, `README_de.md`, `CHANGELOG.md`, `PLANUNG.md`: Abschlussstand.
+
+## Important Context
+- Letzte Nachabnahme pruefte nur den benannten Zielumfang, nicht alle denkbaren
+  Shellformen. Deploy meldet automatisches Neuladen per Dateiwatcher; ein
+  separater Logbeleg des Live-Reloads wurde nicht erhoben.

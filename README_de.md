@@ -159,11 +159,22 @@ werden kann als:
 **Skriptblöcke sind eigener Code.** Ein Block hinter einem lesenden
 Pipeline-Cmdlet (`ForEach-Object`, `Where-Object`, `Select-Object`,
 `Sort-Object`, `Group-Object`, `Measure-Object` und deren Aliase `%`, `?`,
-`select`, `sort`, `group`, `measure`) wird nicht bewertet: die Zeile bleibt
-`ask` und erreicht das Modell nicht (Review 17.11.2026). Vorher galt
+`select`, `sort`, `group`, `measure`) wird als eigenes Skript bewertet. Die
+äußere Zeile läuft nur weiter, wenn jeder Block `allow` ergibt; `ask` und
+`deny` werden mit ihrem Grund durchgereicht. Das gilt auch für verschachtelte
+und berechnete Blöcke. Vorher galt
 `Get-ChildItem | ForEach-Object { Remove-Item -Recurse -Force C:\Windows\x }`
-als „nur lesend". Kontrollblöcke (`if`, `foreach`, `while`) werden weiterhin
-Satz für Satz geprüft.
+als „nur lesend". Kontrollblöcke (`if`, `foreach`, `while`) werden Satz für
+Satz geprüft.
+
+**Dateiwerkzeuge folgen denselben Schutzpfaden.** Ergibt die statische Regel
+für `edit`, `write` oder `patch` `ask`, prüft `scopeEdit()` alle Zielpfade.
+Projektdateien und `%TEMP%\opencode` sind erlaubt; geschützte oder außerhalb
+liegende Ziele werden verweigert, Platzhalter und leere Ressourcen bleiben
+`ask`. Statische `allow`- und `deny`-Regeln bleiben unverändert. Vorhandene
+Pfadteile werden physisch aufgelöst, damit Junctions und Symlinks ihr Ziel
+nicht verbergen. Die Guard-Meldungen nennen dabei keine Zielpfade oder
+Benutzernamen; URL-Zugangsdaten werden aus Git-Meldungen entfernt.
 
 **Schreibend im Projekt:** Zusätzlich erlaubt, wenn jedes Ziel auflösbar ist und
 innerhalb eines vertrauten Ordners liegt:
@@ -720,7 +731,10 @@ Leben, sondern bindet ihn an OpenCode:
   die erste echte Entscheidung den Kaltstart und lief am 25.10.2026 in den
   Timeout (`AbortError`). Budget: `warmupTimeoutMs`, Standard 90 000 ms —
   gemessen wurden 34 028 ms Kaltstart gegen 199–256 ms warm (26.10.2026).
-  Der Entscheidungs-Timeout bleibt davon unberührt.
+  Der Entscheidungs-Timeout bleibt davon unberührt. Nach einem echten
+  Zeitabbruch startet `scheduleWarmup()` im Hintergrund erneut; die aktuelle
+  Entscheidung bleibt ohne Warten `ask`. Start- und Timeout-Aufwärmlauf teilen
+  sich denselben laufenden Aufruf und laufen daher nicht doppelt.
 - **Ruhepause:** `sleep-idle-seconds` in `%APPDATA%\llama.cpp\config.ini` gibt
   die Gewichte nach Untätigkeit frei (hier 900 s). Der Standardwert `-1`
   deaktiviert das; `load-mode = auto` bedeutet mmap, `--no-mmap` macht den Start
@@ -832,11 +846,25 @@ Der Index dient der Vorauswahl, der eigene 18-Befehl-Satz bleibt maßgeblich.
 ```powershell
 .\start-reviewer.ps1                       # llama-server, Clef-Flash, Port 8080
 .\start-reviewer.ps1 -ModelPath "D:\…\anderes.gguf" -Port 8081
+.\start-reviewer.ps1 -Cpu -Server "C:\…\llama-server.exe"   # ohne GPU-Offload
 node smoke-reviewer.mjs                    # 9 Fälle gegen die laufende Konfiguration
-node test.mjs                              # 797 Unit-Tests
+node test.mjs                              # 873 Unit-Tests
+node test-index.mjs                        # 17 Integrationsfälle (Fake-OpenCode)
 node test-wiring.mjs                       # 13 Verdrahtungstests (Fake-git)
 .\start-reviewer.ps1 -Stop
 ```
+
+Der Standardweg nutzt CUDA mit `-ngl all` und bleibt unverändert. `-Cpu` setzt
+`-ngl 0` und ist für Rechner ohne NVIDIA-Grafikkarte oder einen reinen
+CPU-Build gedacht. Gemessen am 17.11.2026 mit Clef-Flash-Q4_K_M auf acht
+CPU-Threads: rund 3,8–4,2 s je Entscheidung, alle 14 Fälle der Modellreihe
+korrekt; die GPU blieb praktisch frei. Deshalb für diesen Betrieb
+`timeoutMs` auf 8000 setzen. 6000 ms waren im Smoke-Lauf mit 6015 ms
+Gesamtdauer für einen Aufruf zu knapp. `--no-op-offload`
+gehört nicht zum Empfehlungsweg: Derselbe Smoke-Lauf brauchte damit über
+6000 ms. Eine CUDA-Exe mit `-Cpu` kann weiterhin GPU-Speicher für Operationen
+belegen; für eine wirklich freie GPU einen CPU-only-Build als `-Server`
+verwenden.
 
 Ohne laufenden Server bleibt alles bei `ask`. Endpunkt, Modell, Grammatik und
 Timeout stehen in `shell-reviewer.config.json` (beim Deploy aus

@@ -577,6 +577,13 @@ export function systemoneVerdict(probability, threshold = 0.7) {
   return { decision: "ask", reason: `Modell: veraendert oder unklar (p=${p.toFixed(3)})`, probability: p }
 }
 
+// Zeitueberschreitung von anderen Fehlern trennen: Nur hier lohnt der
+// Aufwaermlauf im Hintergrund (siehe scheduleWarmup).
+function isTimeoutAbort(error) {
+  const name = error?.name
+  return name === "AbortError" || name === "TimeoutError"
+}
+
 async function requestSystemone(payload, cfg, timeoutMs = cfg.timeoutMs || 2000) {
   if (typeof fetch !== "function") return { ok: false, reason: "kein fetch" }
   const controller = new AbortController()
@@ -602,7 +609,7 @@ async function requestSystemone(payload, cfg, timeoutMs = cfg.timeoutMs || 2000)
     const secrets = data?.answers?.secrets?.noul
     return { ok: true, probability, secrets: typeof secrets === "number" ? secrets : null }
   } catch (error) {
-    return { ok: false, reason: String(error?.name ?? "Fehler") }
+    return { ok: false, aborted: isTimeoutAbort(error), reason: String(error?.name ?? "Fehler") }
   } finally {
     clearTimeout(timer)
   }
@@ -730,6 +737,29 @@ async function warmOne(cfg, endpoint) {
   }
 }
 
+// Nach einer Zeitueberschreitung im Entscheidungspfad laeuft der Aufwaermlauf
+// im Hintergrund an: der naechste Aufruf soll den Kaltstart nicht erneut
+// bezahlen. Ein laufender Aufwaermlauf wird nicht ein zweites Mal gestartet -
+// sonst zoege eine Reihe gleichzeitiger Aborts mehrere Ladevorgaenge ins
+// Backend. Fehler bleiben folgenlos; die Entscheidung selbst wartet nicht.
+let warmupInFlight = null
+export function scheduleWarmup(cfg) {
+  if (warmupInFlight) return warmupInFlight
+  warmupInFlight = warmup(cfg)
+    .catch((error) => ({ ok: false, reason: error?.message ?? String(error) }))
+    .finally(() => {
+      warmupInFlight = null
+    })
+  return warmupInFlight
+}
+
+// Antwort nach einem Abbruch: unveraendert "ask", ohne Wiederholung und ohne
+// Wartezeit. Der Aufwaermlauf laeuft nur bei echter Zeitueberschreitung an.
+function askAfterAbort(result, cfg) {
+  if (result.aborted) scheduleWarmup(cfg)
+  return { decision: "ask", reason: result.reason }
+}
+
 // Eine Modellanfrage fuer beide Ebenen. Jeder Fehlerpfad endet bei "ask".
 async function requestCompletion(messages, cfg) {
   if (!cfg.enabled) return { ok: false, reason: "Reviewer deaktiviert" }
@@ -773,7 +803,11 @@ async function requestCompletion(messages, cfg) {
     const body = await response.json()
     return { ok: true, text: body?.choices?.[0]?.message?.content }
   } catch (error) {
-    return { ok: false, reason: `Reviewer nicht erreichbar: ${error?.name ?? "Fehler"}` }
+    return {
+      ok: false,
+      aborted: isTimeoutAbort(error),
+      reason: `Reviewer nicht erreichbar: ${error?.name ?? "Fehler"}`,
+    }
   } finally {
     clearTimeout(timer)
   }
@@ -794,7 +828,7 @@ async function shellBySystemone(commands, where, cfg) {
     if (left <= 0) return { decision: "ask", reason: "Zeitbudget ueberschritten" }
     const result = await requestSystemone(buildShellSystemoneRequest({ command, model: cfg.model, ...where }), cfg, left)
     if (result.unsupported) return { unsupported: true }
-    if (!result.ok) return { decision: "ask", reason: result.reason }
+    if (!result.ok) return askAfterAbort(result, cfg)
     lowest = Math.min(lowest, result.probability)
     // Jede Antwort mit hohem Exponierungsrisiko ist Rueckfrage. Fehlt der Wert
     // (Backend ohne zweite Frage), bleibt es bei der Hauptfrage allein.
@@ -821,7 +855,7 @@ export async function review({ commands, project, temp, config }) {
   }
 
   const result = await requestCompletion(buildMessages({ commands, project, temp }), cfg)
-  if (!result.ok) return { decision: "ask", reason: result.reason }
+  if (!result.ok) return askAfterAbort(result, cfg)
   return parseAnswer(result.text)
 }
 
@@ -839,7 +873,7 @@ export async function reviewMcp({ criteria, input, project, recent, config }) {
   if (cfg.mcpBackend === "systemone") {
     const result = await requestSystemone(buildSystemoneRequest({ criteria, input, model: cfg.model }), cfg)
     if (!result.unsupported) {
-      if (!result.ok) return { decision: "ask", reason: result.reason }
+      if (!result.ok) return askAfterAbort(result, cfg)
       return systemoneVerdict(result.probability, cfg.mcpThreshold)
     }
     // 404: kein /systemone; unten laeuft der Chat-Weg.
@@ -848,6 +882,6 @@ export async function reviewMcp({ criteria, input, project, recent, config }) {
   const three = cfg.mcpThreeWay === true
   const requestConfig = three ? { ...cfg, grammar: MCP_THREE_GRAMMAR } : cfg
   const result = await requestCompletion(buildMcpMessages({ criteria, input, project, recent, three }), requestConfig)
-  if (!result.ok) return { decision: "ask", reason: result.reason }
+  if (!result.ok) return askAfterAbort(result, cfg)
   return parseMcpAnswer(result.text)
 }

@@ -1,10 +1,10 @@
 // Testtabelle fuer guard.js. Ausfuehren mit: node test.mjs
-import { contextScope, evaluate, gitShadowRecord, mcpAction, mcpCriteria, mcpObservation, mcpVerdict } from "./guard.js"
+import { contextScope, evaluate, gitShadowRecord, mcpAction, mcpCriteria, mcpObservation, mcpVerdict, scopeEdit } from "./guard.js"
 import { appendRecord, canonicalJson, hashRecord, parseLines, verifyChain } from "./audit.js"
 import { summarizeShadow } from "./git-shadow-report.mjs"
 import { shadowPath } from "./shadow.js"
 import { summarizeAudit } from "./mcp-report.mjs"
-import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMcpAnswer, review, reviewMcp, segments, warmup } from "./reviewer.js"
+import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMcpAnswer, review, reviewMcp, scheduleWarmup, segments, warmup } from "./reviewer.js"
 import { buildShellSystemoneRequest, buildSystemoneRequest, sanitizeArguments, systemoneVerdict } from "./reviewer.js"
 import { parseLine, summarize } from "./stats.mjs"
 import { createHash } from "node:crypto"
@@ -36,16 +36,21 @@ const base = [
   ["cd \"C:\\p\"\n\"=== Commits ===\"\ngit rev-list --count HEAD\ngit log --oneline | Select-Object -First 5", "allow"],
   ["Get-Content CHANGELOG.md -Tail 40", "allow"],
   ["$rows | Format-Table -AutoSize | Out-String -Width 160", "allow"],
-  // Skriptblock hinter einem lesenden Pipeline-Cmdlet: eigener Code, deshalb
-  // Rueckfrage (Review 17.11.2026). Ein Block kann alles enthalten.
-  ["Get-Content file.txt | Where-Object { $_ -match 'x' } | Measure-Object", "ask"],
+  // Skriptblock hinter einem lesenden Pipeline-Cmdlet: eigener Code, wird als
+  // eigenes Skript bewertet (17.11.2026). Ein lesender Block ist damit erlaubt.
+  ["Get-Content file.txt | Where-Object { $_ -match 'x' } | Measure-Object", "allow"],
   ["$x = Get-Content file.txt\n$x.Count", "allow"],
-  ["Select-String -Path CHANGELOG.md -Pattern \"Git-Identitaet\" | ForEach-Object { \"$($_.LineNumber)\" }", "ask"],
+  ["Select-String -Path CHANGELOG.md -Pattern \"Git-Identitaet\" | ForEach-Object { \"$($_.LineNumber)\" }", "allow"],
   ["git status", "allow"],
   ["git diff --stat", "allow"],
   ["git config core.autocrlf", "allow"],
   ["git log --format='%ae' | Sort-Object -Unique", "allow"],
   ["git stash show --stat stash@{0}", "allow"],
+  // Git-Refspec mit @{u}: das @ folgt einem Ref-Zeichen bzw. steht in einem
+  // String, ist also kein Teilausdruck (Fehlalarm 17.11.2026).
+  ["git rev-list --left-right --count 'HEAD...@{u}'", "allow"],
+  ["git rev-list --left-right --count HEAD...@{u}", "allow"],
+  ["git log --oneline '@{u}..HEAD'", "allow"],
   ["foreach ($f in @(\"a.md\",\"b.md\")) {\n  $raw = [System.IO.File]::ReadAllText($f)\n  $n = ([regex]::Matches($raw, \"x\")).Count\n  \"$f $n\"\n}", "allow"],
   ["[System.IO.File]::ReadAllBytes($f).Length", "allow"],
   ["[System.IO.File]::Exists($p)", "allow"],
@@ -694,6 +699,26 @@ for (const [script, pattern, withCommand] of messageChecks) {
   if (!ok) failed++
   console.log(`${ok ? "ok  " : "FAIL"}  ${String(got.decision).padEnd(5)}  Meldung ${pattern}  ${script.slice(0, 60)}`)
   if (!ok) console.log(`      Meldung: ${got.message ?? "fehlt"}`)
+}
+// Undurchsichtige URL-Zugangsdaten duerfen unabhaengig vom Tokenwort nicht in
+// der Meldung landen.
+const credentialLeak = evaluate("git push https://user:OPAQUE-TEST-VALUE@example.invalid/repo main", options)
+const credentialOk =
+  credentialLeak.decision === "ask" &&
+  typeof credentialLeak.message === "string" &&
+  credentialLeak.message.includes("Muster: push") &&
+  !credentialLeak.message.includes("OPAQUE-TEST-VALUE")
+if (!credentialOk) failed++
+console.log(`${credentialOk ? "ok  " : "FAIL"}  URL-Zugangsdaten aus Meldung entfernt`)
+const quotedCredentialCases = [
+  ["git push https'://'u:QUOTED-OPAQUE-TEST-VALUE@example.invalid/repo main", "push"],
+  ["git reset --hard https'://'u:QUOTED-OPAQUE-TEST-VALUE@example.invalid/repo", "reset-hard"],
+]
+for (const [script, pattern] of quotedCredentialCases) {
+  const got = evaluate(script, options)
+  const ok = typeof got.message === "string" && got.message.includes(`Muster: ${pattern}`) && !got.message.includes("QUOTED-OPAQUE-TEST-VALUE")
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  Quotierte URL-Zugangsdaten entfernt (${pattern})`)
 }
 console.log("-- Git-Meldungen\n")
 
@@ -1490,6 +1515,146 @@ for (const [name, ok] of warmupChecks) {
 }
 console.log("-- Aufwaermlauf\n")
 
+// --- Nachwaermen nach Zeitueberschreitung (17.11.2026) ---------------------
+// Ein Abbruch durch Zeitueberschreitung bleibt "ask" und startet den
+// Aufwaermlauf im Hintergrund; die Antwort wartet nicht darauf. Fehler beim
+// Nachwaermen sind folgenlos, und gleichzeitige Abbrueche starten nur einen
+// Aufwaermlauf. Alle Faelle laufen mit Ersatz-fetch, ohne Netz und ohne Timer
+// von aussen.
+const abortWarmupChecks = []
+{
+  const saved = globalThis.fetch
+  const unhandled = []
+  const onUnhandled = (reason) => unhandled.push(reason)
+  process.on("unhandledRejection", onUnhandled)
+  // Ein Aufwaermlauf faengt am Tor an, damit der Test sehen kann, dass die
+  // Entscheidung schon vorher zurueck ist (gate) und wie oft er anlaeuft.
+  const setup = ({ warmupMode = "gate" } = {}) => {
+    const calls = { decision: 0, warmup: 0 }
+    let open
+    const gate = new Promise((resolve) => { open = resolve })
+    globalThis.fetch = async (url, init) => {
+      const body = String(init?.body ?? "")
+      const isWarmup = body.includes('"warmup"') || body.includes("2 groesser als 1")
+      if (!isWarmup) {
+        calls.decision++
+        return new Promise((_, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(Object.assign(new Error("aborted"), { name: "AbortError" })))
+        })
+      }
+      calls.warmup++
+      if (warmupMode === "gate") {
+        await gate
+        return { ok: true, arrayBuffer: async () => new ArrayBuffer(0) }
+      }
+      if (warmupMode === "fail") throw Object.assign(new Error("Aufwaermen kaputt"), { name: "Error" })
+      return { ok: true, arrayBuffer: async () => new ArrayBuffer(0) }
+    }
+    return { calls, open }
+  }
+  const base = { enabled: true, baseUrl: "http://[IP_ADDRESS]:1/v1", model: "m", timeoutMs: 5, warmupTimeoutMs: 3000 }
+  const shell = { ...base, shellBackend: "chat", mcpBackend: "chat" }
+  const decisions = ["Get-ChildItem"]
+
+  // Chat-Weg: Abbruch -> ask, Aufwaermlauf laeuft bereits im Hintergrund.
+  {
+    const { calls, open } = setup()
+    const verdict = await review({ commands: decisions, project: "P", temp: "T", config: shell })
+    abortWarmupChecks.push(["Zeitueberschreitung bleibt ask", verdict.decision === "ask" && /AbortError/.test(verdict.reason)])
+    abortWarmupChecks.push(["Chat-Weg waermt nach dem Abbruch nach", calls.warmup === 1])
+    open()
+    await scheduleWarmup(shell)
+    abortWarmupChecks.push(["Nachwaermen laeuft nur einmal", calls.warmup === 1])
+  }
+
+  // systemone-Weg: derselbe Ablauf, anderer Endpunkt.
+  {
+    const { calls, open } = setup()
+    const cfg = { ...base, shellBackend: "systemone", mcpBackend: "systemone" }
+    const verdict = await review({ commands: decisions, project: "P", temp: "T", config: cfg })
+    abortWarmupChecks.push(["systemone: Zeitueberschreitung bleibt ask", verdict.decision === "ask" && /AbortError/.test(verdict.reason)])
+    abortWarmupChecks.push(["systemone-Weg waermt nach dem Abbruch nach", calls.warmup === 1])
+    open()
+    await scheduleWarmup(cfg)
+  }
+
+  // Ebene 3 (MCP) laeuft ueber denselben Chat-Weg.
+  {
+    const { calls, open } = setup()
+    const cfg = { ...base, shellBackend: "chat", mcpBackend: "chat" }
+    const verdict = await reviewMcp({ criteria: mcpCriteria("voellig_unbekannt", { input: { ziel: "x" } }), input: { ziel: "x" }, config: cfg })
+    abortWarmupChecks.push(["MCP: Zeitueberschreitung bleibt ask", verdict.decision === "ask"])
+    abortWarmupChecks.push(["MCP: waermt nach dem Abbruch nach", calls.warmup === 1])
+    open()
+    await scheduleWarmup(cfg)
+  }
+
+  // Gleichzeitige Abbrueche starten nur einen Aufwaermlauf.
+  {
+    const { calls, open } = setup()
+    const results = await Promise.all([
+      review({ commands: decisions, project: "P", temp: "T", config: shell }),
+      review({ commands: decisions, project: "P", temp: "T", config: shell }),
+      review({ commands: decisions, project: "P", temp: "T", config: shell }),
+    ])
+    abortWarmupChecks.push(["parallele Abbrueche bleiben ask", results.every((r) => r.decision === "ask")])
+    abortWarmupChecks.push(["parallele Abbrueche starten einen Aufwaermlauf", calls.warmup === 1])
+    open()
+    await scheduleWarmup(shell)
+  }
+
+  // Ein bereits laufender Start-Aufwärmlauf wird mit dem Timeout-Weg geteilt.
+  {
+    const { calls, open } = setup()
+    const started = scheduleWarmup(shell)
+    const verdict = await review({ commands: decisions, project: "P", temp: "T", config: shell })
+    abortWarmupChecks.push(["Timeout bei laufendem Start-Aufwaermlauf bleibt ask", verdict.decision === "ask"])
+    abortWarmupChecks.push(["Start- und Timeout-Aufwaermlauf laufen nur einmal", calls.warmup === 1])
+    open()
+    await started
+  }
+
+  // Fehler beim Nachwaermen sind folgenlos und erzeugen keine unhandled
+  // rejection.
+  {
+    setup({ warmupMode: "fail" })
+    const verdict = await review({ commands: decisions, project: "P", temp: "T", config: shell })
+    const result = await scheduleWarmup(shell)
+    await new Promise((resolve) => setImmediate(resolve))
+    abortWarmupChecks.push(["Fehler beim Nachwaermen bleibt folgenlos", verdict.decision === "ask" && result?.ok === false])
+    abortWarmupChecks.push(["Nachwaermen erzeugt keine unhandled rejection", unhandled.length === 0])
+  }
+
+  // Kein Aufwaermen ohne Zeitueberschreitung: Serverfehler und Netzfehler.
+  {
+    const calls = { warmup: 0 }
+    const failing = (name) => async (url, init) => {
+      const body = String(init?.body ?? "")
+      if (body.includes('"warmup"') || body.includes("2 groesser als 1")) {
+        calls.warmup++
+        return { ok: true, arrayBuffer: async () => new ArrayBuffer(0) }
+      }
+      if (name) throw Object.assign(new Error("kaputt"), { name })
+      return { ok: false, status: 500, json: async () => ({}) }
+    }
+    globalThis.fetch = failing(null)
+    const server = await review({ commands: decisions, project: "P", temp: "T", config: shell })
+    globalThis.fetch = failing("TypeError")
+    const network = await review({ commands: decisions, project: "P", temp: "T", config: shell })
+    abortWarmupChecks.push(["Server- und Netzfehler bleiben ask", server.decision === "ask" && network.decision === "ask"])
+    abortWarmupChecks.push(["kein Aufwaermen ohne Zeitueberschreitung", calls.warmup === 0])
+  }
+
+  globalThis.fetch = saved
+  process.off("unhandledRejection", onUnhandled)
+}
+for (const [name, ok] of abortWarmupChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- Nachwaermen nach Zeitueberschreitung\n")
+
 // --- Diagnose: keine rohen Befehlstexte, private Ablage --------------------
 const diagnosticsChecks = []
 {
@@ -1604,19 +1769,26 @@ run(reviewFixesScoped, options, "Review 13.11.2026: mit Projektbezug")
 // 1> und 2> wurden nicht als Umleitung erkannt, und ein einzelnes & trennte
 // keine Befehle. Jede Gruppe hat Gegenproben, die legitimes Verhalten haelt.
 const reviewBlock = [
-  // Der Block ist eigener Code; die Zeile bleibt Rueckfrage (kein Modell).
-  ["Get-ChildItem | ForEach-Object { Remove-Item -Recurse -Force C:/Windows/x }", "ask"],
-  ["ForEach-Object { Remove-Item -Recurse -Force C:/Windows/x }", "ask"],
-  ["% { Remove-Item -Recurse -Force C:/Windows/x }", "ask"],
-  ["? { Remove-Item -Recurse -Force C:/Windows/x }", "ask"],
-  ["Get-ChildItem | Where-Object { Remove-Item -Recurse -Force C:/Windows/x }", "ask"],
-  ["Get-ChildItem | Select-Object { Remove-Item -Recurse -Force C:/Windows/x }", "ask"],
-  ["Get-ChildItem | ForEach-Object { $_ } | Where-Object { Remove-Item -Recurse -Force C:/Windows/x }", "ask"],
-  // Ein vorangehendes erlaubtes Schreiben aendert daran nichts.
-  ["Set-Content C:/p/a.txt \"x\"\nGet-ChildItem | ForEach-Object { $_ }", "ask"],
+  // Der Block ist eigener Code und wird als eigenes Skript bewertet. Was im
+  // Block verweigert wird, verweigert die ganze Zeile.
+  ["Get-ChildItem | ForEach-Object { Remove-Item -Recurse -Force C:/Windows/x }", "deny"],
+  ["ForEach-Object { Remove-Item -Recurse -Force C:/Windows/x }", "deny"],
+  ["% { Remove-Item -Recurse -Force C:/Windows/x }", "deny"],
+  ["? { Remove-Item -Recurse -Force C:/Windows/x }", "deny"],
+  ["Get-ChildItem | Where-Object { Remove-Item -Recurse -Force C:/Windows/x }", "deny"],
+  ["Get-ChildItem | Select-Object { Remove-Item -Recurse -Force C:/Windows/x }", "deny"],
+  ["Get-ChildItem | ForEach-Object { $_ } | Where-Object { Remove-Item -Recurse -Force C:/Windows/x }", "deny"],
+  // Ein Aufruf ueber & und ein Schreiben ausserhalb des Projekts bleiben
+  // verweigert, auch wenn sie im Block stehen.
+  ["ForEach-Object { & $cmd }", "deny"],
+  ["ForEach-Object { Set-Content C:/Windows/x y }", "deny"],
+  // Ein lesender Block laesst die aeussere Pruefung weiterlaufen; das
+  // vorangehende Schreiben im Projekt bleibt erlaubt.
+  ["Set-Content C:/p/a.txt \"x\"\nGet-ChildItem | ForEach-Object { $_ }", "allow"],
   // Gegenproben: Kontrollbloecke, Parameter und Hashtables bleiben erlaubt.
   ["foreach ($f in @(\"a.txt\")) { Get-Content $f }", "allow"],
   ["Get-ChildItem | Select-Object @{n='Name';e={$_.Name}}", "allow"],
+  ["Get-ChildItem | Select-Object @{n='x';e={Remove-Item -Recurse -Force C:/Windows/x}}", "deny"],
   ["Get-ChildItem | Where-Object Length -gt 1000", "allow"],
   // 1> und 2> schreiben in eine Datei; 2>&1 und 2>$null nicht.
   ["Get-Content a.txt 1> C:/Windows/x.txt", "deny"],
@@ -1635,6 +1807,69 @@ const reviewBlock = [
   ["Write-Output \"a & b\"", "allow"],
 ]
 run(reviewBlock, options, "Review 17.11.2026: Skriptbloecke, Umleitungen, &")
+
+// 17.11.2026: Der Block hinter ForEach-Object/Where-Object/Select-Object/
+// Sort-Object/Group-Object/Measure-Object und ihren Aliasen ist eigenes
+// Skript. Er wird als eigenes Skript bewertet; die aeussere Pruefung laeuft
+// nur weiter, wenn jeder Block erlaubt ist.
+const pipelineBlocks = [
+  ["Get-ChildItem | ForEach-Object { $_.FullName }", "allow"],
+  ["Get-ChildItem | % { $_.Name }", "allow"],
+  ["Get-ChildItem | Sort-Object Length | Measure-Object", "allow"],
+  ["Get-ChildItem | Group-Object Extension", "allow"],
+  ["Get-Process | Where-Object { $_.Name -eq 'pwsh' }", "allow"],
+  ["Get-ChildItem | ForEach-Object { Get-Content $_.FullName }", "allow"],
+  ["Get-ChildItem | ForEach-Object { Set-Content out.txt 'y' }", "allow"],
+  ["Get-ChildItem | ForEach-Object { $_ } > out.txt", "allow"],
+  // Ein ask aus dem Block bleibt ask - auch ohne Geheimnisverdacht.
+  ["Get-ChildItem | Where-Object { node script.js }", "ask"],
+  ["if ($true) { Where-Object { node script.js } }", "ask"],
+  ["Get-ChildItem | ForEach-Object { Get-Content .env }", "ask"],
+  // Ein Arbeitsordner ausserhalb des Projekts bleibt Rueckfrage, weil ein
+  // relativer Schreibpfad im Block sonst am falschen Ordner haengt.
+  ["cd C:/Windows\nGet-ChildItem | ForEach-Object { Set-Content out.txt 'y' }", "ask"],
+  ["cd C:/Windows\nGet-ChildItem | ForEach-Object { Set-Content escape.txt y }\ncd C:/p", "ask"],
+  // Review 17.11.2026: Auch Klammerausdrücke und eine Umleitung nach dem
+  // Block werden tatsächlich ausgeführt und dürfen nicht verloren gehen.
+  ["Write-Output 1 | ForEach-Object { Write-Output (Set-Content C:/outside/out.txt y) }", "deny"],
+  ["Write-Output 1 | ForEach-Object { Set-Content out.txt 'y' -PassThru } > C:/outside/out.txt", "deny"],
+  // Zweite Review-Runde: Ortswechsel, Hashtables und deny-Priorität.
+  ["Get-ChildItem | ForEach-Object { Set-Location C:/Windows -PassThru } | ForEach-Object { Set-Content escape.txt y }", "ask"],
+  ["Get-ChildItem | ForEach-Object { Write-Output (Set-Location C:/Windows -PassThru) } | ForEach-Object { Set-Content escape.txt y }", "ask"],
+  ["ForEach-Object -InputObject @{a='x'} -Process { & $cmd }", "deny"],
+  ["ForEach-Object -Begin { node -e 'void 0' } -Process { Set-Content C:/Windows/escape.txt y }", "deny"],
+  // Dritte Review-Runde: Satzgrenzen, Schutzwurzel, Verbotsvorrang und Text.
+  ["Write-Output 1 | ForEach-Object { Write-Output 2; Write-Output (Set-Content C:/outside/out.txt y) }", "deny"],
+  ["cd C:/p/.git\nWrite-Output 1 | ForEach-Object { Set-Content config y }", "deny"],
+  ["cd C:/outside\nWrite-Output 1 | ForEach-Object { Set-Content C:/Windows/x.txt y }", "deny"],
+  ['Write-Output 1 | ForEach-Object { "text (Set-Content C:/outside/out.txt y)" }', "allow"],
+  // Vierte Review-Runde: Folgezweige, verschachtelte Orte und Zitate.
+  ["if ($false) { Write-Output 1 } else { Set-Content C:/Windows/out.txt y }", "deny"],
+  ["Write-Output 1 | ForEach-Object { if ($true) { Set-Location C:/Windows -PassThru } } | ForEach-Object { Set-Content escape.txt y }", "ask"],
+  // Gueltige PowerShell-Syntax mit inneren Zitaten im Teilausdruck.
+  ['Write-Output "text $(Write-Output "safe"; Set-Content -Path C:/Users/Public/guard-review-nicht-schreiben.txt -Value y)"', "deny"],
+  ["Write-Output 1 | ForEach-Object -Begin { Write-Output $(node -e 'void 0') } -Process { Set-Content C:/Windows/out.txt y }", "deny"],
+  // Auch ein schreibendes Hauptverb (git push) darf ein Pfadverbot nicht
+  // durch eine fruehere Rueckfrage verdecken.
+  ["Write-Output $(git push); Set-Content C:/Users/Public/guard-review-nicht-schreiben.txt y", "deny"],
+  ["Write-Output $(git push https://token@example.invalid/repo main); Set-Content C:/Users/Public/guard-review-nicht-schreiben.txt y", "deny"],
+]
+run(pipelineBlocks, options, "Pipeline-Bloecke: Block als eigenes Skript")
+
+// Der Grund aus dem Block wird durchgereicht statt durch einen Sammelgrund
+// ersetzt.
+const blockReasons = [
+  ["Get-ChildItem | ForEach-Object { Remove-Item -Recurse -Force C:/Windows/x }", "deny", /^Skriptblock: geschuetzter Pfad/],
+  ["ForEach-Object { & $cmd }", "deny", /^Skriptblock: unpruefbar: Aufruf ueber & oder \./],
+  ["Get-ChildItem | Where-Object { node script.js }", "ask", /^Skriptblock: /],
+]
+for (const [script, want, pattern] of blockReasons) {
+  const got = evaluate(script, options)
+  const ok = got.decision === want && pattern.test(got.reason)
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${got.decision.padEnd(5)} (${want.padEnd(5)})  Grund: ${got.reason}`)
+}
+console.log("-- Pipeline-Bloecke: Grund aus dem Block\n")
 
 // Ohne pwsh im PATH darf der Reviewer-Start den Prozess nicht abbrechen.
 // Vorher beendete das ein unbehandeltes 'error'-Ereignis den Node-Prozess.
@@ -1709,17 +1944,59 @@ for (const [name, ok] of round2Checks) {
 }
 console.log("-- Runde 2: Reviewer und Zuweisungen\n")
 
+// --- Edit-Pruefung (17.11.2026): action "edit" -----------------------------
+// OpenCode meldet edit/write/patch als "edit" und nennt die Zieldateien in
+// resources. Geprueft wird nur das "ask" der statischen Regeln; die
+// geschuetzten Pfade stammen aus derselben Quelle wie die Shell-Pruefung.
+const editCases = [
+  [["C:\\p\\CHANGELOG.md"], "allow"],
+  [["CHANGELOG.md"], "allow"],
+  [["C:\\p\\sub\\..\\CHANGELOG.md"], "allow"],
+  [["C:\\Users\\u\\AppData\\Local\\Temp\\opencode\\x.md"], "allow"],
+  [["C:\\Users\\u\\.config\\opencode\\opencode.jsonc"], "deny"],
+  [["C:\\Users\\u\\.ssh\\id_rsa"], "deny"],
+  [["C:\\p\\.git\\config"], "deny"],
+  [["C:.git\\config"], "deny"],
+  // ".gitignore" ist kein ".git"-Pfad: Praefixpruefung darf nicht greifen.
+  [["C:\\p\\.gitignore"], "allow"],
+  [["C:\\p\\..\\other\\x.md"], "deny"],
+  [["C:\\other\\x.md"], "deny"],
+  [["$unknown"], "deny"],
+  [["*.md"], "ask"],
+  [["C:\\p\\a.md", "C:\\Users\\u\\.ssh\\config"], "deny"],
+  [["C:\\p\\a.md", "C:\\p\\b.md"], "allow"],
+  [["C:\\p\\a.md", "*.md"], "ask"],
+  [["C:\\p\\a.md", ""], "ask"],
+  [["C:\\p\\a.md", "", "C:\\other\\x.md"], "deny"],
+]
+for (const [resources, want] of editCases) {
+  const got = scopeEdit(resources, options)
+  const ok = got.decision === want
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${got.decision.padEnd(5)} (${want.padEnd(5)})  edit ${resources.join(", ")}`)
+  if (!ok) console.log(`      Grund: ${got.reason}`)
+}
+// Ohne Projektbezug bleibt es beim ask - wie "Arbeitsordner unbekannt" der Shell.
+const editNoBase = scopeEdit(["C:\\p\\a.md"], {})
+if (editNoBase.decision !== "ask") failed++
+console.log(`${editNoBase.decision === "ask" ? "ok  " : "FAIL"}  edit ohne base -> ask (${editNoBase.reason})`)
+const editPrivate = scopeEdit(["C:\\Users\\u\\.config\\opencode\\opencode.jsonc"], options)
+const editPrivateOk = editPrivate.decision === "deny" && !/Users|opencode\.jsonc/i.test(editPrivate.reason)
+if (!editPrivateOk) failed++
+console.log(`${editPrivateOk ? "ok  " : "FAIL"}  Edit-Grund enthaelt keinen Zielpfad (${editPrivate.reason})`)
+console.log("-- Edit-Pruefung: Ziele, geschuetzte Pfade, Platzhalter\n")
+
 const total =
   base.length + scoped.length + gitGuardrails.length + cli.length + helpVersion.length + gitleaks.length +
   readOnlyCli.length +
   net.length + denyForms.length + py.length + interp.length +
-  ruffConfigBootstrap.length + sharedChecks.length + messageChecks.length +
+  ruffConfigBootstrap.length + sharedChecks.length + messageChecks.length + 3 +
   shadowChecks.length + shadowReportChecks.length + shadowPathChecks.length +
   mcpObs.length + mcpKeys.length + mcpSecChecks.length +
   mcpCritIntentChecks.length + mcpCritResourceChecks.length + mcpCritChecks.length +
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
-  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + reviewBlock.length + 1 + secretsChecks.length + 5 + 3 + 3 + 1
+  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + abortWarmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + reviewBlock.length + pipelineBlocks.length + blockReasons.length + 1 + secretsChecks.length + editCases.length + 2 + 5 + 3 + 3 + 1
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

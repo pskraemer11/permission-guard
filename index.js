@@ -12,6 +12,9 @@
 // Modell darf ausschliesslich "ask" zu "allow" heben; eine Risikoliste wird
 // vorher geprueft, jeder Fehler und jeder Timeout bleibt "ask".
 //
+// Seit 17.11.2026 zusaetzlich: Datei-Edits (action "edit") im "ask" der
+// statischen Regeln werden am Zielpfad gemessen (scopeEdit in guard.js).
+//
 // Die Entscheidungslogik liegt in guard.js und reviewer.js und ist ohne
 // OpenCode testbar (node test.mjs). Dieses Modul ist nur die Verdrahtung.
 
@@ -19,11 +22,11 @@ import { Plugin } from "@opencode/plugin"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { MCP_GATING_MODE, contextScope, evaluate, gitShadowRecord, mcpAction, mcpCriteria, mcpObservation, mcpVerdict } from "./guard.js"
+import { MCP_GATING_MODE, contextScope, evaluate, gitShadowRecord, mcpAction, mcpCriteria, mcpObservation, mcpVerdict, scopeEdit } from "./guard.js"
 import { appendRecord, auditPath, callKey, readState, shortHash } from "./audit.js"
 import { commandSummary, ensurePrivateDir, ensurePrivateFile, guardLogDir } from "./diagnostics.js"
 import { appendShadow, shadowPath } from "./shadow.js"
-import { ensureRunning, loadConfig, review, reviewMcp, warmup } from "./reviewer.js"
+import { ensureRunning, loadConfig, review, reviewMcp, scheduleWarmup } from "./reviewer.js"
 
 const BASE_DIR = guardLogDir()
 const LOG_FILE = path.join(BASE_DIR, "guard.log")
@@ -254,6 +257,27 @@ export default Plugin.define({
             }
           }
 
+          // Edit-Pruefung (17.11.2026): OpenCode meldet edit/write/patch als
+          // action "edit" und nennt die Zieldateien in resources. Geprueft wird
+          // nur das "ask" der statischen Regeln: Schreiben in vertraute Ordner
+          // wird hochgestuft, geschuetzte Pfade und Ziele ausserhalb werden
+          // verweigert. Ein allow/deny der Regeln kehrt unveraendert zurueck.
+          if (action === "edit" && effect === "ask") {
+            const edit = scopeEdit(input.resources, options)
+            if (edit.decision === "allow") {
+              input.effect = "allow"
+              input.message = `permission-guard: ${edit.reason}`
+              debug(`edit allow ${edit.reason}`)
+            } else if (edit.decision === "deny") {
+              input.effect = "deny"
+              input.message = `permission-guard: ${edit.reason}`
+              debug(`edit deny ${edit.reason}`)
+            } else {
+              debug(`edit ask ${edit.reason}`)
+            }
+            return
+          }
+
           if (effect !== "ask") return
           if (!SHELL_ACTIONS.has(action)) return
 
@@ -348,7 +372,7 @@ export default Plugin.define({
         .then((s) => {
           const state = s.already ? "lief bereits" : s.started ? `gestartet (Port ${s.port})` : "nicht gestartet"
           debug(`setup: Server ${state}${s.reason ? ` (${s.reason})` : ""}`)
-          return warmup(reviewerConfig)
+          return scheduleWarmup(reviewerConfig)
         })
         .then((w) => debug(`setup: Aufwaermlauf ${w.ok ? "ok" : "fehlgeschlagen"} ${w.ms ?? 0} ms${w.reason ? ` (${w.reason})` : ""}`))
         .catch(() => {})

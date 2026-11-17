@@ -22,6 +22,7 @@ process.env.PERMISSION_GUARD_AUDIT = path.join(scratch, "audit.jsonl")
 process.env.PERMISSION_GUARD_GIT_SHADOW_LOG = path.join(scratch, "git-shadow.jsonl")
 
 const { default: plugin } = await import("./index.js")
+const { evaluate, scopeEdit } = await import("./guard.js")
 
 let failed = 0
 const checks = []
@@ -96,8 +97,9 @@ check("Aussen-Schreiben wird verweigert", outside.effect === "deny", `effect=${o
 check("Aussen-Schreiben erreicht das Modell nicht", modelCalls.length === 0, `Anfragen: ${modelCalls.length}`)
 
 // 3) Skriptblock hinter einem lesenden Pipeline-Cmdlet: Die Attrappe wuerde
-// diesen Befehl freigeben (reads 0.95). Der Block bleibt trotzdem Rueckfrage
-// und erreicht das Modell gar nicht (Review 17.11.2026).
+// diesen Befehl freigeben (reads 0.95). Der Block wird statisch als eigenes
+// Skript bewertet - hier verweigert - und erreicht das Modell gar nicht
+// (Review 17.11.2026, nachgezogen 17.11.2026).
 modelCalls.length = 0
 const block = {
   action: "shell",
@@ -106,8 +108,101 @@ const block = {
   metadata: {},
 }
 await evaluateHook(block)
-check("Skriptblock bleibt Rueckfrage", block.effect === "ask", `effect=${block.effect}`)
+check("Skriptblock mit Loeschbefehl wird verweigert", block.effect === "deny", `effect=${block.effect}`)
 check("Skriptblock erreicht das Modell nicht", modelCalls.length === 0, `Anfragen: ${modelCalls.length}`)
+
+// 4) Edits: Nur das "ask" der statischen Regeln wird am Zielpfad gemessen.
+// Schreiben im Projekt wird hochgestuft; geschuetzte Pfade und Ziele ausserhalb
+// werden verweigert. Die Ziele sind Windows-Pfade (siehe Kopf) - ein Ziel im
+// Benutzerprofil ist entweder geschuetzt oder nicht aufloesbar, in beiden
+// Faellen "deny".
+modelCalls.length = 0
+const editInside = {
+  action: "edit",
+  effect: "ask",
+  resources: ["C:\\work\\scratch-project\\notes.md"],
+  metadata: {},
+}
+await evaluateHook(editInside)
+check("Edit im Projekt wird erlaubt", editInside.effect === "allow", `effect=${editInside.effect}`)
+
+const editOutside = {
+  action: "edit",
+  effect: "ask",
+  resources: ["C:\\work\\other\\notes.md"],
+  metadata: {},
+}
+await evaluateHook(editOutside)
+check("Edit ausserhalb des Projekts wird verweigert", editOutside.effect === "deny", `effect=${editOutside.effect}`)
+
+const homePath = os.homedir().replace(/\//g, "\\")
+const editProtected = {
+  action: "edit",
+  effect: "ask",
+  resources: [`${homePath}\\.ssh\\id_rsa`],
+  metadata: {},
+}
+await evaluateHook(editProtected)
+check("Edit auf geschuetzten Pfad wird verweigert", editProtected.effect === "deny", `effect=${editProtected.effect}`)
+
+const editMixed = {
+  action: "edit",
+  effect: "ask",
+  resources: ["C:\\work\\scratch-project\\a.md", `${homePath}\\.ssh\\config`],
+  metadata: {},
+}
+await evaluateHook(editMixed)
+check("Ein geschuetztes Ziel verweigert den ganzen Edit", editMixed.effect === "deny", `effect=${editMixed.effect}`)
+check("Edits erreichen das Modell nicht", modelCalls.length === 0, `Anfragen: ${modelCalls.length}`)
+
+// 5) Statische allow/deny bleiben unveraendert.
+const editStaticAllow = {
+  action: "edit",
+  effect: "allow",
+  resources: [`${homePath}\\.ssh\\id_rsa`],
+  metadata: {},
+}
+await evaluateHook(editStaticAllow)
+check("Statisches allow beim Edit bleibt allow", editStaticAllow.effect === "allow", `effect=${editStaticAllow.effect}`)
+
+const editStaticDeny = {
+  action: "edit",
+  effect: "deny",
+  resources: ["C:\\work\\scratch-project\\notes.md"],
+  metadata: {},
+}
+await evaluateHook(editStaticDeny)
+check("Statisches deny beim Edit bleibt deny", editStaticDeny.effect === "deny", `effect=${editStaticDeny.effect}`)
+
+// 6) Eine echte Junction unter dem Projekt darf ihr physisches Ziel nicht
+// verbergen. Unter POSIX kennt der Guard bewusst nur Laufwerkspfade, daher ist
+// dieser Fall auf Windows begrenzt.
+if (process.platform === "win32") {
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), "pg-edit-outside-"))
+  try {
+    fs.writeFileSync(path.join(outside, "secret.md"), "x")
+    const link = path.join(scratch, "linked")
+    fs.symlinkSync(outside, link, "junction")
+    const linkedEdit = scopeEdit([path.join(link, "secret.md")], {
+      base: scratch,
+      roots: [scratch],
+      home: os.homedir(),
+      temp: os.tmpdir(),
+      appData: process.env.APPDATA,
+    })
+    check("Junction unter Projekt wird physisch verweigert", linkedEdit.decision === "deny", linkedEdit.reason)
+    const linkedShell = evaluate(`Write-Output 1 | ForEach-Object { Set-Content '${path.join(link, "shell.md")}' y }`, {
+      base: scratch,
+      roots: [scratch],
+      home: os.homedir(),
+      temp: os.tmpdir(),
+      appData: process.env.APPDATA,
+    })
+    check("Junction auch in Pipeline-Block verweigert", linkedShell.decision === "deny", linkedShell.reason)
+  } finally {
+    fs.rmSync(outside, { recursive: true, force: true })
+  }
+}
 
 // Aufraeumen
 globalThis.fetch = originalFetch

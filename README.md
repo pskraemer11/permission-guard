@@ -162,11 +162,20 @@ as:
 **Script blocks are code of their own.** A block behind a read-only pipeline
 cmdlet (`ForEach-Object`, `Where-Object`, `Select-Object`, `Sort-Object`,
 `Group-Object`, `Measure-Object` and their aliases `%`, `?`, `select`, `sort`,
-`group`, `measure`) is not evaluated: the line stays `ask` and never reaches the
-model (review 17.11.2026). Previously
+`group`, `measure`) is evaluated as its own script. The outer line proceeds only
+if every block returns `allow`; `ask` and `deny` are propagated with their
+reason. This also covers nested and calculated blocks. Previously
 `Get-ChildItem | ForEach-Object { Remove-Item -Recurse -Force C:\Windows\x }`
-counted as "read-only". Control blocks (`if`, `foreach`, `while`) are still
-checked statement by statement.
+counted as "read-only". Control blocks (`if`, `foreach`, `while`) are checked
+statement by statement.
+
+**File tools follow the same protected paths.** When the static rule for
+`edit`, `write` or `patch` returns `ask`, `scopeEdit()` checks every target
+path. Project files and `%TEMP%\opencode` are allowed; protected or external
+targets are denied, while wildcards and empty resources stay `ask`. Static
+`allow` and `deny` rules remain unchanged. Existing path segments are resolved
+physically so junctions and symlinks cannot hide their target. Guard messages
+omit target paths and usernames; URL credentials are removed from Git messages.
 
 **Writing inside the project:** Additionally allowed when every target is
 resolvable and lies inside a trusted folder:
@@ -716,6 +725,9 @@ permanently; it ties it to OpenCode:
   pays the cold start and ran into a timeout on 25.10.2026 (`AbortError`).
   Budget: `warmupTimeoutMs`, default 90 000 ms — measured were 34 028 ms cold
   against 199–256 ms warm (26.10.2026). The decision timeout is unaffected.
+  After an actual timeout `scheduleWarmup()` starts again in the background;
+  the current decision remains `ask` without waiting. Startup and timeout
+  warm-ups share the same in-flight call and therefore do not run twice.
 - **Idle:** `sleep-idle-seconds` in `%APPDATA%\llama.cpp\config.ini` releases
   the weights after inactivity (900 s here). The default `-1` disables that;
   `load-mode = auto` means mmap, `--no-mmap` makes the start **slower**
@@ -828,11 +840,24 @@ The index serves pre-selection; our own 18-command set remains authoritative.
 ```powershell
 .\start-reviewer.ps1                       # llama-server, Clef-Flash, port 8080
 .\start-reviewer.ps1 -ModelPath "D:\…\anderes.gguf" -Port 8081
+.\start-reviewer.ps1 -Cpu -Server "C:\…\llama-server.exe"   # no GPU offload
 node smoke-reviewer.mjs                    # 9 cases against the running configuration
-node test.mjs                              # 797 unit tests
+node test.mjs                              # 873 unit tests
+node test-index.mjs                        # 17 integration cases (fake OpenCode)
 node test-wiring.mjs                       # 13 wiring tests (fake git)
 .\start-reviewer.ps1 -Stop
 ```
+
+The default path uses CUDA with `-ngl all` and remains unchanged. `-Cpu` sets
+`-ngl 0` and is intended for machines without an NVIDIA GPU or for a CPU-only
+build. Measured on 17 November 2026 with Clef-Flash-Q4_K_M on eight CPU
+threads: about 3.8–4.2 s per decision, all 14 model cases correct, and the GPU
+remained practically free. For this mode set `timeoutMs` to 8000. The smoke
+run showed that 6000 ms was too tight, with one call taking 6015 ms overall.
+`--no-op-offload` is not part of the recommended path: the
+same smoke run needed more than 6000 ms with it. A CUDA executable with `-Cpu`
+may still use GPU memory for operations; use a CPU-only build as `-Server` to
+keep the GPU completely free.
 
 Without a running server everything stays at `ask`. Endpoint, model, grammar
 and timeout are in `shell-reviewer.config.json` (created from

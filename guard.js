@@ -15,7 +15,7 @@
 // und den Datei-Hash fuer die Urteilsdatei.
 
 import { createHash } from "node:crypto"
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync, realpathSync } from "node:fs"
 
 // Umgebungsvariablen, die kein Geheimnis sind. Alles andere ($env:TOKEN) gilt
 // als verdaechtig und bleibt bei "ask".
@@ -225,6 +225,9 @@ function splitStatements(script) {
   const out = []
   let cur = ""
   let quote = null
+  // Ein Semikolon oder Zeilenumbruch innerhalb eines Skriptblocks trennt
+  // keine Anweisungen; der Block wird als Ganzes klassifiziert.
+  let braceDepth = 0
   for (let i = 0; i < script.length; i++) {
     const ch = script[i]
     if (quote) {
@@ -238,6 +241,19 @@ function splitStatements(script) {
       continue
     }
     if (ch === '"' || ch === "'") { quote = ch; cur += ch; continue }
+    if (ch === "{") { braceDepth++; cur += ch; continue }
+    if (ch === "}") {
+      braceDepth = Math.max(0, braceDepth - 1)
+      cur += ch
+      // Folgezweige sind eigene Kontrollbloecke. Ohne diesen Schnitt wertet
+      // splitBlock nur den if-Rumpf aus und der else-Rumpf bliebe unsichtbar.
+      if (braceDepth === 0 && /^\s*(?:else|elseif|catch|finally)\b/i.test(script.slice(i + 1))) {
+        out.push(cur)
+        cur = ""
+      }
+      continue
+    }
+    if (braceDepth > 0) { cur += ch; continue }
     if (ch === "\n" || ch === "\r") { out.push(cur); cur = ""; continue }
     if (ch === ";") { out.push(cur); cur = ""; continue }
     if (ch === "|") {
@@ -496,12 +512,28 @@ export function gitShadowRecord(script) {
   return { pattern: hit.pattern, variant }
 }
 
+// URL-Zugangsdaten sind unabhaengig von ihrem Aufbau geheim: Benutzerinfo vor
+// dem @ wird aus Meldungen entfernt, auch wenn kein Tokenwort vorkommt.
+function redactUrlCredentials(text) {
+  return String(text).replace(/([a-z][a-z0-9+.-]*:\/\/)([^\s/@]+)@/gi, "$1***@")
+}
+
+// Bei quotierten URL-Fragmenten ist die Benutzerinfo statisch nicht sicher zu
+// trennen. Dann nur der Musterkopf, nie der Befehlstext.
+function hasObscuredUrlCredentials(text) {
+  const raw = String(text)
+  const at = raw.indexOf("@")
+  if (at < 0) return false
+  const prefix = raw.slice(0, at)
+  return prefix.includes("://") && /["']/.test(prefix)
+}
+
 // Meldung analog zum Claude-Hook. Der Befehl wird nur genannt, wenn der
 // Geheimnis-Filter ihn nicht als verdaechtig einstuft.
 function gitRuleMessage(hit, raw) {
   const head = `permission-guard: ${hit.reason} (Muster: ${hit.pattern})`
-  if (findSecrets(raw).length) return head
-  const command = String(raw).replace(/\s+/g, " ").trim().slice(0, 140)
+  if (findSecrets(raw).length || hasObscuredUrlCredentials(raw)) return head
+  const command = redactUrlCredentials(raw).replace(/\s+/g, " ").trim().slice(0, 140)
   return command ? `${head}: ${command}` : head
 }
 
@@ -514,8 +546,8 @@ function gitAskMessage(write, raw) {
   } else {
     return undefined
   }
-  if (findSecrets(raw).length) return head
-  const command = String(raw).replace(/\s+/g, " ").trim().slice(0, 140)
+  if (findSecrets(raw).length || hasObscuredUrlCredentials(raw)) return head
+  const command = redactUrlCredentials(raw).replace(/\s+/g, " ").trim().slice(0, 140)
   return command ? `${head}: ${command}` : head
 }
 
@@ -542,23 +574,93 @@ function splitBlock(statement) {
 }
 
 // Lesende Pipeline-Cmdlets, die einen Skriptblock annehmen. Der Block ist
-// eigener Code; er wird nicht bewertet und bleibt deshalb Rueckfrage
-// (Review 17.11.2026). Aliase gehoeren dazu, weil PowerShell sie gleich
-// behandelt.
+// eigener Code und wird als eigenes Skript bewertet (Review 17.11.2026).
+// Aliase gehoeren dazu, weil PowerShell sie gleich behandelt.
 const PIPELINE_BLOCK_CMDLETS = new Set([
   "foreach-object", "foreach", "%", "where-object", "where", "?",
   "select-object", "select", "sort-object", "sort", "group-object", "group",
   "measure-object", "measure",
 ])
+// Ein Ortswechsel im Block veraendert den Kontext fuer alle folgenden Blöcke.
+const PIPELINE_LOCATION_RE = /(?:^|[\r\n;|({]\s*)(?:cd|chdir|set-location|sl|push-location|pop-location)\b/i
 
-// Erstes { ausserhalb von Strings. Ein @{ ist ein Hashtable-Literal, kein Block.
+// Irgendein { ausserhalb von Strings, das nicht direkt zu einem Hashtable
+// gehoert. Ein Hashtable am Anfang darf spaetere Bloecke nicht verdecken.
 function hasScriptBlock(statement) {
   const { masked } = maskStrings(statement)
-  const open = masked.indexOf("{")
-  return open >= 0 && masked[open - 1] !== "@"
+  for (let open = masked.indexOf("{"); open >= 0; open = masked.indexOf("{", open + 1)) {
+    if (masked[open - 1] !== "@") return true
+  }
+  return false
 }
 
-function classifyStatement(raw, ctx) {
+// Schliessende Klammer zu einem {; ohne Gegenstueck das Textende (der Block
+// bleibt dann unvollstaendig und die Bewertung fail closed).
+function matchBrace(text, open) {
+  let depth = 0
+  let quote = null
+  for (let i = open; i < text.length; i++) {
+    const ch = text[i]
+    if (quote) {
+      if (quote === '"' && ch === "`") { i++; continue }
+      if (ch === quote) quote = null
+      continue
+    }
+    if (ch === '"' || ch === "'") { quote = ch; continue }
+    if (ch === "{") depth++
+    else if (ch === "}") {
+      depth--
+      if (depth === 0) return i
+    }
+  }
+  return text.length
+}
+
+// Zerlegt eine Zeile in die Rumpfe ihrer Skriptbloecke und den Rest ohne
+// Bloecke. Ein @{...} ist ein Hashtable-Literal, kann aber selbst Bloecke
+// enthalten (berechnete Eigenschaften) oder vor einem weiteren Block stehen.
+// Innere Bloecke werden deshalb rekursiv gesammelt.
+function scriptBlocks(statement) {
+  const bodies = []
+  let rest = ""
+  let quote = null
+  let i = 0
+  while (i < statement.length) {
+    const ch = statement[i]
+    if (quote) {
+      rest += ch
+      if (quote === '"' && ch === "`" && i + 1 < statement.length) {
+        rest += statement[i + 1]
+        i += 2
+        continue
+      }
+      if (ch === quote) quote = null
+      i++
+      continue
+    }
+    if (ch === '"' || ch === "'") { quote = ch; rest += ch; i++; continue }
+    if (ch === "{") {
+      const end = matchBrace(statement, i)
+      if (statement[i - 1] === "@") {
+        // Hashtable selbst nicht ausfuehren, aber enthaltene Scriptbloecke.
+        bodies.push(...scriptBlocks(statement.slice(i + 1, end)).bodies)
+      } else {
+        bodies.push(statement.slice(i + 1, end))
+      }
+      rest += " "
+      i = end + 1
+      continue
+    }
+    rest += ch
+    i++
+  }
+  return { bodies, rest }
+}
+
+// ctx ist ein Sammelplatz fuer den Aufloesungskontext (opts, vars, cwd) und
+// fuer Gruende aus Skriptbloecken (blockAsk, blockDeny). scopeWrites ruft die
+// Funktion ohne Kontext auf; dann bleibt es bei einem leeren Objekt.
+function classifyStatement(raw, ctx = {}) {
   let s = raw.trim()
   if (!s) return "noop"
   if (/^[{}()]+$/.test(s)) return "noop"
@@ -588,6 +690,9 @@ function classifyStatement(raw, ctx) {
     // Verweigerung dominiert: eine unlesbare Form im Block verweigert den
     // ganzen Block (Nutzerentscheid 3, 22.10.2026).
     if (results.some((r) => r === "deny")) return "deny"
+    // Auch eine Rueckfrage aus einem verschachtelten Pipeline-Block darf
+    // nicht als harmloser Kontrollblock durchgehen.
+    if (results.some((r) => r === "block")) return "block"
     if (results.some((r) => r === "unknown" || r === "write")) return "unknown"
     if (results.some((r) => r === "filewrite")) return "filewrite"
     if (results.some((r) => r === "localwrite")) return "localwrite"
@@ -596,11 +701,47 @@ function classifyStatement(raw, ctx) {
 
   // Skriptblock hinter einem lesenden Pipeline-Cmdlet (ForEach-Object,
   // Where-Object, Select-Object und Aliase): Der Block ist eigener Code und
-  // wird hier nicht bewertet. Frueher galt die ganze Zeile als "read" - ein
-  // Block mit Remove-Item kam damit ohne Rueckfrage durch (Review 17.11.2026).
-  // Deshalb konservativ "ask" mit eigenem Grund; der Aufruf erreicht das
-  // Modell nicht, weil der Grund nicht mit "nicht einordenbar" beginnt.
-  if (PIPELINE_BLOCK_CMDLETS.has(firstToken(s).toLowerCase()) && hasScriptBlock(s)) return "block"
+  // wird wie ein Teilausdruck als eigenes Skript bewertet. Frueher galt die
+  // ganze Zeile als "read" - ein Block mit Remove-Item kam damit ohne
+  // Rueckfrage durch (Review 17.11.2026). Jetzt laeuft die aeussere Pruefung
+  // nur weiter, wenn jeder Block erlaubt ist; ask und deny aus dem Block gehen
+  // mit ihrem Grund an den Aufrufer.
+  if (PIPELINE_BLOCK_CMDLETS.has(firstToken(s).toLowerCase()) && hasScriptBlock(s)) {
+    const { bodies, rest } = scriptBlocks(s)
+    if (!bodies.length) return "block"
+    // Der Block laeuft im Arbeitsordner des Skripts. Ist der Ordner nicht
+    // bestimmt oder liegt er ausserhalb des Projekts, waere ein relativer
+    // Schreibpfad im Block am falschen Ort geprueft - dann Rueckfrage.
+    const base = ctx.opts?.base ? normPath(ctx.opts.base) : null
+    let firstAsk = null
+    if (base && (!ctx.cwd || !isUnder(ctx.cwd, base))) firstAsk = "Arbeitsordner unklar"
+    // Innerhalb des Projekts laeuft der Block im aktuellen Unterordner; die
+    // urspruengliche Projektwurzel bleibt als Schutzwurzel erhalten. Liegt der
+    // Ordner ausserhalb, wird relativ zur Projektwurzel geprueft und die
+    // Rueckfrage oben bleibt bestehen, damit kein relativer Pfad entweicht.
+    const blockBase = base && ctx.cwd && isUnder(ctx.cwd, base) ? ctx.cwd : ctx.opts?.base
+    const blockOpts = { ...ctx.opts, base: blockBase, protectedBase: base }
+    for (const body of bodies) {
+      if (PIPELINE_LOCATION_RE.test(body.trim())) firstAsk ??= "Arbeitsordnerwechsel im Block"
+      // Gewoehnliche Klammerausdruecke werden hier zusaetzlich zerlegt, weil
+      // sie im Block ebenfalls Befehle ausfuehren koennen. Alle Bloecke werden
+      // gelesen: ein spaetes deny hat Vorrang vor einem fruehen ask.
+      for (const inner of [...subexpressions(body, true), body]) {
+        const verdict = evaluate(inner, blockOpts)
+        if (verdict.decision === "allow") continue
+        if (verdict.decision === "deny") {
+          ctx.blockDeny = `Skriptblock: ${verdict.reason}`
+          return "deny"
+        }
+        firstAsk ??= verdict.reason
+      }
+    }
+    if (firstAsk) {
+      ctx.blockAsk = `Skriptblock: ${firstAsk}`
+      return "block"
+    }
+    s = rest.trim()
+  }
 
   // Nur ein String-Literal -> Write-Output
   if (/^["']/.test(s)) return hasRedirection(s) ? "filewrite" : "noop"
@@ -1372,6 +1513,35 @@ function isUnder(target, root) {
   return target === root || target.startsWith(`${root}\\`)
 }
 
+// Loest vorhandene Pfadteile physisch auf, damit eine Junction oder ein Symlink
+// nicht als harmloser Projektpfad gilt. Fehlende Endteile werden angehaengt.
+// null = vorhandener Pfad liess sich nicht aufloesen (fail closed).
+function physicalPath(abs) {
+  if (!abs) return null
+  let current = abs
+  const suffix = []
+  while (!existsSync(current)) {
+    const cut = current.lastIndexOf("\\")
+    if (cut < 2) return abs // synthetischer Pfad ohne realen Wurzelteil
+    if (cut === 2) {
+      // Beim Laufwerkswurzel stehen bleiben: "C:" allein meint unter Windows
+      // den aktuellen Ordner auf dem Laufwerk, nicht das Wurzelverzeichnis.
+      if (current.length > 3) suffix.unshift(current.slice(3))
+      current = current.slice(0, 3)
+      break
+    }
+    suffix.unshift(current.slice(cut + 1))
+    current = current.slice(0, cut)
+  }
+  if (!existsSync(current)) return abs
+  try {
+    const real = normPath(realpathSync.native(current))
+    return suffix.length ? normPath([real, ...suffix].join("\\")) : real
+  } catch {
+    return null
+  }
+}
+
 const UNKNOWN = "\u0001"
 
 // cd-Formen (nur absolute, sicher bestimmbare Wechsel). Genutzt vom
@@ -1409,6 +1579,9 @@ function resolveTarget(token, opts, base, vars) {
   if (t.includes(UNKNOWN) || t.includes("$")) return null
   if (/[*?\[\]]/.test(t)) return null
 
+  // Laufwerksrelative Pfade (`C:.git`) haengen vom aktuellen Ordner des
+  // Laufwerks ab, nicht vom Projekt. Ohne verlaessliche Aufloesung ablehnen.
+  if (/^[A-Za-z]:(?![\\/])/.test(t)) return null
   if (!/^[A-Za-z]:[\\/]/.test(t)) {
     if (/^[\\/]/.test(t)) return null // Unix-Wurzel oder UNC
     if (!base) return null
@@ -1815,18 +1988,12 @@ function stripAssignment(statement) {
   return String(statement).replace(/^\s*\$[\w:]+(?:\.\w+)*\s*(?:[+\-*/])?=\s*/, "")
 }
 
-function scopeWrites(statements, options) {
-  const opts = options ?? {}
-  const emptyVars = new Map()
-  const base = opts.base ? resolveTarget(opts.base, opts, null, emptyVars) : null
-  if (!base) return { ok: false, reason: "Arbeitsordner unbekannt" }
-
-  const roots = [...(opts.roots ?? []), opts.base]
-    .filter(Boolean)
-    .map((root) => resolveTarget(root, opts, null, emptyVars))
-    .filter(Boolean)
-  if (!roots.length) return { ok: false, reason: "keine vertrauten Ordner" }
-
+// Geschuetzte Pfade an einer Stelle: Geheimnisablagen im Benutzerprofil, die
+// Konfiguration der Agenten, Systemordner und das eigene .git des Projekts.
+// Shell-Schreibpruefung (scopeWrites) und Edit-Pruefung (scopeEdit) nutzen
+// dieselbe Liste, damit die beiden Wege nicht auseinanderlaufen.
+// base ist bereits aufgeloest (normPath).
+function deniedRoots(base, opts) {
   const denied = []
   if (opts.home) {
     const home = normPath(opts.home)
@@ -1835,7 +2002,29 @@ function scopeWrites(statements, options) {
     }
   }
   for (const fixed of ["c:\\windows", "c:\\program files", "c:\\program files (x86)", "c:\\programdata"]) denied.push(fixed)
-  denied.push(normPath(`${base}\\.git`))
+  if (base) denied.push(normPath(`${base}\\.git`))
+  // Ein Block kann in einem Unterordner laufen; die Schutzwurzel des
+  // urspruenglichen Projekts bleibt trotzdem gesperrt.
+  if (opts.protectedBase) denied.push(normPath(`${opts.protectedBase}\\.git`))
+  return denied
+}
+
+function scopeWrites(statements, options) {
+  const opts = options ?? {}
+  const emptyVars = new Map()
+  const logicalBase = opts.base ? resolveTarget(opts.base, opts, null, emptyVars) : null
+  const base = logicalBase ? physicalPath(logicalBase) : null
+  if (!base) return { ok: false, reason: "Arbeitsordner unbekannt" }
+
+  const roots = [...(opts.roots ?? []), opts.base]
+    .filter(Boolean)
+    .map((root) => resolveTarget(root, opts, null, emptyVars))
+    .filter(Boolean)
+    .map((root) => physicalPath(root))
+    .filter(Boolean)
+  if (!roots.length) return { ok: false, reason: "keine vertrauten Ordner" }
+
+  const denied = deniedRoots(base, opts).map((root) => physicalPath(root)).filter(Boolean)
 
   // Jede Anweisung wird in Ausfuehrungsreihenfolge mit dem dann gueltigen
   // Arbeitsordner und den dann gueltigen Bindungen geprueft. Kontrollfluss,
@@ -1869,14 +2058,17 @@ function scopeWrites(statements, options) {
     if (cd) {
       const next = resolveTarget(cd[1] ?? cd[2] ?? cd[3], opts, cwd, vars)
       if (!next) return { ok: false, reason: `unpruefbar: Arbeitsordner unklar: ${cd[1] ?? cd[2] ?? cd[3]}` }
-      cwd = next
+      cwd = physicalPath(next)
+      if (!cwd) return { ok: false, reason: "unpruefbar: Arbeitsordner unklar" }
       braceDepth = Math.max(0, braceDepth + open - close)
       continue
     }
 
     braceDepth = Math.max(0, braceDepth + open - close)
 
-    if (classifyStatement(text) !== "filewrite") continue
+    // Der Block braucht denselben Aufloesungskontext wie die erste Pruefung:
+    // ohne ihn fiele eine Umleitung hinter dem Block aus der Zielpruefung.
+    if (classifyStatement(text, { opts, vars, cwd }) !== "filewrite") continue
     // Der Befehl ohne Zuweisung ("$null = Remove-Item ...") fuer Loesch- und Zielpruefung.
     const command = stripAssignment(text)
     const deletion = deletionCommand(command) !== null
@@ -1887,7 +2079,8 @@ function scopeWrites(statements, options) {
 
     const resolved = []
     for (const target of targets) {
-      const abs = resolveTarget(target, opts, cwd, vars)
+      const logicalAbs = resolveTarget(target, opts, cwd, vars)
+      const abs = logicalAbs ? physicalPath(logicalAbs) : null
       if (!abs) {
         // Platzhalter bleiben eine Rueckfrage; unaufloesbare Bindungen werden
         // dagegen verweigert (Nutzerentscheid 10.11.2026).
@@ -1925,6 +2118,75 @@ function scopeWrites(statements, options) {
   }
 
   return { ok: true, reason: "Schreiben in vertrautem Ordner" }
+}
+
+/**
+ * Prueft die Zieldateien eines Edit-Aufrufs (OpenCode meldet edit/write/patch
+ * als action "edit" und nennt die Dateien in resources). Gedacht fuer das
+ * "ask" der statischen Regeln; allow und deny dort bleiben unberuehrt.
+ *
+ * Dieselbe Abstufung wie die Shell-Schreibpruefung: Ziele in vertrauten
+ * Ordnern sind erlaubt, geschuetzte Pfade und Ziele ausserhalb werden
+ * verweigert. Platzhalter bleiben Rueckfrage, unaufloesbare Pfade werden
+ * verweigert; ein fehlender Projektbezug bleibt Rueckfrage.
+ *
+ * Mehrere Ziele: ein deny schlaegt alles, sonst gilt ask, sonst allow.
+ *
+ * @param {string[]} resources Zieldateien des Aufrufs
+ * @param {{base?: string, roots?: string[], home?: string, temp?: string, appData?: string}} [options]
+ * @returns {{decision: "allow" | "ask" | "deny", reason: string}}
+ */
+export function scopeEdit(resources, options = {}) {
+  const opts = options ?? {}
+  const emptyVars = new Map()
+  const logicalBase = opts.base ? resolveTarget(opts.base, opts, null, emptyVars) : null
+  const base = logicalBase ? physicalPath(logicalBase) : null
+  if (!base) return { decision: "ask", reason: "Arbeitsordner unbekannt" }
+
+  const roots = [...(opts.roots ?? []), opts.base]
+    .filter(Boolean)
+    .map((root) => resolveTarget(root, opts, null, emptyVars))
+    .filter(Boolean)
+    .map((root) => physicalPath(root))
+    .filter(Boolean)
+  if (!roots.length) return { decision: "ask", reason: "keine vertrauten Ordner" }
+
+  const denied = deniedRoots(base, opts).map((root) => physicalPath(root)).filter(Boolean)
+  const targets = Array.isArray(resources) ? resources : []
+  if (!targets.length) return { decision: "ask", reason: "kein Ziel" }
+
+  let ask = null
+  let deny = null
+  for (const target of targets) {
+    if (typeof target !== "string" || !target.trim()) {
+      // Leere oder fremdartige Ressourcen nicht still verwerfen; andere Ziele
+      // werden trotzdem geprueft und ein deny behaelt Vorrang.
+      ask ??= { decision: "ask", reason: "kein Ziel" }
+      continue
+    }
+    const logicalAbs = resolveTarget(target, opts, base, emptyVars)
+    const abs = logicalAbs ? physicalPath(logicalAbs) : null
+    if (!abs) {
+      // Wie in scopeWrites: Platzhalter fragen nach, unaufloesbare Pfade
+      // werden verweigert.
+      if (/[*?[\]]/.test(target)) {
+        ask ??= { decision: "ask", reason: "Ziel unklar" }
+      } else {
+        deny ??= { decision: "deny", reason: "unpruefbar: Pfad nicht bestimmbar" }
+      }
+      continue
+    }
+    if (denied.some((root) => isUnder(abs, root))) {
+      deny ??= { decision: "deny", reason: "geschuetzter Pfad" }
+      continue
+    }
+    if (!roots.some((root) => isUnder(abs, root))) {
+      deny ??= { decision: "deny", reason: "ausserhalb des Projekts" }
+    }
+  }
+  if (deny) return deny
+  if (ask) return ask
+  return { decision: "allow", reason: "Schreiben in vertrautem Ordner" }
 }
 
 const DENY_PATHS = [
@@ -2366,21 +2628,64 @@ function stripComment(line) {
 // doppelt gequoteten Strings sowie @( ... ) und @{ ... }. stripStrings wuerde
 // sie sonst verbergen. Ein nicht geschlossener Ausdruck liefert keinen Teil
 // und bleibt bei der normalen Pruefung.
-function subexpressions(script) {
+function subexpressions(script, includeParentheses = false) {
   const found = []
-  // @( und @{ nur als Literal: ein vorangehendes Wort- oder Klammerzeichen macht
-  // es zu einem Index wie stash@{0}, der nichts ausfuehrt.
-  const re = /\$\(|(?<![\w)\]}])@[({]/g
-  let m
-  while ((m = re.exec(script)) !== null) {
-    const start = m.index + m[0].length
+  // @( und @{ nur als Literal: ein vorangehendes Wort-, Klammer- oder
+  // Ref-Zeichen macht es zu einem Index (stash@{0}) oder zu einer Refkurzform
+  // (HEAD@{u}); in einem String fuehrt PowerShell kein @( aus, nur $( - und
+  // das bleibt von dieser Ausnahme unberuehrt.
+  const collect = (start) => {
     let depth = 1
+    const prefixQuotes = []
+    for (let j = 0; j < start; j++) {
+      const ch = script[j]
+      const quote = prefixQuotes[prefixQuotes.length - 1]
+      if (quote) {
+        if (quote === '"' && ch === "`") { j++; continue }
+        if (ch === quote) {
+          if (script[j + 1] === quote) { j++; continue }
+          prefixQuotes.pop()
+        }
+      } else if (ch === '"' || ch === "'") prefixQuotes.push(ch)
+    }
+    // Die aeussere String-Schicht ist beim $( bereits bekannt. Sie darf die
+    // schliessende Klammer nicht verdecken; verschachtelte Zitate im Code
+    // werden dagegen weiterhin ignoriert.
+    let outerQuote = prefixQuotes[prefixQuotes.length - 1] ?? null
+    const nestedQuotes = []
     let i = start
     for (; i < script.length && depth > 0; i++) {
-      if (script[i] === "(" || script[i] === "{") depth++
-      else if (script[i] === ")" || script[i] === "}") depth--
+      const ch = script[i]
+      const quote = nestedQuotes[nestedQuotes.length - 1]
+      if (quote) {
+        if (quote === '"' && ch === "`") { i++; continue }
+        if (ch === quote) {
+          if (script[i + 1] === quote) { i++; continue }
+          nestedQuotes.pop()
+        }
+        continue
+      }
+      // Ein inneres Anfuehrungszeichen kann dem äußeren entsprechen. Es ist
+      // erst dann die äußere String-Schicht, wenn unmittelbar die schliessende
+      // Klammer folgt; "safe" im Teilausdruck oeffnet stattdessen ein Zitat.
+      if (outerQuote && ch === outerQuote && /^\s*[)}]/.test(script.slice(i + 1))) { outerQuote = null; continue }
+      if (ch === '"' || ch === "'") { nestedQuotes.push(ch); continue }
+      if (ch === "(" || ch === "{") depth++
+      else if (ch === ")" || ch === "}") depth--
     }
     if (depth === 0) found.push(script.slice(start, i - 1))
+  }
+  const re = /\$\(|(?<![\w)\]}."'])@[({]/g
+  let m
+  while ((m = re.exec(script)) !== null) collect(m.index + m[0].length)
+
+  // Gewoehnliche Klammerausdruecke nur in Pipeline-Bloecken und ausserhalb
+  // von Strings: `(Set-Content ...)` ist Code, "(...)" in Prosa ist Text.
+  if (includeParentheses) {
+    const { masked } = maskStrings(script)
+    const paren = /(?<![\w$@])\(/g
+    let match
+    while ((match = paren.exec(masked)) !== null) collect(match.index + 1)
   }
   return found
 }
@@ -2393,13 +2698,38 @@ export function evaluate(script, options = {}) {
     if (rx.test(raw)) return { decision: "deny", reason: `destruktiv: ${rx.source}` }
   }
 
-  // Teilausdruecke werden wie eigene Skripte bewertet; jede Abweichung von
-  // allow schlaegt auf das Ganze durch.
+  // Teilausdruecke werden wie eigene Skripte bewertet. Alle werden gelesen:
+  // ein spaetes deny darf nicht hinter einem fruehen ask verschwinden.
+  let subexpressionAsk = null
   for (const inner of subexpressions(raw)) {
     const r = evaluate(inner, options)
-    if (r.decision !== "allow") {
-      return { decision: r.decision, reason: `Teilausdruck: ${r.reason}`, ...(r.message ? { message: r.message } : {}) }
+    if (r.decision === "deny") {
+      return { decision: "deny", reason: `Teilausdruck: ${r.reason}`, ...(r.message ? { message: r.message } : {}) }
     }
+    if (r.decision !== "allow" && !subexpressionAsk) {
+      subexpressionAsk = { decision: r.decision, reason: `Teilausdruck: ${r.reason}`, ...(r.message ? { message: r.message } : {}) }
+    }
+  }
+  // Erst kurz vor einer moeglichen Freigabe anwenden: ein spaeteres deny in
+  // den eigentlichen Anweisungen muss weiterhin Vorrang haben.
+  let write = null
+  let secrets = []
+  const allowUnlessSubexpressionAsk = (reason) => {
+    if (write) {
+      const message = gitAskMessage(write, raw)
+      return { decision: "ask", reason: `schreibend: ${write}`, ...(message ? { message } : {}) }
+    }
+    if (subexpressionAsk) return subexpressionAsk
+    if (secrets.length) return { decision: "ask", reason: `Geheimnis: ${secrets.slice(0, 3).join(", ")}` }
+    return { decision: "allow", reason }
+  }
+  // Ein Geheimnis-Ausdruck als Wert macht das Ziel unaufloesbar; das bleibt
+  // eine Rueckfrage. Echte Pfadverbote werden davon nicht abgeschwaecht.
+  const denyUnlessSecretValue = (reason) => {
+    if (secrets.length && reason.startsWith("unpruefbar:")) {
+      return { decision: "ask", reason: `Geheimnis: ${secrets.slice(0, 3).join(", ")}` }
+    }
+    return { decision: "deny", reason }
   }
 
   // Kommentare und Here-String-Inhalte sind Daten, keine Befehle.
@@ -2421,7 +2751,7 @@ export function evaluate(script, options = {}) {
     }
   }
 
-  const write = hasWriteVerb(stripStrings(text))
+  write = hasWriteVerb(stripStrings(text))
   const fileWrite = hasFileWriteVerb(stripStrings(text))
 
   if (write || fileWrite) {
@@ -2429,41 +2759,29 @@ export function evaluate(script, options = {}) {
       if (rx.test(text)) return { decision: "deny", reason: "Schreibzugriff auf Geheimnisablage" }
     }
   }
-  // Netz, Prozesse, Registry, Git-Historie: immer Rueckfrage.
-  if (write) {
-    const message = gitAskMessage(write, raw)
-    return {
-      decision: "ask",
-      reason: `schreibend: ${write}`,
-      ...(message ? { message } : {}),
-    }
-  }
+  // Netz, Prozesse, Registry, Git-Historie bleiben Rueckfrage, aber erst vor
+  // einer Freigabe: ein gleichzeitiges Pfadverbot muss Vorrang behalten.
 
   const statements = splitStatements(text)
 
-  // Aufloesungskontext fuer pfadverankerte Freigaben (node-/python-Skripte):
-  // Variablen aus einfachen Literalzuweisungen und der auf oberster Ebene
-  // per cd verfolgte Arbeitsordner. Misslingt ein cd-Ziel, wird relative
-  // Pfadaufloesung abgestellt (fail closed).
+  // Aufloesungskontext fuer pfadverankerte Freigaben (node-/python-Skripte
+  // und Pipeline-Bloecke): Variablen aus einfachen Literalzuweisungen und der
+  // Arbeitsordner werden Satz fuer Satz verfolgt. Ein Block darf nicht den
+  // erst spaeter erreichten cd-Zustand erben. Misslingt ein cd-Ziel, wird
+  // relative Pfadaufloesung ab dort abgestellt (fail closed).
   const vars = buildVarMap(statements)
   let cwd = resolveTarget(options.base, options, null, vars)
-  if (cwd) {
-    for (const st of statements) {
-      const m = CD_RE.exec(st.trim())
-      if (!m) continue
-      const next = resolveTarget(m[1] ?? m[2] ?? m[3], options, cwd, vars)
-      if (!next) { cwd = null; break }
-      cwd = next
-    }
-  }
   const ctx = { opts: options, vars, cwd }
 
   const kinds = new Set()
   const unknowns = []
   for (const st of statements) {
+    ctx.cwd = cwd
     const kind = classifyStatement(st, ctx)
     kinds.add(kind)
     if (kind === "unknown" || kind === "write") unknowns.push(st.slice(0, 80))
+    const m = CD_RE.exec(st.trim())
+    if (m) cwd = resolveTarget(m[1] ?? m[2] ?? m[3], options, cwd, vars)
   }
 
   // Nutzerentscheid 3 (22.10.2026, Abend): Aufrufe ueber & oder . verweigern
@@ -2472,29 +2790,36 @@ export function evaluate(script, options = {}) {
   // Verweigerung schlaegt die Geheimnis-Rueckfrage, weil jede Form von
   // Nachfragen ohne lesbaren Inhalt unbrauchbar bleibt.
   if (kinds.has("deny")) {
-    return { decision: "deny", reason: "unpruefbar: Aufruf ueber & oder ." }
+    // Ein Block meldet seinen eigenen Grund; sonst bleibt es beim Aufruf &/.
+    return { decision: "deny", reason: ctx.blockDeny ?? "unpruefbar: Aufruf ueber & oder ." }
   }
 
-  const secrets = findSecrets(raw)
-  if (secrets.length) return { decision: "ask", reason: `Geheimnis: ${secrets.slice(0, 3).join(", ")}` }
+  secrets = findSecrets(raw)
 
-  if (!statements.length) return { decision: "allow", reason: "nur Ausgabe" }
+  if (!statements.length) return allowUnlessSubexpressionAsk("nur Ausgabe")
 
   // Aussen-Schreiben verweigern, auch wenn der Rest unlesbar ist. Sonst ginge
   // der ganze Befehl an das Modell, das ihn auf allow heben koennte.
   if (kinds.has("filewrite")) {
     const early = scopeWrites(statements, options)
     if (!early.ok && /^(ausserhalb des Projekts|geschuetzter Pfad|rekursiv auf|unpruefbar:)/.test(early.reason)) {
-      return { decision: "deny", reason: early.reason }
+      return denyUnlessSecretValue(early.reason)
     }
   }
-  // Skriptblock (Review 17.11.2026): eigener Code im Block wird nicht
-  // bewertet. Rueckfrage mit eigenem Grund - index.js befragt das Modell nur
-  // bei "nicht einordenbar", dieser Fall erreicht es also nie.
+  // Skriptblock (Review 17.11.2026): Der Block wurde als eigenes Skript
+  // bewertet und ist nicht erlaubt. Rueckfrage mit dem Grund aus dem Block -
+  // index.js befragt das Modell nur bei "nicht einordenbar", dieser Fall
+  // erreicht es also nie.
   if (kinds.has("block")) {
-    return { decision: "ask", reason: "Skriptblock: eigener Code im Block nicht bewertet" }
+    if (write || secrets.length || subexpressionAsk) {
+      return allowUnlessSubexpressionAsk(ctx.blockAsk ?? "Skriptblock: eigener Code im Block nicht bewertet")
+    }
+    return { decision: "ask", reason: ctx.blockAsk ?? "Skriptblock: eigener Code im Block nicht bewertet" }
   }
   if (kinds.has("write") || kinds.has("unknown")) {
+    if (write || secrets.length || subexpressionAsk) {
+      return allowUnlessSubexpressionAsk(`nicht einordenbar: ${unknowns[0] ?? ""}`)
+    }
     return { decision: "ask", reason: `nicht einordenbar: ${unknowns[0] ?? ""}` }
   }
   if (kinds.has("filewrite")) {
@@ -2507,17 +2832,20 @@ export function evaluate(script, options = {}) {
     // werden ebenfalls verweigert. Nur ein fehlender Projektbezug
     // ("Arbeitsordner unbekannt", "keine vertrauten Ordner") bleibt "ask".
     if (!scoped.ok && /^(ausserhalb des Projekts|geschuetzter Pfad|rekursiv auf|unpruefbar:)/.test(scoped.reason)) {
-      return { decision: "deny", reason: scoped.reason }
+      return denyUnlessSecretValue(scoped.reason)
     }
-    if (!scoped.ok) return { decision: "ask", reason: scoped.reason }
+    if (!scoped.ok) {
+      if (write || secrets.length || subexpressionAsk) return allowUnlessSubexpressionAsk(scoped.reason)
+      return { decision: "ask", reason: scoped.reason }
+    }
     const reason = kinds.has("localwrite") ? `${scoped.reason} + git add/commit` : scoped.reason
-    return { decision: "allow", reason }
+    return allowUnlessSubexpressionAsk(reason)
   }
   if (kinds.has("localwrite")) {
-    return { decision: "allow", reason: "git add/commit (lokal, umkehrbar)" }
+    return allowUnlessSubexpressionAsk("git add/commit (lokal, umkehrbar)")
   }
   if (!kinds.size || [...kinds].every((k) => k === "noop")) {
-    return { decision: "allow", reason: "nur Ausgabe" }
+    return allowUnlessSubexpressionAsk("nur Ausgabe")
   }
-  return { decision: "allow", reason: "nur lesend" }
+  return allowUnlessSubexpressionAsk("nur lesend")
 }
