@@ -1961,3 +1961,51 @@ messen, deployen, dokumentieren.
 - `gh run list --commit ...` kann direkt nach dem Push kurz "no runs found"
   melden; die Registrierung ist verzoegert. Der Lauf existiert spaeter unter
   derselben Commit-Kurzform.
+
+================ Compaction 17.11.2026 / 21:07 ================
+## Objective
+- **Current:** Session-Abschluss nach dem vollendeten Push der Doku-Korrekturen.
+- **Completed:** Letzter Doku-Stand (Testzahlen 873, praezise pytest-Angabe,
+  Push-Nachtrag) wurde in `b07b54f` committet und vom Nutzer auf `main`
+  gepusht; der Pruef-Branch ist geloescht; alle Pflicht-Checks gruen.
+
+## Important Details
+- **Decisions:** Die Doku-Korrektur ist ein eigener Commit; beide README-Fassungen
+  aendern sich inhaltlich gleich. Historische "797"-Fundstellen in
+  Nachtraegen bleiben stehen, weil sie datierte Belege sind.
+- **Bug / Finding:** Die READMEs widersprachen sich selbst (797 gegen 873);
+  zudem zaehlte der Satz zu den 40 gemeinsamen Faellen doppelt, weil
+  `test.mjs` die Shared-Checks bereits in der Summe fuehrt.
+- **Architecture:** Keine.
+
+## Work State
+### Completed
+- `b07b54f` auf `main`, lokales `main` identisch mit `origin/main`,
+  Arbeitsbaum sauber.
+- 7/7 Pflicht-Checks gruen (Nachweis ueber check-runs-API); `ci/b07b54f`
+  geloescht.
+- Pre-Commit-Gate beim Commit mitgelaufen: 873/873 Unit, 17/17 Integration.
+### Active
+- Keine.
+### Blocked
+- Keiner. Dependabot-Alert 2 (minimatch, moderate) bleibt bewusst offen.
+
+## Next Move
+1. Dieser Compaction-Block ist noch uncommittet; Nutzer nimmt ihn in einer
+   anderen Session auf (Commit und Push dort).
+2. Neue Guard-Arbeiten starten frisch aus diesem Stand.
+
+## Relevant Files
+- `README.md`, `README_de.md`: 797 zu 873, pytest-Angabe praezisiert,
+  Shared-Faelle als enthalten formuliert, Tabellen neu ausgerichtet.
+- `PLANUNG.md`: Nachtrag "Push durchgefuehrt und Doku korrigiert".
+- `CHANGELOG.md`: Eintrag "Testzahlen in den READMEs korrigiert".
+
+## Important Context
+- Das Harness blockierte Agenten-Push-Versuche mit "Permission denied: shell";
+  der Push laeuft beim Nutzer. Der Guard lehnt Pfade in Variablen ab, Pfade
+  muessen literal im Befehl stehen.
+- Der combined-status-Endpoint zeigte leer/pending obwohl gruen; verlaesslich
+  ist der check-runs-Endpoint.
+- `gh api dependabot/alerts` bestaetigt: Alert 2 = minimatch, medium; identisch
+  mit der Remote-Meldung beim Push auf den Default-Branch.

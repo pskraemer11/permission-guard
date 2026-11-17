@@ -685,3 +685,23 @@ Nachprüfung fielen drei veraltete „797"-Angaben in beiden README-Fassungen
 auf; sie nennen jetzt 873 und erklären, dass die 40 gemeinsamen Fälle mit dem
 Codex-Guard in der Summe enthalten sind. Die pytest-Angabe präzisiert
 „146 bestanden, 1 übersprungen". `CHANGELOG.md` führt die Korrektur.
+
+## Nachtrag 17.11.2026: Skill-Baseline ergänzt
+
+Abgleich gegen `python-project-init` (auf Nutzerwunsch auch ohne `src/`-Layout).
+Die Baseline war größtenteils erfüllt (CI-Matrix, Hooks, Gates, Doku, Pins).
+Geschlossen wurden: Bandit-`S`-Regeln in Ruff mit `tests/*`-Ignorierungen,
+`pip-audit`-Pin und CI-Schritt, `hook-regeln.yml` (Bereichsprüfung wie im
+Eltern-Repo, ohne dessen Verhaltensproben) und `scripts/enable-hooks.ps1`.
+`pre-commit` weicht von der Vorlage ab: Deren Skill-Struktur-Check
+(`--verify-layout`) kennt nur `skills/`-Ordner und würde hier jeden Commit
+blockieren; die Abweichung ist bewusst und bleibt bestehen. Bewusst nicht
+übernommen: `permission-guard.yml` als Caller (dieses Repo *ist* der Guard;
+`guard.yml` ist die Quelle, kein Selbstaufruf) und Dependabot (nur nach
+Nutzer-Opt-in). `requirements-dev.txt` behält seinen Namen.
+
+Belegt: `ruff check`, `ruff format --check`, `pyright`, `pytest`
+(146 bestanden, 1 übersprungen), `actionlint`, Node-Testreihen und
+`git diff --check` grün; `pip_audit` lokal durchgelaufen.
+
+Der nächste Schritt bleibt der vom Nutzer ausgeführte Commit und Push.

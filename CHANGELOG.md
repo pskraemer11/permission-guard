@@ -8,6 +8,12 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **Skill-Baseline ergänzt (17.11.2026):** `hook-regeln.yml` prüft den Push-/PR-Bereich mit demselben `pre-push`-Hook lokal (gitleaks 8.30.1, `GITHOOKS_TEST_GATE=0`, fail closed bei unlesbaren Revisionen); der Verhaltensproben-Schritt des Eltern-Repositories entfällt, weil `tools/githooks-test/` hier nicht existiert. `scripts/enable-hooks.ps1` setzt `core.hooksPath .githooks` pro Klon. `requirements-dev.txt` pinnt `pip-audit==2.10.1`; `ci.yml` führt `pip_audit --strict` im Python-Job aus. Ruff prüft jetzt die Bandit-`S`-Regeln; `assert` (`S101`) und `subprocess` (`S603`) sind in `tests/*` ignoriert, der Produktivcode war schon sauber.
+
+### Geändert
+
+- **`AGENTS.md` (17.11.2026):** Der Satz zur Byte-Identität der Hooks war so nicht wahr: `pre-commit` weicht von der Vorlage ab, weil deren Skill-Struktur-Check hier keinen `skills/`-Ordner findet und Commits blockieren würde. Die Abweichung ist jetzt dokumentiert.
+
 - **Optionaler CPU-Start des Reviewers (17.11.2026):** `start-reviewer.ps1`
   kennt `-Cpu` und setzt dann `-ngl 0`. Ohne den Schalter bleibt `-ngl all`
   und damit der bisherige CUDA-Standard unverändert. `README.md` und

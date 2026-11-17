@@ -100,5 +100,8 @@ jobs:
       - name: Pyright
         run: python -m pyright
 
+      - name: Bekannte Schwachstellen pruefen
+        run: python -m pip_audit -r requirements-dev.txt --strict --progress-spinner off
+
       - name: Tests des Codex-Guards
         run: python -m pytest tests -q

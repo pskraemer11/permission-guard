@@ -1,0 +1,117 @@
+# Privacy- und Secret-Pruefung fuer den Push- bzw. PR-Bereich.
+#
+# Ruft denselben Hook auf, der lokal vor dem Push laeuft (.githooks/pre-push):
+# eine Prueflogik, zwei Ausloeser. Der Bereich kommt aus dem jeweiligen
+# Ereignis. Fehlende oder unlesbare Revisionen blockieren (fail closed).
+#
+# Ohne den Schritt "Verhaltensproben des Hooks" des Eltern-Repositories:
+# `tools/githooks-test/` existiert hier nicht; der Hook selbst ist identisch.
+
+name: Hook-Regeln (Privacy und Secrets)
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  GITLEAKS_VERSION: "8.30.1"
+  # Der Hook laeuft hier fuer Privacy und Secrets, nicht fuer Tests. Ohne
+  # diesen Schalter wuerde das Test-Gate in pre-push die Pytest-Suite
+  # starten, die auf ubuntu-latest nicht vorinstalliert ist.
+  GITHOOKS_TEST_GATE: "0"
+
+jobs:
+  bereichspruefung:
+    name: Push-/PR-Bereich
+    runs-on: ubuntu-latest
+    steps:
+      - name: Auschecken (volle Historie)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: gitleaks installieren und pruefen
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          curl -sSfLO "$base/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfLO "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep -E "  gitleaks_${GITLEAKS_VERSION}_linux_x64\.tar\.gz$" \
+            "gitleaks_${GITLEAKS_VERSION}_checksums.txt" | sha256sum -c -
+          tar -xzf "gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" gitleaks
+          mkdir -p "$RUNNER_TEMP/bin"
+          install -m 0755 gitleaks "$RUNNER_TEMP/bin/gitleaks"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/gitleaks" version
+
+      - name: Bereich bestimmen
+        id: bereich
+        env:
+          EVENT: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          if [ "$EVENT" = "pull_request" ]; then
+            if ! git cat-file -e "${PR_HEAD}^{commit}" 2>/dev/null; then
+              git fetch --no-tags origin "$PR_HEAD"
+            fi
+            before="$PR_BASE"
+            after="$PR_HEAD"
+          else
+            before="$PUSH_BEFORE"
+            after="$PUSH_AFTER"
+            if [ -z "$before" ] || ! [[ "$before" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              echo "::error::Push-Vorher-Revision fehlt oder ist ungueltig."
+              exit 1
+            fi
+            if [ "$before" != "$zero" ] && ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
+              echo "::notice::Vorher-Revision fehlt nach einem Force-Push; lade sie anhand ihrer SHA."
+              if ! git fetch --no-tags origin "$before"; then
+                echo "::error::Vorher-Revision konnte nicht geladen werden; Bereichspruefung bleibt gesperrt."
+                exit 1
+              fi
+            fi
+            if [ "$before" != "$zero" ] && ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
+              echo "::error::Vorher-Revision ist nach dem Laden weiterhin nicht verfuegbar."
+              exit 1
+            fi
+          fi
+          echo "vorher=$before" >> "$GITHUB_OUTPUT"
+          echo "nachher=$after" >> "$GITHUB_OUTPUT"
+
+      - name: Revisionen pruefen (fail closed)
+        env:
+          VORHER: ${{ steps.bereich.outputs.vorher }}
+          NACHHER: ${{ steps.bereich.outputs.nachher }}
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          if [ -z "$NACHHER" ] || ! git cat-file -e "${NACHHER}^{commit}" 2>/dev/null; then
+            echo "::error::CI BLOCKIERT - Nachher-Revision fehlt oder ist unlesbar." >&2
+            exit 1
+          fi
+          if [ "$VORHER" = "$zero" ]; then
+            echo "Keine vorherige Revision: der Hook prueft alle Commits des neuen Zweigs."
+            exit 0
+          fi
+          if [ -z "$VORHER" ] || ! git cat-file -e "${VORHER}^{commit}" 2>/dev/null; then
+            echo "::error::CI BLOCKIERT - Vorher-Revision fehlt oder ist unlesbar." >&2
+            exit 1
+          fi
+
+      - name: Hook-Regeln auf den Bereich anwenden
+        env:
+          VORHER: ${{ steps.bereich.outputs.vorher }}
+          NACHHER: ${{ steps.bereich.outputs.nachher }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "refs/heads/ci $NACHHER refs/heads/ziel $VORHER" \
+            | bash .githooks/pre-push

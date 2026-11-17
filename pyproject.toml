@@ -32,7 +32,13 @@ select = [
     "B",      # flake8-bugbear
     "I",      # isort
     "UP",     # pyupgrade
+    "S",      # flake8-bandit: Sicherheitsregeln
 ]
+
+# In den Tests sind assert der Prüfmechanismus und subprocess.run der
+# kontrollierte Hook-Aufruf; beides keine Schwachstelle.
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S603"]
 ignore = [
     # Zeilenlaenge: die Urteilstexte im Guard sind bewusst lang.
     "E501",

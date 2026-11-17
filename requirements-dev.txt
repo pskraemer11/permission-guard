@@ -4,3 +4,5 @@
 pytest==9.2.0
 ruff==0.17.4
 pyright==1.1.414
+# Abhaengigkeitsscan in der CI; Version entspricht dem Eltern-Repository.
+pip-audit==2.10.1
