@@ -158,6 +158,18 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Behoben
 
+- **Löschprüfung war plattformabhängig (17.11.2026):** Unter Linux lehnte
+  `codex_guard.py` zwei Fälle ab, die unter Windows erlaubt waren:
+  `Remove-Item -Recurse .\cache\npm` (Backslashes sind unter POSIX
+  Namensbestandteil, nicht Trenner) und `rm -rf staging/x`, wenn der Aufrufer
+  einen relativen Projektordner übergibt. `is_allowed_delete_target()` liest
+  einen Backslash unter POSIX nur dann als Trenner, wenn das wörtliche Ziel
+  nicht existiert; `delete_roots()` löst den Projektordner einmal auf, und ohne
+  Auflösung entfällt die Projektwurzel (Ablehnung). Damit ist auch die vorher
+  offene Randlage geschlossen: Ein echtes `cache\npm` im Projektordner ist
+  wieder `deny`. Belegt mit `pytest tests -q` (146 passed, 1 POSIX-Test
+  übersprungen, unter Windows) und 147 passed unter WSL/Linux, dazu
+  `node test.mjs` (797/797), `ruff` und `pyright`.
 - **Skriptblock galt als Lesen (Review 17.11.2026):** `guard.js` bewertete
   `Get-ChildItem | ForEach-Object { Remove-Item -Recurse -Force C:/Windows/x }`
   als „nur lesend“, weil nur der Cmdlet-Name geprüft wurde. Ein Block hinter

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -200,6 +201,17 @@ def test_delete_uses_project_root() -> None:
     assert guard.first_reason("rm -rf staging/x", root=root) is None
     assert guard.first_reason("rm -rf src", root=root) is not None
     assert guard.first_reason("cd repo && rm -rf staging/x", root=root) is not None
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX: der Backslash ist ein Namensbestandteil")
+def test_backslash_name_is_not_a_cache_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ein wortwoertliches ``cache\\npm`` im Projektordner liegt nicht unter cache/."""
+    # Das System-Temp wird verlegt, sonst deckt /tmp den ganzen Testordner ab.
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path / "system-temp"))
+    (tmp_path / "cache").mkdir()
+    (tmp_path / "cache\\npm").write_text("x", encoding="utf-8")
+    assert guard.first_reason("rm -rf cache\\npm", root=tmp_path) is not None
+    assert guard.first_reason("rm -rf cache/npm", root=tmp_path) is None
 
 
 def test_hook_json_over_stdin_uses_execution_folder() -> None:

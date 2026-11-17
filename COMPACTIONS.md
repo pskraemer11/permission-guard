@@ -1809,3 +1809,53 @@ messen, deployen, dokumentieren.
 - `.githooks/pre-commit`: kanonische Fassung mit `pre-commit.local`-Einstieg.
 - `README.md`, `README_de.md`: Abschnitt zu den Repo-Hooks.
 - `CHANGELOG.md`, `PLANUNG.md`, `COMPACTIONS.md`: dieser Stand.
+
+================ Compaction 17.11.2026 / 13:23 ================
+## Objective
+- **Current:** Die sechs Review-Befunde vom 16.11. sind umgesetzt (Commit
+  `dd3cb9c`); der rote CI-Job `Python (3.12 / ubuntu-latest)` war die letzte
+  Luecke und ist mit einem Plattform-Fix geschlossen.
+- **Completed:** Fix 1-6, Plattform-Fix, Tests und Doku; der Commit des
+  Plattform-Fixes laeuft in diesem Vorgang.
+## Important Details
+- **Decisions:** Ein Skriptblock hinter `ForEach-Object`/`Where-Object` & Co.
+  ist `ask` ohne Modellweitergabe, keine Block-Rekursion. Ein einzelnes `&`
+  trennt in beiden Guards, ausser in Zitaten und in `>&`; am Segmentanfang
+  bleibt es Call-Operator. Loeschwurzeln sind nur `cache/`, `staging/`, `tmp/`
+  und `temp/` im Projektordner plus das echte System-Temp; `..` verweigert.
+- **Bug / Finding:** Der Backslash ist unter POSIX ein Namensbestandteil. Die
+  erste Fassung las ihn pauschal als Trenner und machte damit ein echtes
+  `cache\npm` im Projektordner loeschbar. Jetzt gilt das wortwoertliche Ziel,
+  wenn es existiert; sonst die Windows-Lesart. Zweiter Befund: `/tmp` deckt
+  unter Linux den ganzen pytest-Ordner ab - Tests muessen das System-Temp
+  verlegen, sonst pruefen sie nichts.
+- **Architecture:** Keine neuen Abhaengigkeiten; `codex_guard.py` bleibt
+  Standardbibliothek.
+## Work State
+### Completed
+- Commit `dd3cb9c` (17 Dateien) mit den sechs Fixes und `.full-review/` in
+  `.gitignore`.
+- Plattform-Fix: `pytest` 146 passed mit 1 POSIX-Skip unter Windows, 147 passed
+  unter WSL/Linux; `node test.mjs` 797/797, `test-wiring` 13/13, `test-index`
+  8/8, Ruff-Lint und -Format, Pyright 0 Fehler.
+### Active
+- Der Plattform-Fix wird im selben Vorgang committet.
+### Blocked
+- Kein Push und kein PR: beides bleibt beim Nutzer.
+## Next Move
+1. Push des neuen Commits.
+2. PR #6 (`feat/guard-kurzform`) mergen - er steckt bereits in
+   `chore/hook-local`.
+3. Danach PR `chore/hook-local` → `main`; anschliessend lokales `main` per
+   Fast-Forward nachziehen, nicht pushen.
+## Relevant Files
+- `codex_guard.py`: `is_allowed_delete_target()`, `delete_roots()`.
+- `tests/test_codex_guard.py`: neuer POSIX-Test mit verlegtem System-Temp.
+- `CHANGELOG.md`, `PLANUNG.md`: Eintrag und Nachtrag 17.11.2026.
+## Important Context
+- Das Ruleset `baseline` verlangt vier Test-Jobs und `actionlint`; der
+  Python-Job ist nicht Pflicht, war aber rot und damit ein echter Befund.
+- `pytest` fehlte in WSL und wurde als Benutzer-Installation nachgezogen
+  (9.2.0 unter `~/.local`, kein Systemeingriff).
+- Offen ausserhalb dieses Repos: `audit-dependencies.ps1` im Eltern-Repo ist
+  angelegt und geprueft, aber nicht committet.

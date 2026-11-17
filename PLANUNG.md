@@ -1,6 +1,6 @@
 # PLANUNG — permission-guard
 
-Stand: 14.11.2026
+Stand: 17.11.2026
 
 ## Wozu dieses Dokument
 
@@ -507,3 +507,29 @@ aber nicht gegen einen echten Hook-Lauf belegt; ohne `cwd` gilt der Ordner des
 Hook-Prozesses. Ein Symlink-Rennen kann den aufgelösten Pfad nach der Prüfung
 ändern. Ein grünes Gate belegt nur die geprüften Fälle, keine vollständige
 Sandbox- oder Parser-Sicherheit.
+
+## Nachtrag 17.11.2026: Löschprüfung plattformneutral
+
+Der CI-Lauf zu `dd3cb9c` war im Job `Python (3.12 / ubuntu-latest)` rot:
+`test_allows[Remove-Item -Recurse .\cache\npm]` und `test_delete_uses_project_root`.
+Unter WSL nachgestellt, beide Fehler bestätigt; unter Windows waren sie grün.
+Zwei Ursachen in `codex_guard.py`:
+
+- `is_allowed_delete_target()` liest einen Backslash unter POSIX nur dann als
+  Trenner, wenn das wörtliche Ziel nicht existiert. Existiert es, gilt es - und
+  ein echtes `cache\npm` im Projektordner bleibt `deny`. Diese Randlage war mit
+  der ersten Fassung offen und ist jetzt geschlossen.
+- `delete_roots()` löst den Projektordner einmal auf; ohne Auflösung blieben die
+  vier Wurzeln relativ, während der Zielpfad absolut verglichen wurde.
+
+Neuer Test `test_backslash_name_is_not_a_cache_path` läuft nur unter POSIX
+(`skipif` auf `os.name == "nt"`) und verlegt das System-Temp, weil `/tmp` sonst
+den ganzen Testordner abdeckt.
+
+Belegt: `pytest tests -q` 146 passed und 1 übersprungen unter Windows,
+147 passed unter WSL/Linux (pytest 9.2.0 nachinstalliert), dazu
+`node test.mjs` 797/797, `node test-wiring.mjs` 13/13, `node test-index.mjs`
+8/8, `ruff check`, `ruff format --check` und `pyright` (0 Fehler).
+
+Grenze: Ein Symlink-Rennen nach der Prüfung bleibt möglich; der `cwd`-Anker
+stammt weiterhin aus dem Codex-Quelltext, nicht aus einem Live-Lauf.

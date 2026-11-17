@@ -33,6 +33,7 @@ Aufruf durch Codex (stdin: Hook-JSON, stdout: Entscheidung):
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 import tempfile
@@ -226,7 +227,8 @@ def is_allowed_delete_target(token: str, roots: list[Path], root: Path | None, r
 
     Geprueft wird der aufgeloeste Pfad gegen die freigegebenen Wurzeln. ``..``
     im Ziel und relative Ziele ohne eindeutigen Arbeitsordner werden abgelehnt
-    (Review 17.11.2026).
+    (Review 17.11.2026). Unter POSIX ist der Backslash ein Namensbestandteil:
+    Existiert das wortwoertliche Ziel, gilt es; sonst gilt die Windows-Lesart.
     """
     raw = token.strip().strip("\"'`")
     if not raw:
@@ -235,6 +237,14 @@ def is_allowed_delete_target(token: str, roots: list[Path], root: Path | None, r
     if not parts or ".." in parts:
         return False
     path = Path(raw)
+    if "\\" in raw and os.name != "nt":
+        try:
+            base = root.resolve() if root is not None else None
+        except OSError:
+            base = None
+        literal = path if path.is_absolute() else (base / path if base is not None else None)
+        if literal is None or not (literal.exists() or literal.is_symlink()):
+            path = Path(raw.replace("\\", "/"))
     if not path.is_absolute():
         if not relative_ok or root is None:
             return False
@@ -251,11 +261,17 @@ def delete_roots(root: Path | None) -> list[Path]:
 
     Nur die vier freigegebenen Unterordner des Projektordners und das
     tatsaechliche System-Temp. Frueher genuegte ein Pfadbestandteil wie
-    ``staging`` irgendwo im Ziel.
+    ``staging`` irgendwo im Ziel. Der Projektordner wird aufgeloest, damit der
+    Vergleich auch dann greift, wenn der Aufrufer einen relativen Pfad uebergibt.
     """
     roots: list[Path] = []
     if root is not None:
-        roots.extend(root / name for name in sorted(ALLOWED_DELETE_PARTS))
+        try:
+            base = root.resolve()
+        except OSError:
+            base = None
+        if base is not None:
+            roots.extend(base / name for name in sorted(ALLOWED_DELETE_PARTS))
     try:
         roots.append(Path(tempfile.gettempdir()).resolve())
     except OSError:
