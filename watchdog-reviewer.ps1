@@ -80,7 +80,7 @@ if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyCon
     exit 1
 }
 
-$starter = Join-Path $HOME ".config\opencode\plugin\permission-guard\start-reviewer.ps1"
+$starter = Join-Path $HOME ".config\opencode\plugins\permission-guard\start-reviewer.ps1"
 if (-not (Test-Path -LiteralPath $starter)) {
     Write-Status "start-reviewer.ps1 nicht gefunden: $starter"
     exit 1

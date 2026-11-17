@@ -1,6 +1,6 @@
 # PLANUNG — permission-guard
 
-Stand: 14.11.2026
+Stand: 17.11.2026
 
 ## Wozu dieses Dokument
 
@@ -47,6 +47,7 @@ Ablageort.
 | P3   | Warmup-`TypeError` diagnostizieren                                                        | S       | —                             |
 | P3   | Suchmuster mit Befehlsnamen (`iex`) löst Verweigerung aus                                 | S       | —                             |
 | P3   | `repository`/`bugs`/`homepage` in `package.json`                                          | S       | Nutzerentscheid               |
+| P3   | Smoke braucht Warmup (Lessons learned 16.11.2026)                                         | S       | —                             |
 
 ## Plan 1: Eigenständiges Repository
 
@@ -448,3 +449,87 @@ Datei nicht (gemessen). Smoke-Test: CRLF → Exit 1 mit Meldung, LF → Exit 0;
 Offen: Commit und Push dieses Repos; getrennte Commits für `~/.agents`,
 `AI+IDE-Hints` und `python-project-template`; die fünf Nachbar-Repos mit
 eigenem Hook-Stand haben nur die AGENTS.md-Regel, noch kein Laufzeit-Gate.
+
+## Nachtrag 15.11.2026: pre-commit.local
+
+Der gemeinsame `pre-commit` liest optional `.githooks/pre-commit.local`.
+Dieses Repo hat keine solche Datei; die kanonische Fassung läuft unverändert.
+Die Konvention steht in `~/.agents/references/githooks/README.md` und im ADR
+des Eltern-Repos (`docs/adr/0005-projektlokaler-pre-commit-zusatz.md`).
+
+## Nachtrag 16.11.2026: Smoke braucht Warmup
+
+Gemessen am 16.11.2026 gegen den laufenden Reviewer (Server `/health` OK):
+
+- ohne Warmup: `node smoke-reviewer.mjs` Exit 1, 3 Fälle FAIL mit `AbortError`
+  nach rund 2000 ms (Timeout);
+- mit Warmup (`import('./reviewer.js')` und ein leerer Aufruf vorab) 92 ms,
+  danach Smoke Exit 0, alle Fälle bestanden, 97–142 ms je Modellaufruf.
+
+Lehre: Bench- und Smoke-Reihen brauchen den Warmup vorab, sonst wird die
+Ladezeit des Modells statt der Qualität gemessen.
+
+Offen: `smoke-reviewer.mjs` hat keinen eingebauten Warmup. Vorschlag: Warmup
+einbauen oder ihn als Voraussetzung im Aufruf dokumentieren.
+
+## Nachtrag 17.11.2026: sechs Review-Befunde umgesetzt
+
+Belegt durch `node test.mjs` (797/797), `node test-index.mjs` (8/8),
+`node test-wiring.mjs` (13/13), `node bench-mcp.mjs` (33/33, auch mit
+`--change`), `python -m pytest tests -q` (146 passed), `ruff check`,
+`ruff format --check` und `pyright` (0 Fehler).
+
+- **Skriptblöcke (1):** Ein Block hinter `ForEach-Object`, `Where-Object`,
+  `Select-Object`, `Sort-Object`, `Group-Object`, `Measure-Object` und deren
+  Aliase ist jetzt `ask` mit eigenem Grund und erreicht das Modell nicht. Zwei
+  bisherige Testerwartungen (harmlose Blöcke) sind bewusst auf `ask` gezogen.
+  Kein Rekursionspfad: der Block wird nicht bewertet, sondern bleibt
+  Rückfrage - eine bewusste, hier dokumentierte Entscheidung.
+- **Dateiumleitungen (2):** `1>` und `2>` zählen als Schreiben und werden am
+  Ziel geprüft; `2>&1`, `*>&1`, `2>$null` und zitierte Prosa bleiben
+  ausgenommen.
+- **Einzelnes `&` (3/4):** Beide Guards trennten es nicht und ließen
+  `Get-Content a.txt & Remove-Item ...` als ein Segment durch. Jetzt trennt es;
+  am Segmentanfang bleibt es Call-Operator und verweigert, auch ohne
+  Leerzeichen. In Zitaten und in `>&` bleibt es Text.
+- **Rekursives Löschen (5):** `codex_guard.py` erlaubte jedes Ziel mit einem
+  Pfadbestandteil `cache`/`staging`/`tmp`/`temp` und ließ absolute POSIX-Ziele
+  aus. Jetzt entscheidet der aufgelöste Pfad gegen die freigegebenen Wurzeln
+  (diese vier Ordner im Projektordner plus das tatsächliche System-Temp); `..`
+  und relative Ziele in Ketten oder Shell-Hüllen werden abgelehnt.
+- **Dokumentation (6):** `README.md` und `README_de.md` gemeinsam,
+  `CHANGELOG.md` und dieser Nachtrag.
+
+Grenzen: Geprüft sind der Codex-Hook mit stdin-JSON und der OpenCode-Pfad in
+`test.mjs` und `test-index.mjs`. Dass Codex den Ausführungsordner wirklich als
+`cwd` im Hook-Eingang liefert, ist aus dem Quelltext von 0.169.0 abgeleitet,
+aber nicht gegen einen echten Hook-Lauf belegt; ohne `cwd` gilt der Ordner des
+Hook-Prozesses. Ein Symlink-Rennen kann den aufgelösten Pfad nach der Prüfung
+ändern. Ein grünes Gate belegt nur die geprüften Fälle, keine vollständige
+Sandbox- oder Parser-Sicherheit.
+
+## Nachtrag 17.11.2026: Löschprüfung plattformneutral
+
+Der CI-Lauf zu `dd3cb9c` war im Job `Python (3.12 / ubuntu-latest)` rot:
+`test_allows[Remove-Item -Recurse .\cache\npm]` und `test_delete_uses_project_root`.
+Unter WSL nachgestellt, beide Fehler bestätigt; unter Windows waren sie grün.
+Zwei Ursachen in `codex_guard.py`:
+
+- `is_allowed_delete_target()` liest einen Backslash unter POSIX nur dann als
+  Trenner, wenn das wörtliche Ziel nicht existiert. Existiert es, gilt es - und
+  ein echtes `cache\npm` im Projektordner bleibt `deny`. Diese Randlage war mit
+  der ersten Fassung offen und ist jetzt geschlossen.
+- `delete_roots()` löst den Projektordner einmal auf; ohne Auflösung blieben die
+  vier Wurzeln relativ, während der Zielpfad absolut verglichen wurde.
+
+Neuer Test `test_backslash_name_is_not_a_cache_path` läuft nur unter POSIX
+(`skipif` auf `os.name == "nt"`) und verlegt das System-Temp, weil `/tmp` sonst
+den ganzen Testordner abdeckt.
+
+Belegt: `pytest tests -q` 146 passed und 1 übersprungen unter Windows,
+147 passed unter WSL/Linux (pytest 9.2.0 nachinstalliert), dazu
+`node test.mjs` 797/797, `node test-wiring.mjs` 13/13, `node test-index.mjs`
+8/8, `ruff check`, `ruff format --check` und `pyright` (0 Fehler).
+
+Grenze: Ein Symlink-Rennen nach der Prüfung bleibt möglich; der `cwd`-Anker
+stammt weiterhin aus dem Codex-Quelltext, nicht aus einem Live-Lauf.

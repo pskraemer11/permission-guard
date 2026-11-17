@@ -2,7 +2,7 @@
 # Deployt permission-guard aus dem Projekt in die Laufzeitverzeichnisse.
 #
 # Quelle ist das Verzeichnis dieses Skripts. Ziele sind
-# ${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugin/permission-guard und
+# ${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins/permission-guard und
 # ~/.codex/hooks (ueberschreibbar mit PERMISSION_GUARD_CODEX_TARGET).
 #
 # Beide Ziele bleiben absichtlich schreibgeschuetzt (permission: ask): Kein
@@ -19,15 +19,15 @@
 # Hinweis unter Windows: $HOME zeigt in Git Bash/MSYS auf /home/<name>, in WSL
 # auf /home/<name> - nicht auf das Windows-Profil. Entweder deploy.ps1
 # verwenden oder die Ziele explizit setzen:
-#   Git Bash/MSYS: PERMISSION_GUARD_TARGET=/c/Users/<name>/.config/opencode/plugin/permission-guard
+#   Git Bash/MSYS: PERMISSION_GUARD_TARGET=/c/Users/<name>/.config/opencode/plugins/permission-guard
 #                  PERMISSION_GUARD_CODEX_TARGET=/c/Users/<name>/.codex/hooks
-#   WSL:           PERMISSION_GUARD_TARGET=/mnt/c/Users/<name>/.config/opencode/plugin/permission-guard
+#   WSL:           PERMISSION_GUARD_TARGET=/mnt/c/Users/<name>/.config/opencode/plugins/permission-guard
 #                  PERMISSION_GUARD_CODEX_TARGET=/mnt/c/Users/<name>/.codex/hooks
 
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-TARGET=${PERMISSION_GUARD_TARGET:-"${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugin/permission-guard"}
+TARGET=${PERMISSION_GUARD_TARGET:-"${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins/permission-guard"}
 CODEX_TARGET=${PERMISSION_GUARD_CODEX_TARGET:-"$HOME/.codex/hooks"}
 
 FILES="guard.js index.js audit.js diagnostics.js reviewer.js shadow.js git-shadow-report.mjs test.mjs README.md README_de.md start-reviewer.ps1 smoke-reviewer.mjs bench-reviewer.ps1 bench-quality.ps1 shared-cases.jsonl"

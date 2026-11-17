@@ -7,7 +7,7 @@
     Quelle ist dieses Verzeichnis (tools/permission-guard im Projekt). Es gibt
     zwei Ziele:
 
-      - ~/.config/opencode/plugin/permission-guard   (OpenCode-Plugin, Node)
+      - ~/.config/opencode/plugins/permission-guard  (OpenCode-Plugin, Node)
       - ~/.codex/hooks                               (Codex-Guard, Python)
 
     Beide Ziele bleiben absichtlich schreibgeschuetzt (permission: ask): Kein
@@ -37,7 +37,7 @@
 param(
     [switch]$Check,
     [switch]$SkipTests,
-    [string]$Target = (Join-Path $HOME ".config\opencode\plugin\permission-guard"),
+    [string]$Target = (Join-Path $HOME ".config\opencode\plugins\permission-guard"),
     [string]$CodexTarget = (Join-Path $HOME ".codex\hooks")
 )
 

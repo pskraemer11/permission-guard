@@ -34,3 +34,7 @@
 {"id":"branch-force-delete","command":"git branch -D backup","codex":"deny","opencode":"deny"}
 {"id":"branch-delete-force-long","command":"git branch --delete --force backup","codex":"deny","opencode":"deny"}
 {"id":"branch-delete-force-short","command":"git branch -d -f backup","codex":"deny","opencode":"deny"}
+{"id":"ampersand-push","command":"echo ok & git push","codex":"deny","opencode":"ask"}
+{"id":"ampersand-delete","command":"Get-Content a.txt & Remove-Item -Recurse -Force C:/Windows/x","codex":"deny","opencode":"deny"}
+{"id":"delete-dotdot","command":"rm -rf staging/../src","codex":"deny","opencode":"ask"}
+{"id":"delete-dotdot-git","command":"rm -rf ./temp/../.git","codex":"deny","opencode":"deny"}

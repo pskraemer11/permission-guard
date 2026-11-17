@@ -31,14 +31,21 @@ const check = (name, ok, detail = "") => {
 }
 
 // Attrappe fuer das Modell: Die Antwort gibt "changes" hohe Wahrscheinlichkeit,
-// damit nichts auf allow gehoben wird. Alle Anfragen werden protokolliert.
+// damit nichts auf allow gehoben wird. Fuer einen Befehl mit "ForEach-Object"
+// antwortet die Attrappe umgekehrt mit hoher Lese-Wahrscheinlichkeit - sie
+// wuerde den Block also freigeben. Alle Anfragen werden protokolliert.
 const modelCalls = []
 const originalFetch = globalThis.fetch
 globalThis.fetch = async (url, options = {}) => {
-  modelCalls.push({ url: String(url), body: String(options.body ?? "") })
+  const body = String(options.body ?? "")
+  modelCalls.push({ url: String(url), body })
+  const blockCommand = body.includes("ForEach-Object")
+  const probabilities = blockCommand
+    ? { changes: 0.05, reads: 0.95 }
+    : { changes: 0.9, reads: 0.1 }
   const answer = {
     model: "stub",
-    answers: { effect: { type: "choice", choice: "changes", probabilities: { changes: 0.9, reads: 0.1 }, confidence: 0.9 } },
+    answers: { effect: { type: "choice", choice: blockCommand ? "reads" : "changes", probabilities, confidence: 0.9 } },
     usage: { input_tokens: 0, output_tokens: 0 },
   }
   return new Response(JSON.stringify(answer), { status: 200, headers: { "content-type": "application/json" } })
@@ -87,6 +94,20 @@ const outside = {
 await evaluateHook(outside)
 check("Aussen-Schreiben wird verweigert", outside.effect === "deny", `effect=${outside.effect}`)
 check("Aussen-Schreiben erreicht das Modell nicht", modelCalls.length === 0, `Anfragen: ${modelCalls.length}`)
+
+// 3) Skriptblock hinter einem lesenden Pipeline-Cmdlet: Die Attrappe wuerde
+// diesen Befehl freigeben (reads 0.95). Der Block bleibt trotzdem Rueckfrage
+// und erreicht das Modell gar nicht (Review 17.11.2026).
+modelCalls.length = 0
+const block = {
+  action: "shell",
+  effect: "ask",
+  resources: ["Get-ChildItem | ForEach-Object { Remove-Item -Recurse -Force C:/Windows/x }"],
+  metadata: {},
+}
+await evaluateHook(block)
+check("Skriptblock bleibt Rueckfrage", block.effect === "ask", `effect=${block.effect}`)
+check("Skriptblock erreicht das Modell nicht", modelCalls.length === 0, `Anfragen: ${modelCalls.length}`)
 
 // Aufraeumen
 globalThis.fetch = originalFetch

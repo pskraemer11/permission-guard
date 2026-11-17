@@ -245,7 +245,18 @@ function splitStatements(script) {
       out.push(cur); cur = ""
       continue
     }
-    if (ch === "&" && script[i + 1] === "&") { i++; out.push(cur); cur = ""; continue }
+    if (ch === "&") {
+      // && trennt immer. Ein einzelnes & trennt Befehle (Review 17.11.2026);
+      // in einer Stream-Umleitung (2>&1, *>&1) und am Segmentanfang bleibt es
+      // Text: dort ist es der Call-Operator, der weiter unten verweigert wird.
+      if (script[i + 1] === "&") { i++; out.push(cur); cur = ""; continue }
+      const prev = script[i - 1]
+      if (prev === ">" || prev === "<") { cur += ch; continue }
+      const last = cur.trimEnd().slice(-1)
+      if (!last || "{(;|,&=".includes(last)) { cur += ch; continue }
+      out.push(cur); cur = ""
+      continue
+    }
     cur += ch
   }
   out.push(cur)
@@ -530,6 +541,23 @@ function splitBlock(statement) {
   return { head: statement.slice(0, open), body: statement.slice(open + 1) }
 }
 
+// Lesende Pipeline-Cmdlets, die einen Skriptblock annehmen. Der Block ist
+// eigener Code; er wird nicht bewertet und bleibt deshalb Rueckfrage
+// (Review 17.11.2026). Aliase gehoeren dazu, weil PowerShell sie gleich
+// behandelt.
+const PIPELINE_BLOCK_CMDLETS = new Set([
+  "foreach-object", "foreach", "%", "where-object", "where", "?",
+  "select-object", "select", "sort-object", "sort", "group-object", "group",
+  "measure-object", "measure",
+])
+
+// Erstes { ausserhalb von Strings. Ein @{ ist ein Hashtable-Literal, kein Block.
+function hasScriptBlock(statement) {
+  const { masked } = maskStrings(statement)
+  const open = masked.indexOf("{")
+  return open >= 0 && masked[open - 1] !== "@"
+}
+
 function classifyStatement(raw, ctx) {
   let s = raw.trim()
   if (!s) return "noop"
@@ -565,6 +593,14 @@ function classifyStatement(raw, ctx) {
     if (results.some((r) => r === "localwrite")) return "localwrite"
     return "read"
   }
+
+  // Skriptblock hinter einem lesenden Pipeline-Cmdlet (ForEach-Object,
+  // Where-Object, Select-Object und Aliase): Der Block ist eigener Code und
+  // wird hier nicht bewertet. Frueher galt die ganze Zeile als "read" - ein
+  // Block mit Remove-Item kam damit ohne Rueckfrage durch (Review 17.11.2026).
+  // Deshalb konservativ "ask" mit eigenem Grund; der Aufruf erreicht das
+  // Modell nicht, weil der Grund nicht mit "nicht einordenbar" beginnt.
+  if (PIPELINE_BLOCK_CMDLETS.has(firstToken(s).toLowerCase()) && hasScriptBlock(s)) return "block"
 
   // Nur ein String-Literal -> Write-Output
   if (/^["']/.test(s)) return hasRedirection(s) ? "filewrite" : "noop"
@@ -619,7 +655,9 @@ function classifyStatement(raw, ctx) {
   // Ziel liegt in einer Variablen oder Bindung und ist in der Zeile nicht
   // lesbar - verweigern ("deny") statt Rueckfrage. Ausgeschriebene,
   // sichtbare Aufrufe (.\\skript.ps1 direkt) laufen in die normale Einordnung.
-  if (/^&\s/.test(s) || /^\.\s/.test(s)) return "deny"
+  // Seit 17.11.2026 auch ohne Leerzeichen (&$cmd): der Trenner ist bereits
+  // abgeschnitten, was hier beginnt, ist ein Aufruf.
+  if (/^&/.test(s) || /^\.\s/.test(s)) return "deny"
 
   const token = firstToken(s)
   if (!token) return "unknown"
@@ -1280,10 +1318,14 @@ function hasRedirection(script) {
   // > und >> zaehlen als Schreiben; 2>&1, *>&1 und -gt/-ge/-lt/-le nicht.
   // Stringinhalte sind maskiert (siehe maskStrings); ohne Aufloesung gilt
   // ein Skript konservativ als schreibend.
+  // Review 17.11.2026: 1> und 2> schreiben in eine Datei. Frueher blieb das
+  // unerkannt, weil die Ziffer vor dem > als Wortzeichen galt.
   const { masked, unbalanced } = maskStrings(script)
   if (unbalanced) return true
-  const cleaned = masked.replace(/\d?>&\d/g, " ")
-  return /(^|[^-\w=])>{1,2}(?!&)/.test(cleaned)
+  const cleaned = masked
+    .replace(/\d?>&\d/g, " ")
+    .replace(/\d?>\s*\$null\b/gi, " ")
+  return /(^|[^-\w=])\d?>{1,2}(?!&)/.test(cleaned)
 }
 
 function hasFileWriteVerb(script) {
@@ -1570,8 +1612,11 @@ function extractTargets(statement, vars) {
     add(m[1] ?? m[2] ?? m[3])
   }
   for (const m of s.matchAll(/(?:^|[^-\w])\d?>{1,2}\s*(?:"([^"]*)"|'([^']*)'|([^\s;|()]+))/g)) {
+    const target = m[1] ?? m[2] ?? m[3] ?? ""
+    // Stream-Umleitung (2>&1, *>&1) ist kein Dateiziel (Review 17.11.2026).
+    if (target.startsWith("&")) continue
     explicit = true
-    add(m[1] ?? m[2] ?? m[3])
+    add(target)
   }
   if (explicit) return out
 
@@ -2442,6 +2487,12 @@ export function evaluate(script, options = {}) {
     if (!early.ok && /^(ausserhalb des Projekts|geschuetzter Pfad|rekursiv auf|unpruefbar:)/.test(early.reason)) {
       return { decision: "deny", reason: early.reason }
     }
+  }
+  // Skriptblock (Review 17.11.2026): eigener Code im Block wird nicht
+  // bewertet. Rueckfrage mit eigenem Grund - index.js befragt das Modell nur
+  // bei "nicht einordenbar", dieser Fall erreicht es also nie.
+  if (kinds.has("block")) {
+    return { decision: "ask", reason: "Skriptblock: eigener Code im Block nicht bewertet" }
   }
   if (kinds.has("write") || kinds.has("unknown")) {
     return { decision: "ask", reason: `nicht einordenbar: ${unknowns[0] ?? ""}` }
