@@ -1933,7 +1933,7 @@ messen, deployen, dokumentieren.
   Push keine Check-Registrierung existiert ("5 of 5 required status checks are
   expected"). Auf dem Pruef-Branch liefen danach alle Windows- und Python-Jobs
   gruen; nur die beiden Ubuntu-Node-Jobs scheiterten am Privacy-Scan. Ursache
-  waren drei synthetische Testziele `C:/Users/Public/...`, nicht Produktivcode.
+  waren drei synthetische Testziele `C:/Users/…`, nicht Produktivcode.
   Sie heissen jetzt `C:/outside/...`; die Deny-Erwartungen sind unveraendert.
 - **Architecture:** Keine. Nur Testdaten plus Chronik.
 

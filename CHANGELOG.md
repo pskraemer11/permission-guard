@@ -183,7 +183,7 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 - **CI-Privacy-Scan bei neuen Testpfaden (17.11.2026):** `test.mjs` nutzt
   für drei Außenziele jetzt `C:/outside/guard-review-nicht-schreiben.txt`
-  statt `C:/Users/Public/...`. Der Ort bleibt außerhalb des Projekts, die
+  statt `C:/Users/…`. Der Ort bleibt außerhalb des Projekts, die
   Deny-Erwartungen sind unverändert; der Ubuntu-Scan findet keinen
   personenbezogenen Beispielpfad mehr. Produktivcode bleibt unverändert.
 - **URL-Zugangsdaten in Git-Meldungen (17.11.2026):** Benutzerinfo vor `@`

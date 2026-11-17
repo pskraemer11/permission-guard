@@ -670,7 +670,7 @@ Begründungen stehen hier, in `COMPACTIONS.md` und in den README-Fassungen.
 
 Nach dem ersten Push-Versuch auf den Prüf-Branch scheiterten die beiden
 Ubuntu-Node-Jobs am Privacy-Scan: Drei synthetische Pfade nannten
-`C:/Users/Public/...` und entsprachen damit dem verbotenen Muster für
+`C:/Users/…` und entsprachen damit dem verbotenen Muster für
 Benutzerpfade. Die Ziele heißen jetzt `C:/outside/...`; alle Deny-Erwartungen
 bleiben gleich. Lokal sind `git grep` auf das CI-Muster, 873/873 Unit-Tests,
 17/17 Integration, 13/13 Wiring, 33/33 MCP, 146 Python-Tests plus 1 Skip,
