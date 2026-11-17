@@ -675,3 +675,13 @@ Benutzerpfade. Die Ziele heißen jetzt `C:/outside/...`; alle Deny-Erwartungen
 bleiben gleich. Lokal sind `git grep` auf das CI-Muster, 873/873 Unit-Tests,
 17/17 Integration, 13/13 Wiring, 33/33 MCP, 146 Python-Tests plus 1 Skip,
 Ruff, Pyright und `git diff --check` grün.
+
+## Nachtrag 17.11.2026: Push durchgeführt und Doku korrigiert
+
+Der Nutzer hat `main` auf `09f904a` gepusht; der Prüf-Branch `ci/0abac44`
+ist danach gelöscht. Für den Commit auf `main` sind alle sieben Pflicht-Checks
+grün (vier Node-Test-Jobs, zwei Python-Jobs, `actionlint`). Bei der
+Nachprüfung fielen drei veraltete „797"-Angaben in beiden README-Fassungen
+auf; sie nennen jetzt 873 und erklären, dass die 40 gemeinsamen Fälle mit dem
+Codex-Guard in der Summe enthalten sind. Die pytest-Angabe präzisiert
+„146 bestanden, 1 übersprungen". `CHANGELOG.md` führt die Korrektur.

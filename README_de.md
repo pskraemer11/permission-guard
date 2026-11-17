@@ -65,8 +65,8 @@ Beide Programme liegen hier: das OpenCode-Plugin (Node) und der Codex-Guard
 (Python). Die Tests laufen getrennt, weil die Laufzeiten getrennt sind:
 
 ```powershell
-node test.mjs                     # OpenCode-Seite, 797 Fälle
-python -m pytest tests -q         # Codex-Seite, 146 Fälle
+node test.mjs                     # OpenCode-Seite, 873 Fälle
+python -m pytest tests -q         # Codex-Seite, 146 bestanden, 1 uebersprungen
 python -m ruff check .            # Lint des Python-Teils
 python -m pyright                 # Typprüfung des Python-Teils
 ```
@@ -539,16 +539,16 @@ Seit 25.10.2026 geht diesem `ask` ein lokaler Entscheider voraus (Ebene 1).
 Derselbe Schutz existiert zweimal, mit getrenntem Code. Eine Änderung an der
 einen Umsetzung wirkt nicht auf die andere.
 
-| Eigenschaft | OpenCode                                                           | Codex                                                     |
-| ----------- | ------------------------------------------------------------------ | --------------------------------------------------------- |
-| Einstieg    | `index.js`: `Plugin.define` mit `permission.hook("evaluate")`      | `PreToolUse`-Hook aus `~/.codex/hooks.json`, 10 s Timeout |
-| Prüfcode    | `guard.js` (rund 100 KB)                                           | `codex_guard.py` hier im Repo (rund 270 Zeilen)           |
-| Urteile     | `allow`, `ask`, `deny`                                             | `deny` oder durchlassen                                   |
-| Grundlage   | Shell-Zerlegung, statische Listen, Pfadprüfung, MCP in drei Ebenen | Textmuster auf dem Befehlstext, fester Katalog            |
-| Modell      | ja, Ebene 1/3 für unklare Fälle über `llama-server`                | nein                                                      |
-| Laufzeit    | im OpenCode-Prozess, synchron                                      | eigener Prozess je Aufruf, synchron                       |
-| Fehlerfall  | Ausnahme wird protokolliert; statische Regeln entscheiden          | Hook startet nicht: Codex meldet und lässt laufen         |
-| Tests       | `node test.mjs` (797 Fälle)                                        | `python -m pytest tests -q` (146 Fälle)                   |
+| Eigenschaft | OpenCode                                                           | Codex                                                        |
+| ----------- | ------------------------------------------------------------------ | ---------------------------------------------------------    |
+| Einstieg    | `index.js`: `Plugin.define` mit `permission.hook("evaluate")`      | `PreToolUse`-Hook aus `~/.codex/hooks.json`, 10 s Timeout    |
+| Prüfcode    | `guard.js` (rund 100 KB)                                           | `codex_guard.py` hier im Repo (rund 270 Zeilen)              |
+| Urteile     | `allow`, `ask`, `deny`                                             | `deny` oder durchlassen                                      |
+| Grundlage   | Shell-Zerlegung, statische Listen, Pfadprüfung, MCP in drei Ebenen | Textmuster auf dem Befehlstext, fester Katalog               |
+| Modell      | ja, Ebene 1/3 für unklare Fälle über `llama-server`                | nein                                                         |
+| Laufzeit    | im OpenCode-Prozess, synchron                                      | eigener Prozess je Aufruf, synchron                          |
+| Fehlerfall  | Ausnahme wird protokolliert; statische Regeln entscheiden          | Hook startet nicht: Codex meldet und lässt laufen            |
+| Tests       | `node test.mjs` (873 Fälle)                                        | `python -m pytest tests -q` (146 bestanden, 1 uebersprungen) |
 
 **Warum getrennt.** Codex kennt kein `ask`; ein Hook kann nur verweigern oder
 durchlassen. Der Codex-Teil ist ein schmaler Katalog harter Fälle; den Rest
@@ -1205,21 +1205,21 @@ node test.mjs
 node test-wiring.mjs            # Fake-git: deny verhindert Ausfuehrung
 node test-index.mjs             # Plugin-Verdrahtung
 node bench-mcp.mjs              # 33 feste MCP-Faelle
-python -m pytest tests -q      # Codex-Guard, 146 Faelle
+python -m pytest tests -q      # Codex-Guard, 146 bestanden, 1 uebersprungen
 python -m ruff check .         # Python-Lint
 python -m pyright              # Python-Typpruefung
 node replay.mjs                # Messung: wie viele Befehle laufen ohne Rueckfrage
 node analyze.mjs               # Punkt-8-Analyse: Woher genau kommt "nicht einordenbar"
 ```
 
-797 Fälle in den Gruppen ohne/mit Projektbezug, CLI-Allowlists, Hilfe und
+873 Fälle in den Gruppen ohne/mit Projektbezug, CLI-Allowlists, Hilfe und
 Version, gitleaks, sqlite3/gh, Netz-Lesen, Verweigerung & Geheimnis-Ersetzung,
 python, Interpreters, Ruff-Bootstrap, Reviewer (Risikoliste, Fehlalarme,
 Antwortformat, Aufbau), MCP (Erkennung, Schlüssel, Geheimnisverdacht,
 Kriterien, Drei-Schichten-Urteil inklusive Notbremse, Absicht aus Argumenten,
 Datenabfluss, unaufgelöste Ziele, Schalter, Prompt-Kanäle und Modellaufruf mit
 Ersatz-`fetch`), Audit-Kette, Skill-Urteilsdatei, Auswertung, Entscheidungsmodell
-und Statistik. Dazu kommen 40 gemeinsame Fälle mit dem Codex-Guard, die
+und Statistik. Die Summe enthält 40 gemeinsame Fälle mit dem Codex-Guard, die
 `shared-cases.jsonl` als Sollwert führen. Exitcode 1 bei Abweichung.
 Der Klassifizierer (`guard.js`) ist eine reine Funktion und braucht weder
 OpenCode noch Netzwerk. `replay.mjs` und `analyze.mjs` bleiben im Projekt und

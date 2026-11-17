@@ -66,8 +66,8 @@ Both programs live here: the OpenCode plugin (Node) and the Codex guard
 (Python). The tests run separately because the runtimes are separate:
 
 ```powershell
-node test.mjs                     # OpenCode side, 797 cases
-python -m pytest tests -q         # Codex side, 146 cases
+node test.mjs                     # OpenCode side, 873 cases
+python -m pytest tests -q         # Codex side, 146 passed, 1 skipped
 python -m ruff check .            # lint of the Python part
 python -m pyright                 # type check of the Python part
 ```
@@ -548,7 +548,7 @@ implementation does not affect the other.
 | Model       | yes, level 1/3 for unclear cases via `llama-server`                | no                                                         |
 | Runtime     | inside the OpenCode process, synchronous                           | own process per call, synchronous                          |
 | Failure     | exception is logged; static rules decide                           | hook does not start: Codex reports and lets it run         |
-| Tests       | `node test.mjs` (797 cases)                                        | `python -m pytest tests -q` (146 cases)                    |
+| Tests       | `node test.mjs` (873 cases)                                        | `python -m pytest tests -q` (146 passed, 1 skipped)        |
 
 **Why separate.** Codex has no `ask`; a hook can only deny or let through. The
 Codex part is a narrow catalogue of hard cases; the sandbox covers the rest.
@@ -1199,21 +1199,21 @@ node test.mjs
 node test-wiring.mjs            # fake git: deny prevents execution
 node test-index.mjs             # plugin wiring
 node bench-mcp.mjs              # 33 fixed MCP cases
-python -m pytest tests -q      # Codex guard, 146 cases
+python -m pytest tests -q      # Codex guard, 146 passed, 1 skipped
 python -m ruff check .         # Python lint
 python -m pyright              # Python type check
 node replay.mjs                # measurement: how many commands run without a prompt
 node analyze.mjs               # point-8 analysis: where exactly "not classifiable" comes from
 ```
 
-797 cases in the groups without/with project reference, CLI allowlists, help and
+873 cases in the groups without/with project reference, CLI allowlists, help and
 version, gitleaks, sqlite3/gh, network reads, denial & secret replacement,
 python, interpreters, Ruff bootstrap, reviewer (risk list, false alarms,
 answer format, structure), MCP (detection, keys, secret suspicion, criteria,
 three-layer verdict including emergency brake, intent from arguments, data
 exfiltration, unresolved targets, switch, prompt channels and model call with
 replacement `fetch`), audit chain, skill verdict file, evaluation, decision
-model and statistics. Added to that are 40 shared cases with the Codex guard,
+model and statistics. The total includes 40 shared cases with the Codex guard,
 whose target values are kept in `shared-cases.jsonl`. Exit code 1 on deviation.
 The classifier (`guard.js`) is a pure function and needs neither OpenCode nor
 network. `replay.mjs` and `analyze.mjs` stay in the project and are not

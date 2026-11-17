@@ -90,6 +90,12 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Testzahlen in den READMEs korrigiert (17.11.2026):** `README.md` und
+  `README_de.md` nannten an drei Stellen noch 797 Fälle für `node test.mjs`;
+  korrekt sind 873. Die 40 gemeinsamen Fälle mit dem Codex-Guard sind in der
+  Summe enthalten, nicht zusätzlich. `pytest` heißt jetzt präziser „146
+  bestanden, 1 übersprungen". `PLANUNG.md` vermerkt den Push auf `main`, die
+  grünen Pflicht-Checks und das Löschen des Prüf-Branchs.
 - **Merge ohne aktuellen Branch (17.11.2026, Nutzerentscheid):** Der Regelsatz
   `baseline` verlangt die fünf Jobs weiter, aber nicht mehr
   `strict_required_status_checks_policy` (jetzt `false`, gesetzt 13:47). Damit
