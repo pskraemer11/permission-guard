@@ -68,5 +68,9 @@
   },
   "devDependencies": {
     "@opencode/plugin": "^2.3.0"
+  },
+  "overrides": {
+    "minimatch": "11.0.9",
+    "glob": "14.0.6"
   }
 }

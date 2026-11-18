@@ -38,6 +38,18 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Ruff 0.17.4 → 0.17.5 (18.11.2026):** `requirements-dev.txt` pinnt
+  `ruff==0.17.5`, `pyproject.toml` verlangt im `[tool.ruff]`-Abschnitt
+  `required-version = "==0.17.5"`. Keine Format- oder Lint-Änderung:
+  `ruff check`, `ruff format --check` (2 Dateien), `pyright` (0 Fehler)
+  und `pytest` (146 bestanden, 1 übersprungen) sind unter 0.17.5 grün.
+  `tools/ci/check_ci_pins.py` existiert im Guard-Repo nicht (Eltern-Repo-Code).
+- **Parent-Pin angeglichen (18.11.2026):** Das Eltern-Repo
+  (`requirements-ci.txt` und `pyproject.toml`) steht jetzt ebenfalls auf
+  Ruff 0.17.5; Guard und Parent sind wieder gleich. Lokal ist Ruff 0.17.5
+  installiert. Die Eltern-Prüfung `test_home_agents_sync` bleibt unverändert
+  rot (Vorab-Drift der Home-Spiegel, nicht pinbedingt); die Eltern-`AGENTS.md`
+  nennt Ruff-Zeilen noch auf 0.17.4 und braucht eine eigene Korrektur.
 - **`scripts/enable-hooks.ps1` (18.11.2026):** Das Skript setzt seit dem
   18.11.2026 neben `core.hooksPath .githooks` auch `core.autocrlf false` und
   `core.eol lf`; es meldet beide Werte am Ende und bricht bei jedem
@@ -247,6 +259,22 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Behoben
 
+- **minimatch-Override deklariert (18.11.2026):** `package.json` führt neu
+  `"overrides": { "minimatch": "11.0.9", "glob": "14.0.6" }` hinter
+  `devDependencies`. Damit sollen `GHSA-g3hv-75wg-m249` (minimatch
+  `>=7.0.0 <11.0.1`) und `GHSA-3g3m-2fjr-6pw4` (glob `9.0.0–14.0.1`)
+  geschlossen werden. JSON ist gültig (`python -m json.tool`); `node
+  test-index.mjs` 17/17 und `node test.mjs` 899/899 sind grün. Das `npm
+  install` selbst war als Agent blockiert (Permission denied: shell für
+  `npm install`), deshalb ist `package-lock.json` unverändert und `npm
+  audit` zeigt weiter 28 Schwachstellen; `npm ls` meldet die
+  Override-Versionen als `invalid`. Der Nutzer führt `npm install` von
+  Hand aus; danach `npm audit` und `npm ls minimatch` / `npm ls glob`
+  erneut prüfen.
+- **npm audit geschlossen (18.11.2026):** Nach dem Nutzerwurf (`npm install`
+  + `npm audit fix`) meldet `npm audit` 0 Schwachstellen; `npm ls
+  minimatch`/`glob` zeigt nur noch `11.0.9`/`14.0.6` (deduped/overridden).
+  `node test-index.mjs` 17/17 und `node test.mjs` 899/899 bleiben grün.
 - **Datumsangabe in der Beispiel-Konfiguration (18.11.2026):**
   `shell-reviewer.config.example.json` nannte „Standard seit 05.11.2026“; der
   Code-Standard `systemone` wurde am 13.11.2026 gesetzt. Die Angabe lautet

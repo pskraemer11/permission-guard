@@ -1232,7 +1232,7 @@ OpenCode noch Netzwerk. `replay.mjs` und `analyze.mjs` bleiben im Projekt und
 werden nicht deployt.
 
 Der Python-Teil läuft mit denselben Regeln wie das Eltern-Repository:
-`pyproject.toml` pinnt Ruff (`==0.17.4`), `requirements-dev.txt` zusätzlich
+`pyproject.toml` pinnt Ruff (`==0.17.5`), `requirements-dev.txt` zusätzlich
 pytest und Pyright. Vor dem ersten Lauf einmalig
 `python -m pip install -r requirements-dev.txt`.
 

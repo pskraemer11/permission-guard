@@ -1226,7 +1226,7 @@ network. `replay.mjs` and `analyze.mjs` stay in the project and are not
 deployed.
 
 The Python part runs with the same rules as the parent repository:
-`pyproject.toml` pins Ruff (`==0.17.4`), `requirements-dev.txt` additionally
+`pyproject.toml` pins Ruff (`==0.17.5`), `requirements-dev.txt` additionally
 pytest and Pyright. Before the first run, once:
 `python -m pip install -r requirements-dev.txt`.
 

@@ -2137,3 +2137,76 @@ messen, deployen, dokumentieren.
   acht Endungen, also acht Faelle plus Gegenprobe `keys.txt`.
 - Die CI-Pruefung meldet nur Dateinamen, nie Inhalte, und laeuft auf
   `ubuntu-latest` ohne Netz.
+
+## Compaction 18.11.2026 / 22:00 — Ruff 0.17.5 angeglichen, minimatch nicht erhoeht
+
+### Objective
+- Dependabot-PR `dependabot/pip/ruff-0.17.5` lokal vorbereiten (Guard-Repo, Branch `main`, kein Commit/Push/Deploy).
+- Dependabot-Alert `minimatch` ueber `@opencode/plugin` klaeren.
+
+### Important Details
+- **Ruff:** `requirements-dev.txt` und `pyproject.toml` (`required-version`) auf 0.17.5. Kein `requirements-ci.txt` im Guard-Repo. Eltern-`requirements-ci.txt` bleibt 0.17.4 — Guard/Parent weichen ab, bewusst nicht angefasst (Eltern-Repo ausserhalb des Auftrags).
+- **Warum so:** Dependabot wuerde sonst jedes Mal nur eine der beiden Stellen vorschlagen; beide Stellen immer gemeinsam halten.
+- **minimatch:** Keine `@opencode/plugin`-Erhoehung. `@opencode/util` pinnt in 2.3.0 und 2.3.2 exakt `minimatch 10.2.5` und `glob 13.0.5` (beide fehlerhaft: minimatch `>=7.0.0 <11.0.1`, glob `9.0.0-14.0.1`). Erst `glob 14.0.2` wuerde `minimatch ^11.0.5` ziehen; das kommt in keiner 2.3er-`@opencode/plugin` vor. Alternative spaeter: `overrides` auf `minimatch 11.0.9` (erste fehlerfreie 11.0.1) und `glob 14.0.6` — nicht implementiert.
+
+### Work State
+- Completed: Ruff-Pins in beiden Dateien, Gates unter 0.17.5 gruen (check, format 2 Dateien, pyright 0, pytest 146+1), `PLANUNG.md`/`CHANGELOG.md` nachgezogen. Lokal auf Ruff 0.17.4 zurueckgestellt (bewusst: `required-version` bricht dann lokal ab, CI installiert aus `requirements-dev.txt`).
+- Open (Nutzer): Commit und Push, Merge der Dependabot-PR, Entscheidung ueber minimatch-`overrides` oder Warten auf `@opencode`.
+
+### Relevant Files
+- `requirements-dev.txt`, `pyproject.toml`, `PLANUNG.md`, `CHANGELOG.md`, `COMPACTIONS.md`.
+
+### Important Context
+- Die Dependabot-PR bleibt remote; kein Branchwechsel. `.github/dependabot.yml` unveraendert.
+
+## Compaction 18.11.2026 / minimatch-Override deklariert
+
+### Objective
+- Freigegebenen `overrides`-Eintrag in `package.json` einbauen und lokal gegenpruefen (kein Commit, Push oder Deploy).
+
+### Important Details
+- **Eingebaut:** `"overrides": { "minimatch": "11.0.9", "glob": "14.0.6" }` nach `devDependencies`. Keine bestehende Override-Struktur vorhanden gewesen.
+- **Warum:** `@opencode/util` pinnt exakt fehlerhafte `minimatch 10.2.5` / `glob 13.0.5`; eine `@opencode/plugin`-Erhoehung (2.3.0 -> 2.3.2) wuerde den Alert nicht schliessen. Der Override erzwingt die ersten fehlerfreien Stande (minimatch 11.0.1+, glob 14.0.2+); 11.0.9 / 14.0.6 sind die freigegebenen Pins.
+- **Belegt lokal:** JSON gueltig; `test-index.mjs` 17/17 und `test.mjs` 899/899 gruen; `npm ls` meldet die Override-Versionen als `invalid` (deklariert, nicht installiert); `package-lock.json` unveraendert (Diff 0 Zeilen). `npm audit` ohne Install weiter 28 (23 moderate, 5 high), darunter weiterhin `GHSA-g3hv-75wg-m249` und `GHSA-3g3m-2fjr-6pw4`.
+
+### Work State
+- Completed: Override in `package.json`, Tests gruen, Doku nachgezogen.
+- Open (Nutzer): `npm install` von Hand (Agentenversuch: Permission denied: shell), danach `npm audit` / `npm ls minimatch` / `npm ls glob` und Lock-Diff pruefen; erst dann ist die Schliessung belegt.
+
+### Relevant Files
+- `package.json`, `CHANGELOG.md`, `PLANUNG.md`, `COMPACTIONS.md`.
+
+### Important Context
+- Der bestaetigte Fix (Audit ohne die beiden GHSAs) steht noch aus; diese Compaction behauptet ihn nicht.
+
+================ Compaction 18.11.2026 / 23:30 ================
+## Objective
+- **Current:** Session-Abschluss nach Audit-Schliessung und Bench-Läufen.
+- **Completed:** CRLF/Dependabot/Secrets/Allow-Liste umgesetzt und committet (`ab0d5a0`); Ruff 0.17.5 beidseits angeglichen; `minimatch`/`glob`-Override installiert und per `npm audit` als geschlossen belegt; Bench-Läufe 14/14 und 23/23 gemessen.
+
+## Important Details
+- **Decisions:** PowerShell-Dateien auf LF (`cmd.exe`-Material `.bat`/`.cmd` bleibt CRLF) — Elite-Wahl nach dem Brave-Abgleich, damit Git keine Umwandlung braucht. `enable-hooks.ps1` setzt künftig auch `core.autocrlf=false` und `core.eol=lf`. Einfaches Loeschen bleibt `allow` (Nutzerentscheid 29.10.2026, nicht gedreht).
+- **Bug / Finding:** Dependabot-PR `ruff-0.17.5` aenderte nur eine der beiden Pin-Stellen; beide (Pin-Datei und `pyproject.toml`) gehoeren immer zusammen. `@opencode/plugin`-Erhoehung schliesst den `minimatch`-Alert nicht, weil `@opencode/util` exakt fehlerhafte Fassungen pinnt; der Override (`minimatch 11.0.9`, `glob 14.0.6`) ist der einzige wirksame Weg. `npm audit fix` schloss danach die verbleibenden `picomatch`-Treffer.
+- **Architecture:** Kein neuer ADR — der Override ist reversibel und keine Architekturentscheidung (Workflow: nur Compaction). Direkter `main`-Push ist durch `5 of 5 required checks` gesperrt; Weg ueber den Pruef-Branch `ci/<sha>` bleibt.
+
+## Work State
+### Completed
+- Gates gruen: 899/899, 17/17, 13/13, 33/33, 146+1, Ruff/Pyright/actionlint, `git ls-files --eol` `w/lf` durchgehend, `npm audit` 0 Treffer. Reviewer laeuft (Smoke 9/9), Aufgaben `permission-guard reviewer` (Anmeldung) und `watchdog` (5-Minuten) sind aktiv.
+### Active
+- Finaler Commit des Doku- und Lock-Standes (Autor: Nutzer); Push ueber `ci/<sha>`.
+### Blocked
+- Eltern-Repo-Drift: `test_home_agents_sync` rot und Eltern-`AGENTS.md` nennt Ruff 0.17.4 — eigener Auftrag, nicht Teil dieses Standes.
+
+## Next Move
+1. Nutzer committet `README.md`/`README_de.md`/`CHANGELOG.md`/`COMPACTIONS.md`/`PLANUNG.md`/`package.json`/`package-lock.json`/`pyproject.toml`/`requirements-dev.txt`, pusht `main:ci/<sha>`, prueft die 5 Pflicht-Checks und zieht `main` per Fast-Forward nach.
+2. Bei der naechsten Modell- oder Versionsaenderung erneut `bench-model.mjs`/`bench-shell.mjs` laufen lassen.
+
+## Relevant Files
+- `package.json`/`package-lock.json`: Override und Aufloesung nach `npm install`/`audit fix`.
+- `requirements-dev.txt`/`pyproject.toml`: Ruff 0.17.5 (Guard und Parent gleich).
+- `README.md`/`README_de.md`: Pin 0.17.5, Summen 899.
+- `CHANGELOG.md`/`PLANUNG.md`: Audit- und Parent-Nachträge.
+
+## Important Context
+- `review/` und `staging/` bleiben ungetrackt und gehoeren nicht in den Commit.
+- Profile-Daten: Lock-Diff 850 Zeilen nach `npm install` (transitive Kette), `git ls-files --eol` bleibt der EOL-Nachweis.

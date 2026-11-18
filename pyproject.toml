@@ -14,7 +14,7 @@ include = ["*.py", "*.pyi"]
 
 # Eine Version fuer alle Aufrufer: python -m ruff, uvx ruff, CI. Bei Abweichung
 # bricht Ruff mit einer Meldung ab, statt still anders zu pruefen.
-required-version = "==0.17.4"
+required-version = "==0.17.5"
 
 extend-exclude = [
     "node_modules",

@@ -757,3 +757,65 @@ Belegt am 18.11.2026: `node test.mjs` 899/899, `node test-index.mjs` 17/17,
 `python -m pytest tests -q` 146 bestanden und 1 übersprungen, Ruff, Ruff-Format
 und Pyright grün, `actionlint` ohne Befund. `bench-shell.mjs` wurde nicht
 gemessen: Es braucht einen laufenden Reviewer.
+
+## Nachtrag 18.11.2026: Ruff 0.17.5 und minimatch-Befund
+
+Ruff 0.17.5 liegt im PyPI-Index vor (`pip index versions ruff`: LATEST
+0.17.5, INSTALLED 0.17.4). Vorher (0.17.4, alte Pins): `ruff check` grün,
+`ruff format --check` 2 Dateien bereits formatiert (nicht 13 —
+`include = ["*.py", "*.pyi"]` nimmt nur zwei Python-Dateien), `pyright`
+0 Fehler, `pytest` 146 bestanden und 1 übersprungen.
+Geändert: `requirements-dev.txt` auf `ruff==0.17.5`, `pyproject.toml`
+`[tool.ruff]` `required-version` auf `==0.17.5`. Kein
+`requirements-ci.txt` im Guard-Repo; Eltern-`requirements-ci.txt` bleibt
+bei 0.17.4 — Guard und Parent weichen danach ab. Nachher mit lokalem
+`pip install ruff==0.17.5`: alle vier Gates grün (2 Dateien formatiert,
+0 Pyright-Fehler). Lokal danach auf 0.17.4 zurückgestellt; mit den neuen
+Pins bricht die lokale 0.17.4 deshalb bewusst ab
+(`Required version ... does not match`) — CI installiert aus
+`requirements-dev.txt` und ist grün. Unter 0.17.5 ändert sich nichts an
+der Formatierung. `tools/ci/check_ci_pins.py` im Guard-Repo nicht
+vorhanden (Eltern-Repo-Code).
+
+minimatch (GHSA-g3hv-75wg-m249): `npm audit` meldet `minimatch`
+`>=7.0.0 <11.0.1` als fehlerhaft; erste fehlerfreie Fassung aus dem Index
+11.0.1, jüngste 11.0.9. `@opencode/plugin` aktuell `^2.3.0` (gelöst
+2.3.0), neueste Fassung 2.3.2. Sowohl 2.3.0 als auch 2.3.2 ziehen über
+`@opencode/util` exakt `minimatch 10.2.5` und `glob 13.0.5` (zusätzlich
+`minimatch 9.0.9` über `glob 10.5.0`/`rimraf`). `glob 14.0.2` würde
+`minimatch ^11.0.5` bringen, kommt aber in keiner 2.3er-`@opencode/plugin`
+vor. Deshalb keine `@opencode/plugin`-Erhöhung: sie würde den Alert nicht
+schließen und die Lock-Datei unnötig umschreiben. Zweiter Weg (später,
+nicht implementiert): `overrides` in `package.json` auf
+`minimatch >=11.0.1` (z. B. 11.0.9) und `glob >=14.0.2` prüfen, falls
+`@opencode` keine neue Fassung liefert.
+Die Dependabot-PR `dependabot/pip/ruff-0.17.5` ist remote und wurde nicht
+lokal ausgecheckt; Merge bleibt beim Nutzer. Stand bleibt Branch `main`.
+
+## Nachtrag 18.11.2026: minimatch-Override
+
+`package.json` führt neu `"overrides": { "minimatch": "11.0.9", "glob":
+"14.0.6" }` (hinter `devDependencies`). Belegt: JSON gültig, `node
+test-index.mjs` 17/17, `node test.mjs` 899/899. Offene Wirkung: `npm
+install` war als Agent blockiert (`Permission denied: shell`), daher ist
+`package-lock.json` unverändert, `npm audit` meldet weiter 28
+Schwachstellen und `npm ls` markiert die Override-Versionen als
+`invalid`. Nächster Schritt (Nutzer): `npm install` von Hand, danach
+`npm audit` und `npm ls minimatch` / `npm ls glob` erneut prüfen.
+
+## Nachtrag 18.11.2026: Audit geschlossen und gemessen
+
+Der Nutzer hat `npm install` und `npm audit fix` selbst ausgeführt.
+`npm audit` meldet 0 Schwachstellen; `npm ls minimatch`/`glob` zeigt nur
+noch `11.0.9`/`14.0.6`; `test-index.mjs` 17/17 und `test.mjs` 899/899
+bleiben grün. Die Ruff-Pins sind im Eltern-Repo jetzt ebenfalls auf 0.17.5,
+lokal liegt Ruff 0.17.5; Guard und Parent sind wieder gleich. Die
+Eltern-Prüfung `test_home_agents_sync` bleibt rot (Vorab-Drift der
+Home-Spiegel, nicht pinbedingt) und die Eltern-`AGENTS.md` nennt Ruff noch
+auf 0.17.4. Die Bench-Läufe vom 18.11.2026 (Reviewer via
+`start-reviewer.ps1`, danach gestoppt): `bench-model.mjs` 14/14,
+`bench-shell.mjs` 23/23, je dreimal, Regelmäßigkeit 14/14 und 23/23
+einstimmig, Projekt-Schreib-Fälle ohne Regression. Der Watchdog- und
+Reviewer-Start steht über die vorhandenen geplanten Aufgaben
+(`permission-guard reviewer` bei Anmeldung, `watchdog` alle 5 Minuten)
+und über `ensureRunning` beim Plugin.
