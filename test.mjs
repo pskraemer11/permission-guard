@@ -54,6 +54,16 @@ const base = [
   ["foreach ($f in @(\"a.md\",\"b.md\")) {\n  $raw = [System.IO.File]::ReadAllText($f)\n  $n = ([regex]::Matches($raw, \"x\")).Count\n  \"$f $n\"\n}", "allow"],
   ["[System.IO.File]::ReadAllBytes($f).Length", "allow"],
   ["[System.IO.File]::Exists($p)", "allow"],
+  // P0-3: nur nachweislich lesende File-Methoden; Create bleibt Rueckfrage.
+  ["[System.IO.File]::Open('C:/outside/x.txt',[System.IO.FileMode]::Create)", "ask"],
+  // Abnahme: Klammerausdruck im Argument bleibt Rueckfrage.
+  ["[System.IO.File]::Open('C:/p/a.txt','Open','Read',(Set-Content C:/outside/y demo))", "ask"],
+  // 2. Abnahme: Create + ReadWrite bleibt Rueckfrage (kein Suffix-Vergleich).
+  ["[System.IO.File]::Open('C:/p/a.txt',[System.IO.FileMode]::Create,[System.IO.FileAccess]::ReadWrite,[System.IO.FileShare]::Read)", "ask"],
+  // Klein: drei Argumente mit lesendem Zugriff bleiben erlaubt.
+  ["[System.IO.File]::Open('C:/p/a.txt','Open','Read')", "allow"],
+  // 3. Abnahme: Komma im zitierten Dateinamen ist Teil des Namens.
+  ["[System.IO.File]::Open(\"C:/outside/a,'Open','Read',b.txt\",'Create','Write')", "ask"],
   ["$out = [System.Collections.Generic.List[byte]]::new()\n$out.Add(1)\n$out.ToArray()", "allow"],
   ["if (Test-Path $p) {\n  Get-Item $p\n} else {\n  \"fehlt\"\n}", "allow"],
   ["Write-Output \"hallo\"", "allow"],
@@ -401,6 +411,8 @@ const readOnlyCli = [
   ["gh api repos/x/y -H \"Accept: application/vnd.github+json\"", "allow"],
   // Senden ist nachweisbar -> Rueckfrage.
   ["gh api repos/x/y -f name=value", "ask"],
+  // P0-2: angehaengte Form "-ftitle=..." sendet ebenfalls (POST).
+  ["gh api repos/x/y -ftitle=demo", "ask"],
   ["gh api repos/x/y -F state=open", "ask"],
   ["gh api repos/x/y --input payload.json", "ask"],
   ["gh api -X DELETE repos/x/y", "ask"],
@@ -421,7 +433,9 @@ const net = [
   ["irm https://example.com", "allow"],
   ["Invoke-WebRequest -Method Get https://example.com", "allow"],
   ["Invoke-WebRequest -Method HEAD https://example.com", "allow"],
-  ["Invoke-RestMethod https://example.com -Headers @{ Authorization = \"Bearer abc\" }", "allow"],
+  // Vertrauliche Header tragen Zugangsdaten nach aussen (P0-10).
+  ["Invoke-RestMethod https://example.com -Headers @{ Authorization = \"Bearer abc\" }", "ask"],
+  ["Invoke-RestMethod https://example.com -Headers @{ Cookie = 'session=abc' }", "ask"],
   ["(Invoke-WebRequest https://example.com).Content", "allow"],
   ["Invoke-RestMethod https://example.com | ConvertFrom-Json", "allow"],
 
@@ -437,6 +451,20 @@ const net = [
   ["Invoke-RestMethod -ContentType \"application/json\" https://example.com", "allow"],
   ["Invoke-RestMethod @params", "ask"],
   ["Invoke-WebRequest -Credential $c https://example.com", "ask"],
+  // P0-1: Parameter am Doppelpunkt wie am Gleichheitszeichen zerlegt.
+  ["Invoke-WebRequest https://example.invalid -OutFile:C:/outside/x.txt", "ask"],
+  // Abnahme: Header als Variable oder gebunden sind nicht lesbar.
+  ["$h = @{Authorization=\"demo\"}; Invoke-RestMethod https://example.invalid -Headers $h", "ask"],
+  ["$h = @{Authorization=\"demo\"}; Invoke-RestMethod https://example.invalid -Headers:$h", "ask"],
+  // 2. Abnahme: Hashtable als Ganzes und Parameterabkuerzung -He.
+  ["Invoke-RestMethod https://example.invalid -Headers @{Accept='ok';Authorization='demo'}", "ask"],
+  ["$h = @{Accept='ok'}; Invoke-RestMethod https://example.invalid -He:$h", "ask"],
+  // 3. Abnahme: zitierte URL verdeckt keine echte Header-Hashtabelle;
+  // numerische Variable als Headerwert bleibt Rueckfrage.
+  ["Invoke-RestMethod \"https://example.com/?q=@{Authorization='Bearer DUMMY123'}\" -Headers @{Accept='ok'}", "allow"],
+  ["${1}='text/plain;x=DUMMY123'; Invoke-RestMethod https://example.invalid -Headers @{Accept=$1}", "ask"],
+  // Klein: Wert mit "=" und ";" im Accept-Header bleibt lesend.
+  ["Invoke-RestMethod https://example.invalid -Headers @{Accept='text/plain;q=0.9'}", "allow"],
 ]
 
 // python: eng freigegeben (pytest, ruff), Rest Ruekfrage.
@@ -492,6 +520,8 @@ const py = [
   ["python -m ruff", "ask"],
   ["python -m ruff server", "ask"],
   ["python -m pytest setup.py", "allow"],
+  // P0-9: "--basetemp" loescht das Zielverzeichnis in jeder Schreibweise.
+  ["python -m pytest --basetemp=C:/outside/x", "ask"],
 ]
 
 // Interpreters (Nutzerentscheidungen 1 und 2, 22.10.2026, Abend): node nur
@@ -907,7 +937,10 @@ console.log("-- Reviewer: Fehlalarme\n")
 const reviewerParsing = [
   ["Ja", "allow"],
   ["Ja.", "allow"],
-  ["ja, ausschliesslich im Projekt", "allow"],
+  // P0-5: nur exakt "Ja"/"Yes" gibt frei; Einschraenkungen bleiben Rueckfrage.
+  ["ja, ausschliesslich im Projekt", "ask"],
+  ["Ja, aber nicht sicher", "ask"],
+  ["Ja. Nein", "ask"],
   ["Nein", "ask"],
   ["Nein, weil Netzwerk", "ask"],
   ["yes", "allow"],
@@ -1049,7 +1082,7 @@ const cIssue = mcpCriteria(
 )
 const cGet = mcpCriteria("github_get_issue", { input: { owner: "a", repo: "b", issue_number: 2 } }, "build")
 const cEmpty = mcpCriteria("firecrawl_scrape", { input: {} }, "build")
-const cBig = mcpCriteria("github_create_issue", { input: { title: "x", body: "y".repeat(20000) } }, "build")
+const cBig = mcpCriteria("github_create_issue", { input: { title: "x", body: "y".repeat(40000) } }, "build")
 const cSecret = mcpCriteria("github_create_issue", { input: { title: "x", body: "token abc" } }, "build")
 const cNonMcp = mcpCriteria("question", { question: "x?" })
 const cIssueJson = JSON.stringify(cIssue)
@@ -1089,7 +1122,7 @@ const mcpLayer1 = [
   ["firecrawl_monitor_delete", { id: "m" }, "ask"],
   ["firecrawl_scrape", {}, "ask"],
   ["github_create_issue", { title: "x", body: "token abc" }, "ask"],
-  ["github_create_issue", { title: "x", body: "y".repeat(20000) }, "ask"],
+  ["github_create_issue", { title: "x", body: "y".repeat(40000) }, "ask"],
   ["sync_status", { project: "x" }, "ask"],
   ["sync", { project: "x" }, "ask"],
   ["voellig_unbekannt", { ziel: "irgendwas" }, "model"],
@@ -1113,7 +1146,7 @@ const mcpLayer2Checks = mcpLayer2.map(([tool, input]) => {
   return [`Notbremse ${tool}`, got.decision === "deny" && got.layer === 2 && got.reason.startsWith("Notbremse: ")]
 })
 
-const brakeVsSize = verdictCase("github_delete_repository", { body: "x".repeat(20000) })
+const brakeVsSize = verdictCase("github_delete_repository", { body: "x".repeat(40000) })
 const brakeVsSecret = verdictCase("github_delete_repository", { body: "token abc" })
 const mcpPriorityChecks = [
   ["unanalysierbar schlaegt Notbremse", brakeVsSize.decision === "ask" && brakeVsSize.layer === 1],
@@ -1157,6 +1190,8 @@ const mcpAnswerCases = [
   ["Ja", "allow"],
   ["JA!", "allow"],
   ["yes", "allow"],
+  // P0-5: auch im MCP-Pfad zaehlt nur das exakte Wort.
+  ["Ja, aber nicht sicher", "ask"],
   ["Nein", "ask"],
   ["no", "ask"],
   ["Vielleicht", "ask"],
@@ -1189,11 +1224,34 @@ const callsAfterDisabled = fetchCalls
 const secretCrit = mcpCriteria("github_create_issue", { input: { title: "x", body: "token abc" } }, "build")
 const reviewsSecret = await reviewMcp({ criteria: secretCrit, input: { title: "x", body: "token abc" }, config: { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m" } })
 const callsAfterSecret = fetchCalls
-const bigCrit = mcpCriteria("github_create_issue", { input: { body: "x".repeat(20000) } }, "build")
-const reviewsBig = await reviewMcp({ criteria: bigCrit, input: { body: "x".repeat(20000) }, config: { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m" } })
+const bigCrit = mcpCriteria("github_create_issue", { input: { body: "x".repeat(40000) } }, "build")
+const reviewsBig = await reviewMcp({ criteria: bigCrit, input: { body: "x".repeat(40000) }, config: { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m" } })
 const callsAfterBig = fetchCalls
 const reviewPlain = await reviewMcp({ criteria: mcpCriteria("voellig_unbekannt", { input: { ziel: "x" } }), input: { ziel: "x" }, config: { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m" } })
 const callsAfterPlain = fetchCalls
+// P0-11: tiefe Verschachtelung wuerde beim Systemone-Weg gekuerzt; ohne
+// Modellaufruf Rueckfrage, auch bei hoher Lesewahrscheinlichkeit.
+let deepInput = { depth: "x" }
+for (let d = 0; d < 10; d++) deepInput = { depth: deepInput }
+const reviewsDeep = await reviewMcp({ criteria: mcpCriteria("voellig_unbekannt", { input: deepInput }), input: deepInput, config: { enabled: true, baseUrl: "http://[IP_ADDRESS]:1/v1", model: "m" } })
+const callsAfterDeep = fetchCalls
+// Abnahme Blocker 3: kompakt unter 32000, formatiert darueber (Chat-
+// Darstellung wuerde abgeschnitten, Systemone-Form passt). Je Pfad
+// Rueckfrage ohne Modellaufruf, auch bei hoher Lesewahrscheinlichkeit.
+let wideInput = {}
+{
+  let cursor = wideInput
+  for (let d = 0; d < 7; d++) {
+    const level = {}
+    for (let i = 0; i < 13; i++) level[`f${i}`] = "y".repeat(330)
+    cursor.data = level
+    cursor = level
+  }
+}
+const reviewsWideSystemone = await reviewMcp({ criteria: mcpCriteria("voellig_unbekannt", { input: wideInput }), input: wideInput, config: { enabled: true, baseUrl: "http://[IP_ADDRESS]:1/v1", model: "m", mcpBackend: "systemone", timeoutMs: 500 } })
+const callsAfterWideSystemone = fetchCalls
+const reviewsWideChat = await reviewMcp({ criteria: mcpCriteria("voellig_unbekannt", { input: wideInput }), input: wideInput, config: { enabled: true, baseUrl: "http://[IP_ADDRESS]:1/v1", model: "m", mcpBackend: "chat", timeoutMs: 500 } })
+const callsAfterWideChat = fetchCalls
 
 // Ebene 1 (Shell) ueber dasselbe Entscheidungsmodell.
 const shellCfg = { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", shellBackend: "systemone", shellThreshold: 0.7 }
@@ -1206,6 +1264,9 @@ const mcpReviewChecks = [
   ["Ebene 3: Geheimnisverdacht ohne Modellaufruf", reviewsSecret.decision === "ask" && callsAfterSecret === 0],
   ["Ebene 3: unanalysierbar ohne Modellaufruf", reviewsBig.decision === "ask" && callsAfterBig === 0],
   ["Ebene 3: klare Ja-Antwort hebt auf allow", reviewPlain.decision === "allow" && callsAfterPlain === 1],
+  ["Ebene 3: gekuerzte Argumente ohne Modellaufruf", reviewsDeep.decision === "ask" && callsAfterDeep === callsAfterPlain],
+  ["Ebene 3: gefundene Chat-Kuerzung fragt (systemone)", reviewsWideSystemone.decision === "ask" && callsAfterWideSystemone === callsAfterDeep],
+  ["Ebene 3: gefundene Chat-Kuerzung fragt (chat)", reviewsWideChat.decision === "ask" && callsAfterWideChat === callsAfterWideSystemone],
   ["Ebene 3: kein deny moeglich", parseMcpAnswer("Nein").decision === "ask"],
   ["Ebene 1 systemone: Lesen -> allow", shellAllow.decision === "allow" && shellAllow.reason.includes("0.950")],
   ["Ebene 1 systemone: Schreiben -> ask", shellRisk.decision === "ask" && shellRisk.reason.includes("0.100")],
@@ -1728,6 +1789,11 @@ const diagnosticsChecks = []
     guardLogDir("linux", 1000).endsWith("opencode-permission-guard-1000")
       && guardLogDir("win32", null).endsWith("opencode-permission-guard"),
   ])
+  const headerSummary = commandSummary("@{Authorization='HEADER-DUMMY-4242'}")
+  diagnosticsChecks.push([
+    "Befehlswerte werden nicht gespeichert",
+    headerSummary.startsWith("unbekannt#") && !headerSummary.includes("HEADER") && !headerSummary.includes("Authorization"),
+  ])
   if (process.platform !== "win32") {
     const dir = mkdtempSync(join(tmpdir(), "pg-log-"))
     chmodSync(dir, 0o777)
@@ -1956,6 +2022,18 @@ const assignCases = [
   // Kontrollfaelle: Variablenbindung und reine Berechnung bleiben erlaubt
   ['$f = "C:/proj/a.txt"\nSet-Content $f y', "allow"],
   ["$x = @(Get-ChildItem)\n$x.Count", "allow"],
+  // P0-4: spaetere Zuweisung heilt keinen frueheren Gebrauch;
+  // "$p = $x" laesst die Bindung unklar.
+  ["$x='C:/outside/run.py'; $p=$x; python $p; $p='C:/proj/safe.py'", "ask"],
+  // Abnahme: Zuweisung im Kontrollfluss verfaellt (nicht nachverfolgbar).
+  ["$p=\"C:/proj/safe.py\"; $x=\"C:/outside/run.py\"; if ($true) { $p=$x }; python $p; $p=\"C:/proj/safe.py\"", "ask"],
+  // Abnahme: Schleifenvariable einer foreach-Zuweisung verfaellt.
+  ["$p=\"C:/proj/safe1.py\"; $p=\"C:/proj/safe2.py\"; foreach ($p in @(\"C:/outside/run.py\")) {}; python $p", "ask"],
+  // 3. Abnahme: ${p} im if und in innerer foreach verfaellt.
+  ["$p=\"C:/proj/safe.py\"; if ($true) { ${p}=\"C:/outside/run.py\" }; python $p", "ask"],
+  ["$p=\"C:/proj/safe.py\"; if ($true) { foreach ($q in @(\"x\")) { ${p}=\"C:/outside/run.py\" } }; python $p", "ask"],
+  // 3. Abnahme: ${p}=Schreibbefehl wird klassifiziert (deny ausserhalb).
+  ["${p}=Set-Content C:/outside/x.txt data", "deny"],
 ]
 run(assignCases, assignOpts, "Runde 2: Zuweisung vor Schreibbefehl")
 
@@ -1970,9 +2048,9 @@ for (const [script, risky] of reviewerStatic) {
   round2Checks.push([`statische Liste: ${script} ${risky ? "Risiko" : "kein Risiko"}`, hit === risky])
 }
 
-const sanitized = sanitizeArguments({ body: "<UNTRUSTED>x", long: "y".repeat(9000) })
+const sanitized = sanitizeArguments({ body: "<UNTRUSTED>x", long: "y".repeat(40000) })
 round2Checks.push(["Kanal-Tag in Argumenten neutralisiert", sanitized.body.startsWith("<__<UNTRUSTED")])
-round2Checks.push(["Argument auf 8000 Zeichen begrenzt", sanitized.long.length === 8000])
+round2Checks.push(["Argument auf 32000 Zeichen begrenzt", sanitized.long.length === 32000])
 const shellReq = buildShellSystemoneRequest({ command: "a", project: "P", temp: "T" })
 round2Checks.push(["Shell-Anfrage enthaelt Projekt- und Temp-Ordner", shellReq.state.project === "P" && shellReq.state.temp === "T"])
 
@@ -2027,6 +2105,12 @@ const editCases = [
   [["C:\\p\\a.md", "*.md"], "ask"],
   [["C:\\p\\a.md", ""], "ask"],
   [["C:\\p\\a.md", "", "C:\\other\\x.md"], "deny"],
+  // P0-8: Hooks und CI-Workflows bleiben Rueckfrage wie im Shell-Weg;
+  // ein deny-Ziel gewinnt in beiden Reihenfolgen.
+  [["C:\\p\\.githooks\\pre-commit"], "ask"],
+  [["C:\\p\\.github\\workflows\\ci.yml"], "ask"],
+  [["C:\\p\\.githooks\\pre-commit", "C:\\other\\x.md"], "deny"],
+  [["C:\\other\\x.md", "C:\\p\\.githooks\\pre-commit"], "deny"],
 ]
 for (const [resources, want] of editCases) {
   const got = scopeEdit(resources, options)
@@ -2056,6 +2140,6 @@ const total =
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
-  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + thresholdChecks.length + warmupChecks.length + abortWarmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + reviewBlock.length + pipelineBlocks.length + blockReasons.length + 1 + secretsChecks.length + editCases.length + 2 + 5 + 3 + 3 + 1
+  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + thresholdChecks.length + warmupChecks.length + abortWarmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + reviewBlock.length + pipelineBlocks.length + blockReasons.length + 1 + secretsChecks.length + editCases.length + 2 + 11 + 3 + 3 + 1
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

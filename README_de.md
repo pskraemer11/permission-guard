@@ -65,8 +65,8 @@ Beide Programme liegen hier: das OpenCode-Plugin (Node) und der Codex-Guard
 (Python). Die Tests laufen getrennt, weil die Laufzeiten getrennt sind:
 
 ```powershell
-node test.mjs                     # OpenCode-Seite, 899 Fälle
-python -m pytest tests -q         # Codex-Seite, 146 bestanden, 1 uebersprungen
+node test.mjs                     # OpenCode-Seite, 932 Fälle
+python -m pytest tests -q         # Codex-Seite, 149 bestanden, 1 uebersprungen
 python -m ruff check .            # Lint des Python-Teils
 python -m pyright                 # Typprüfung des Python-Teils
 ```
@@ -549,7 +549,7 @@ einen Umsetzung wirkt nicht auf die andere.
 | Modell      | ja, Ebene 1/3 für unklare Fälle über `llama-server`                | nein                                                         |
 | Laufzeit    | im OpenCode-Prozess, synchron                                      | eigener Prozess je Aufruf, synchron                          |
 | Fehlerfall  | Ausnahme wird protokolliert; statische Regeln entscheiden          | Hook startet nicht: Codex meldet und lässt laufen            |
-| Tests       | `node test.mjs` (899 Fälle)                                        | `python -m pytest tests -q` (146 bestanden, 1 uebersprungen) |
+| Tests       | `node test.mjs` (932 Fälle)                                        | `python -m pytest tests -q` (149 bestanden, 1 uebersprungen) |
 
 **Warum getrennt.** Codex kennt kein `ask`; ein Hook kann nur verweigern oder
 durchlassen. Der Codex-Teil ist ein schmaler Katalog harter Fälle; den Rest
@@ -849,8 +849,8 @@ Der Index dient der Vorauswahl, der eigene 18-Befehl-Satz bleibt maßgeblich.
 .\start-reviewer.ps1 -ModelPath "D:\…\anderes.gguf" -Port 8081
 .\start-reviewer.ps1 -Cpu -Server "C:\…\llama-server.exe"   # ohne GPU-Offload
 node smoke-reviewer.mjs                    # 9 Fälle gegen die laufende Konfiguration
-node test.mjs                              # 899 Unit-Tests
-node test-index.mjs                        # 17 Integrationsfälle (Fake-OpenCode)
+node test.mjs                              # 932 Unit-Tests
+node test-index.mjs                        # 23 Integrationsfälle (Fake-OpenCode)
 node test-wiring.mjs                       # 13 Verdrahtungstests (Fake-git)
 .\start-reviewer.ps1 -Stop
 ```
@@ -931,7 +931,7 @@ Regeln des Katalogs:
 - Zielarten kommen aus der **Form** (`https://…` → `url`, `C:\…` → `path`) und
   erst danach aus dem Feldnamen. Verschachtelte Argumente (etwa
   `files: [{ path }]`) werden bis Tiefe 3 mitgezählt.
-- Große Argumente (> 16 KB) gelten als `unanalysierbar` — getrennt von
+- Große Argumente (mehr als 32000 Zeichen als JSON) gelten als `unanalysierbar` — getrennt von
   „destruktiv", damit ein Größenlimit nie als Fund missverstanden wird.
 - Argumentwerte verlassen die Funktion nicht; im Log stehen nur Feldnamen,
   Zielarten und Zählungen.
@@ -951,7 +951,7 @@ gilt. Beides ist rein und ohne Backend testbar.
 
 Reihenfolge und Grenzen:
 
-- **`unanalysierbar` zuerst.** Argumente über 16 KB ergeben `ask`, auch wenn
+- **`unanalysierbar` zuerst.** Argumente über 32000 Zeichen (als JSON) ergeben `ask`, auch wenn
   Werkzeug oder Text destruktiv aussähen — ein Größenlimit ist kein Fund.
   Danach Notbremse, dann Geheimnisverdacht, dann leere Argumente.
 - **Die Absicht kommt aus dem Werkzeugnamen, die Argumente dürfen sie nur
@@ -1007,7 +1007,7 @@ Das lokale Modell bekommt genau zwei Nachrichten: eine Systemnachricht mit der
 Entscheidungsregel und eine Benutzernachricht mit drei Kanälen
 (`TRUSTED-USER-INTENT`, `UNTRUSTED-PENDING-ACTION`, `UNTRUSTED-RECENT-TOOLS`).
 Es sieht Werkzeugname, Absicht, Zielarten und die Argumente als JSON; Fälle mit
-Geheimnisverdacht oder über 16 KB Argumenten erreichen es nie. Die Antwort ist
+Geheimnisverdacht oder über 32000 Zeichen Argumenten erreichen es nie. Die Antwort ist
 durch eine Grammatik auf `Ja` oder `Nein` beschränkt (`root ::= "Ja" | "Nein"`),
 `max_tokens` 8, `temperature` 0, Timeout 2500 ms.
 
@@ -1116,7 +1116,7 @@ die Messung „14/14, 75 ms" aus „Zwei Backends für Ebene 3".
 - **MCP `sync` ist schreibend:** `sync` und `sync_status` fragen nach.
 - **404 auf `/systemone`:** Ein Backend ohne dieses Protokoll (LM Studio,
   Chat-GGUF) bekommt die Entscheidung über den Chat-Weg.
-- **Argumente:** Kanal-Tags neutralisiert, Texte auf 8000 Zeichen begrenzt.
+- **Argumente:** Kanal-Tags neutralisiert, Texte auf 32000 Zeichen begrenzt. Jede Kürzung, Tiefenbegrenzung oder ausgelassene Feldgruppe fragt ohne Modellaufruf nach (fail closed).
 - **Zeitbudget Shell:** Ein Budget für alle Segmente zusammen.
 - **Aufwärmlauf:** Beide Wege bei gemischten Backends.
 - **Audit:** Zustand vor jedem Anhängen neu lesen (zwei Plugin-Instanzen).
@@ -1211,14 +1211,14 @@ node test.mjs
 node test-wiring.mjs            # Fake-git: deny verhindert Ausfuehrung
 node test-index.mjs             # Plugin-Verdrahtung
 node bench-mcp.mjs              # 33 feste MCP-Faelle
-python -m pytest tests -q      # Codex-Guard, 146 bestanden, 1 uebersprungen
+python -m pytest tests -q      # Codex-Guard, 149 bestanden, 1 uebersprungen
 python -m ruff check .         # Python-Lint
 python -m pyright              # Python-Typpruefung
 node replay.mjs                # Messung: wie viele Befehle laufen ohne Rueckfrage
 node analyze.mjs               # Punkt-8-Analyse: Woher genau kommt "nicht einordenbar"
 ```
 
-899 Fälle in den Gruppen ohne/mit Projektbezug, CLI-Allowlists, Hilfe und
+932 Fälle in den Gruppen ohne/mit Projektbezug, CLI-Allowlists, Hilfe und
 Version, gitleaks, sqlite3/gh, Netz-Lesen, Verweigerung & Geheimnis-Ersetzung,
 python, Interpreters, Ruff-Bootstrap, Reviewer (Risikoliste, Fehlalarme,
 Antwortformat, Aufbau), MCP (Erkennung, Schlüssel, Geheimnisverdacht,
@@ -1232,7 +1232,7 @@ OpenCode noch Netzwerk. `replay.mjs` und `analyze.mjs` bleiben im Projekt und
 werden nicht deployt.
 
 Der Python-Teil läuft mit denselben Regeln wie das Eltern-Repository:
-`pyproject.toml` pinnt Ruff (`==0.17.4`), `requirements-dev.txt` zusätzlich
+`pyproject.toml` pinnt Ruff (`==0.17.5`), `requirements-dev.txt` zusätzlich
 pytest und Pyright. Vor dem ersten Lauf einmalig
 `python -m pip install -r requirements-dev.txt`.
 

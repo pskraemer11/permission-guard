@@ -2137,3 +2137,188 @@ messen, deployen, dokumentieren.
   acht Endungen, also acht Faelle plus Gegenprobe `keys.txt`.
 - Die CI-Pruefung meldet nur Dateinamen, nie Inhalte, und laeuft auf
   `ubuntu-latest` ohne Netz.
+
+## Compaction 18.11.2026 / 22:00 — Ruff 0.17.5 angeglichen, minimatch nicht erhoeht
+
+### Objective
+- Dependabot-PR `dependabot/pip/ruff-0.17.5` lokal vorbereiten (Guard-Repo, Branch `main`, kein Commit/Push/Deploy).
+- Dependabot-Alert `minimatch` ueber `@opencode/plugin` klaeren.
+
+### Important Details
+- **Ruff:** `requirements-dev.txt` und `pyproject.toml` (`required-version`) auf 0.17.5. Kein `requirements-ci.txt` im Guard-Repo. Eltern-`requirements-ci.txt` bleibt 0.17.4 — Guard/Parent weichen ab, bewusst nicht angefasst (Eltern-Repo ausserhalb des Auftrags).
+- **Warum so:** Dependabot wuerde sonst jedes Mal nur eine der beiden Stellen vorschlagen; beide Stellen immer gemeinsam halten.
+- **minimatch:** Keine `@opencode/plugin`-Erhoehung. `@opencode/util` pinnt in 2.3.0 und 2.3.2 exakt `minimatch 10.2.5` und `glob 13.0.5` (beide fehlerhaft: minimatch `>=7.0.0 <11.0.1`, glob `9.0.0-14.0.1`). Erst `glob 14.0.2` wuerde `minimatch ^11.0.5` ziehen; das kommt in keiner 2.3er-`@opencode/plugin` vor. Alternative spaeter: `overrides` auf `minimatch 11.0.9` (erste fehlerfreie 11.0.1) und `glob 14.0.6` — nicht implementiert.
+
+### Work State
+- Completed: Ruff-Pins in beiden Dateien, Gates unter 0.17.5 gruen (check, format 2 Dateien, pyright 0, pytest 146+1), `PLANUNG.md`/`CHANGELOG.md` nachgezogen. Lokal auf Ruff 0.17.4 zurueckgestellt (bewusst: `required-version` bricht dann lokal ab, CI installiert aus `requirements-dev.txt`).
+- Open (Nutzer): Commit und Push, Merge der Dependabot-PR, Entscheidung ueber minimatch-`overrides` oder Warten auf `@opencode`.
+
+### Relevant Files
+- `requirements-dev.txt`, `pyproject.toml`, `PLANUNG.md`, `CHANGELOG.md`, `COMPACTIONS.md`.
+
+### Important Context
+- Die Dependabot-PR bleibt remote; kein Branchwechsel. `.github/dependabot.yml` unveraendert.
+
+## Compaction 18.11.2026 / minimatch-Override deklariert
+
+### Objective
+- Freigegebenen `overrides`-Eintrag in `package.json` einbauen und lokal gegenpruefen (kein Commit, Push oder Deploy).
+
+### Important Details
+- **Eingebaut:** `"overrides": { "minimatch": "11.0.9", "glob": "14.0.6" }` nach `devDependencies`. Keine bestehende Override-Struktur vorhanden gewesen.
+- **Warum:** `@opencode/util` pinnt exakt fehlerhafte `minimatch 10.2.5` / `glob 13.0.5`; eine `@opencode/plugin`-Erhoehung (2.3.0 -> 2.3.2) wuerde den Alert nicht schliessen. Der Override erzwingt die ersten fehlerfreien Stande (minimatch 11.0.1+, glob 14.0.2+); 11.0.9 / 14.0.6 sind die freigegebenen Pins.
+- **Belegt lokal:** JSON gueltig; `test-index.mjs` 17/17 und `test.mjs` 899/899 gruen; `npm ls` meldet die Override-Versionen als `invalid` (deklariert, nicht installiert); `package-lock.json` unveraendert (Diff 0 Zeilen). `npm audit` ohne Install weiter 28 (23 moderate, 5 high), darunter weiterhin `GHSA-g3hv-75wg-m249` und `GHSA-3g3m-2fjr-6pw4`.
+
+### Work State
+- Completed: Override in `package.json`, Tests gruen, Doku nachgezogen.
+- Open (Nutzer): `npm install` von Hand (Agentenversuch: Permission denied: shell), danach `npm audit` / `npm ls minimatch` / `npm ls glob` und Lock-Diff pruefen; erst dann ist die Schliessung belegt.
+
+### Relevant Files
+- `package.json`, `CHANGELOG.md`, `PLANUNG.md`, `COMPACTIONS.md`.
+
+### Important Context
+- Der bestaetigte Fix (Audit ohne die beiden GHSAs) steht noch aus; diese Compaction behauptet ihn nicht.
+
+================ Compaction 18.11.2026 / 23:30 ================
+## Objective
+- **Current:** Session-Abschluss nach Audit-Schliessung und Bench-Läufen.
+- **Completed:** CRLF/Dependabot/Secrets/Allow-Liste umgesetzt und committet (`ab0d5a0`); Ruff 0.17.5 beidseits angeglichen; `minimatch`/`glob`-Override installiert und per `npm audit` als geschlossen belegt; Bench-Läufe 14/14 und 23/23 gemessen.
+
+## Important Details
+- **Decisions:** PowerShell-Dateien auf LF (`cmd.exe`-Material `.bat`/`.cmd` bleibt CRLF) — Elite-Wahl nach dem Brave-Abgleich, damit Git keine Umwandlung braucht. `enable-hooks.ps1` setzt künftig auch `core.autocrlf=false` und `core.eol=lf`. Einfaches Loeschen bleibt `allow` (Nutzerentscheid 29.10.2026, nicht gedreht).
+- **Bug / Finding:** Dependabot-PR `ruff-0.17.5` aenderte nur eine der beiden Pin-Stellen; beide (Pin-Datei und `pyproject.toml`) gehoeren immer zusammen. `@opencode/plugin`-Erhoehung schliesst den `minimatch`-Alert nicht, weil `@opencode/util` exakt fehlerhafte Fassungen pinnt; der Override (`minimatch 11.0.9`, `glob 14.0.6`) ist der einzige wirksame Weg. `npm audit fix` schloss danach die verbleibenden `picomatch`-Treffer.
+- **Architecture:** Kein neuer ADR — der Override ist reversibel und keine Architekturentscheidung (Workflow: nur Compaction). Direkter `main`-Push ist durch `5 of 5 required checks` gesperrt; Weg ueber den Pruef-Branch `ci/<sha>` bleibt.
+
+## Work State
+### Completed
+- Gates gruen: 899/899, 17/17, 13/13, 33/33, 146+1, Ruff/Pyright/actionlint, `git ls-files --eol` `w/lf` durchgehend, `npm audit` 0 Treffer. Reviewer laeuft (Smoke 9/9), Aufgaben `permission-guard reviewer` (Anmeldung) und `watchdog` (5-Minuten) sind aktiv.
+### Active
+- Finaler Commit des Doku- und Lock-Standes (Autor: Nutzer); Push ueber `ci/<sha>`.
+### Blocked
+- Eltern-Repo-Drift: `test_home_agents_sync` rot und Eltern-`AGENTS.md` nennt Ruff 0.17.4 — eigener Auftrag, nicht Teil dieses Standes.
+
+## Next Move
+1. Nutzer committet `README.md`/`README_de.md`/`CHANGELOG.md`/`COMPACTIONS.md`/`PLANUNG.md`/`package.json`/`package-lock.json`/`pyproject.toml`/`requirements-dev.txt`, pusht `main:ci/<sha>`, prueft die 5 Pflicht-Checks und zieht `main` per Fast-Forward nach.
+2. Bei der naechsten Modell- oder Versionsaenderung erneut `bench-model.mjs`/`bench-shell.mjs` laufen lassen.
+
+## Relevant Files
+- `package.json`/`package-lock.json`: Override und Aufloesung nach `npm install`/`audit fix`.
+- `requirements-dev.txt`/`pyproject.toml`: Ruff 0.17.5 (Guard und Parent gleich).
+- `README.md`/`README_de.md`: Pin 0.17.5, Summen 899.
+- `CHANGELOG.md`/`PLANUNG.md`: Audit- und Parent-Nachträge.
+
+## Important Context
+- `review/` und `staging/` bleiben ungetrackt und gehoeren nicht in den Commit.
+- Profile-Daten: Lock-Diff 850 Zeilen nach `npm install` (transitive Kette), `git ls-files --eol` bleibt der EOL-Nachweis.
+
+## Nachtrag 18.11.2026: Welle 1 (P0-1 bis P0-11)
+
+**Warum:** Die Voll-Review (`.full-review/05-final-report.md`, Basis `ceb85cf`)
+hat elf belegte Wege gezeigt, auf denen ein schreibender oder sendender
+Befehl ohne Rueckfrage durchging. Der Auftrag war die Welle 1 als Ganzes,
+mit den Nutzerentscheiden (P0-5 nur exakt „Ja"/„Yes"; P0-9 nur `--basetemp`;
+P0-11 zweistufig mit 32k-Grenze und Servermessung; P1-03 nur als
+Edit-Vorbedingung).
+
+**Was gilt jetzt:**
+- Edit-Weg und Shell-Weg pruefen dieselben Schutzordner (`.githooks`,
+  `.github` bleiben `ask`); deny gewinnt im Edit-Pfad unabhaengig von der
+  Zielreihenfolge.
+- Modellfreigabe nur bei exakt „Ja"/„Yes" (Satzzeichen `.`/`!` am Ende
+  erlaubt, kein Praefix). Urteil `ask` aus Addition unaufloesbarer Variablen
+  erreicht das Modell nie.
+- Netz-, gh-, pytest- und Header-Pruefung arbeiten auf Parameterebene
+  (Doppelpunkt-Form, angehaengte Kurzflags, `--basetemp`, vertrauliche Header).
+- `[System.IO.File]` ist nur mit nachweislich lesenden Methoden frei; die
+  4-Argument-Leseform (`FileMode::Open`, `FileAccess::Read`) bleibt erlaubt.
+- Variablenbindungen gelten sequenziell; ein spaeterer Wert heilt keinen
+  frueheren Gebrauch.
+- Codex-Hook erkennt angehaengte Git-Optionen, gebuendelte Schalter,
+  PowerShell-Abkuerzungen und Array-Ziele.
+- Gekuerzte oder zu tiefe MCP-Argumente fragen ohne Modell nach; Textgrenze
+  32000 Zeichen, Server-Kontext 32768.
+
+**Messung (18.11.2026, gelaufener Reviewer):** `node test.mjs` 913/913,
+`node test-wiring.mjs` 13/13, `node bench-mcp.mjs` 33/33,
+`node test-index.mjs` 17/17, `pytest` 148 bestanden und 1 uebersprungen,
+Ruff, Ruff-Format, Pyright gruen; `bench-model` 14/14 und `bench-shell`
+23/23 einstimmig. Testserver auf 8081 mit `-c 32768` lief (`/health` ok,
+2000-Zeichen-Anfrage 252 ms, bereitgestellt 6125 MiB); Eingaben ab etwa
+4000 Zeichen scheitern aber am physischen Stapel (ubatch 1024) und fallen
+damit auf `ask` zurueck (fail closed). Prod-Server 8080 neu zu starten war
+nicht beauftragt (kein Deploy); die Stapel-Anhebung bleibt ein eigener,
+zu messender Schritt. Vollstaendige Nachweise je Befund in
+`.full-review/fix-log.md`.
+
+**Offen:** P0-5 Prompt-Schaerfung (nur Textvorschlag mit Messauftrag in
+`PLANUNG.md`), andere pytest-Optionen als `--basetemp` (nicht bewiesen),
+Shell-Pfad von P1-03. Nichts committet (Auftrag); Deploy bleibt beim Nutzer.
+
+## Next Move
+1. Freigabe abwarten, dann committen (Doku und Fix-Log sind im Arbeitsbaum).
+2. P0-5-Prompt und Stapel-Anhebung als eigene Aufträge mit Messung
+   (`bench-shell`/`bench-model` vorher/nachher).
+
+## Nachtrag 18.11.2026: 2. Abnahme (acht Befunde)
+
+**Was galt zuletzt:** Acht Punkte aus der 2. Abnahme, alle im Arbeitsbaum:
+`foreach`-Schleifenvariable verfaellt wie Kontrollfluss-Zuweisungen
+(inklusive `${p}`-Formen); Header-Hashtabellen vollstaendig (alle
+Schluessel) und Parameterabkuerzungen (`-He`, `-Head`) erkannt;
+FileMode/FileAccess nur exakt als Enum oder Zeichenkettenform; unsichere
+`File::Open`-Argumente ohne Modellweg; `unpruefbar`-Gruende ohne
+Befehlswerte (Diagnose-Log-Regressionstest); Codex-Kurzbuendel beliebiger
+Laenge; `test.mjs` CI-Pfad neutral; Fix-Log maskiert.
+
+**Gate (18.11.2026):** `node test.mjs` 925/925, `node test-wiring.mjs` 13/13,
+`node bench-mcp.mjs` 33/33, `node test-index.mjs` 23/23 (isoliertes Temp),
+`pytest` 149 bestanden und 1 uebersprungen, Ruff, Ruff-Format, Pyright
+gruen; `bench-model` 14/14 einstimmig (llama-server 8080 lief, Health 200).
+Nichts committet; der ubatch-Stand (LMS-Test, Modell-33/33, llama-server
+mit zweiter Instanz nicht startbar) gilt unveraendert.
+
+**Weg A (18.11.2026):** Unsicher → `ask` → Reviewer (nur wenn statisch
+`ask`) → sonst `ask`. Das ist das Prinzip dieser Runde; weitere
+Spezial-Suffixe werden nicht angehaengt. Weg B (Sandbox-ADR) bleibt ein
+eigener Schritt im PLANUNG-Nachtrag vom 18.11.2026 und wird nicht umgesetzt.
+
+## Nachtrag 18.11.2026: 3. Abnahme (sieben Befunde)
+
+**Was gilt jetzt zusaetzlich:** Kontrollfluss-Bindungen vollstaendig
+ungültig (auch `${p}`, innere Schleifenvariablen, Skriptbloecke);
+`${p}=Schreibbefehl` wird RHS-klassifiziert; Header-Hashtabelle dem echten
+Parameterwert zugeordnet (zitierte URL verdeckt sie nicht), numerische
+Variablen abgelehnt; `File::Open`-Argumente zitatsbewusst zerlegt; Codex
+erkennt `-irf` und unbekannte rekursive Bündel; `unpruefbar`-Gründe und
+`commandSummary()` ohne Befehlswerte; Log-Test mit `guardLogDir()` und
+positivem Schreibnachweis.
+
+**Gate (18.11.2026):** `node test.mjs` 932/932, `node test-wiring.mjs` 13/13,
+`node bench-mcp.mjs` 33/33, `node test-index.mjs` 23/23 (isoliertes Temp),
+`pytest` 149 bestanden und 1 uebersprungen, Ruff, Ruff-Format, Pyright
+gruen; `bench-model` 14/14 einstimmig. Details in `.full-review/fix-log.md`.
+
+## Nachtrag 18.11.2026: Abnahme-Nacharbeiten (acht Blocker)
+
+**Warum:** Die Abnahme hat die Welle 1 nicht abgenommen (FAIL): acht Punkte
+- drei davon kritisch mit Umgehung (`if`-Bindung, `-Headers $h`,
+  Chat-Kuerzung), ein kritischer Modell-Hebel (`nicht einordenbar` gab
+  erkannte Parameter an das Modell), Codex-Switches mit Wert, ein
+  Klammerausdruck im Dateizugriff, ein personenbezogener Pfad in den
+  geaenderten `docs/`, falsche 16-KB-Aussage in den READMEs.
+
+**Was gilt jetzt zusaetzlich:** Bindungen verfallen bei Zuweisung im
+Kontrollfluss; `-Headers` als Variable bleibt `ask`; die versandte
+Chat-Darstellung wird vor dem Abschneiden geprueft (je Pfad nachgewiesen);
+erkannte sende-/schreibende Parameter bleiben `ask` ohne Modellweg;
+`-Recurse:$true` und `rm -rfd` erkennt der Codex-Hook; Klammerausdruck im
+`File::Open`-Argument bleibt `ask`; `Accept='text/plain;q=0.9'` bleibt
+lesend; `docs/Claude Auto Modus …:571` nennt `C:/outside/permission-guard`;
+beide READMEs nennen 32000 Zeichen (JSON).
+
+**Gate (18.11.2026):** `node test.mjs` 921/921, `node test-wiring.mjs` 13/13,
+`node bench-mcp.mjs` 33/33, `node test-index.mjs` 19/19 (isoliertes Temp),
+`pytest` 149 bestanden und 1 uebersprungen, Ruff, Ruff-Format, Pyright
+gruen; `bench-model` 14/14 einstimmig (Reviewer lief). Details je Blocker in
+`.full-review/fix-log.md`. Nichts committet; der ubatch-Stand aus dem
+Vornachtrag gilt unveraendert (Messung nicht ausgefuehrt).

@@ -408,17 +408,20 @@ export function buildMessages({ commands, project, temp }) {
   ]
 }
 
-// Nur ein klares "Ja" gibt frei. "Jein", "Vielleicht", leere Antwort und
-// Freitext bleiben Rueckfrage.
-function firstWord(text) {
-  const raw = String(text ?? "").trim().toLowerCase()
-  return raw.split(/[^a-zäöüß]+/i).filter(Boolean)[0] ?? ""
+// Nur ein exaktes "Ja" gibt frei. Freitext, Einschraenkungen und jede
+// Zusatzaussage ("Ja, aber nicht sicher", "Ja. Nein") bleiben Rueckfrage:
+// genau die Unsicherheit, fuer die das Modell gefragt wird, darf nicht als
+// Freigabe gelesen werden. Punkt und Ausrufezeichen am Ende zaehlen als
+// Satzzeichen, nicht als Zusatzaussage ("Ja."/"Ja!" bleiben frei); ein
+// Komma oder ein zweites Wort macht es zu Freitext.
+function exactAnswer(text) {
+  return String(text ?? "").trim().replace(/[.!\s]+$/u, "").toLowerCase()
 }
 
 export function parseAnswer(text) {
-  const first = firstWord(text)
-  if (first === "ja" || first === "yes") return { decision: "allow", reason: "Modell: Wirkung bleibt im Projekt" }
-  if (first === "nein" || first === "no") return { decision: "ask", reason: "Modell: Wirkung ausserhalb oder unsicher" }
+  const answer = exactAnswer(text)
+  if (answer === "ja" || answer === "yes") return { decision: "allow", reason: "Modell: Wirkung bleibt im Projekt" }
+  if (answer === "nein" || answer === "no") return { decision: "ask", reason: "Modell: Wirkung ausserhalb oder unsicher" }
   return { decision: "ask", reason: "Modell: Antwort unklar" }
 }
 
@@ -501,7 +504,7 @@ export function buildMcpMessages({ criteria, input, recent = [], three = false }
         `Absicht: ${action.intent}`,
         `Zielarten: ${kinds.join(", ") || "keine"}`,
         "Argumente:",
-        escapeChannelTags(args).slice(0, 8000),
+        escapeChannelTags(args).slice(0, SYSTEMONE_FIELD_LIMIT),
         "</UNTRUSTED-PENDING-ACTION>",
         "",
         "<UNTRUSTED-RECENT-TOOLS>",
@@ -515,10 +518,10 @@ export function buildMcpMessages({ criteria, input, recent = [], three = false }
 // Nur ein klares "Ja" hebt auf allow. Die Ebene darf nie "deny" erzeugen;
 // "Nein", Freitext, Timeout und Fehler bleiben Rueckfrage.
 export function parseMcpAnswer(text) {
-  const first = firstWord(text)
-  if (first === "ja" || first === "yes") return { decision: "allow", reason: "Modell: Aufruf nur lesend" }
-  if (first === "nein" || first === "no") return { decision: "ask", reason: "Modell: veraendert, veroeffentlicht oder unsicher" }
-  if (first === "unbestimmt" || first === "unklar" || first === "unsure") return { decision: "ask", reason: "Modell: unbestimmt" }
+  const answer = exactAnswer(text)
+  if (answer === "ja" || answer === "yes") return { decision: "allow", reason: "Modell: Aufruf nur lesend" }
+  if (answer === "nein" || answer === "no") return { decision: "ask", reason: "Modell: veraendert, veroeffentlicht oder unsicher" }
+  if (answer === "unbestimmt" || answer === "unklar" || answer === "unsure") return { decision: "ask", reason: "Modell: unbestimmt" }
   return { decision: "ask", reason: "Modell: Antwort unklar" }
 }
 
@@ -573,9 +576,10 @@ export function buildShellSystemoneRequest({ command, model = "", project = "", 
 }
 
 // Argumente gehen als Daten ins Modell. Kanal-Tags werden neutralisiert wie im
-// Chat-Pfad; Texte werden auf 8000 Zeichen begrenzt. Die Groessenpruefung (16 KB)
-// bleibt davor in reviewMcp.
-const SYSTEMONE_FIELD_LIMIT = 8000
+// Chat-Pfad; Texte werden auf 32000 Zeichen begrenzt. Die Groessenpruefung
+// (guard.js: JSON des ganzen Eingabeobjekts) gilt daneben in reviewMcp.
+// Der Server-Kontext wurde dafuer auf 32768 gesetzt (start-reviewer.ps1).
+const SYSTEMONE_FIELD_LIMIT = 32000
 export function sanitizeArguments(value, depth = 0) {
   if (depth > 8) return null
   if (typeof value === "string") return escapeChannelTags(value).slice(0, SYSTEMONE_FIELD_LIMIT)
@@ -588,6 +592,38 @@ export function sanitizeArguments(value, depth = 0) {
     )
   }
   return value
+}
+
+// Meldet, ob die tatsaechlich versandte Darstellung kuerzen, die Tiefe
+// begrenzen oder Felder auslassen wuerde. Geprueft wird beides: die
+// sanitizeArguments-Form (Systemone-Pfad) und die formatierte
+// Chat-Darstellung aus buildMcpMessages (die dort am Limit geschnitten
+// wuerde, auch wenn kein einzelnes Feld zu lang ist). reviewMcp fragt in
+// dem Fall ohne Modell nach: ein gekuerztes Bild darf keine Freigabe
+// begruenden.
+export function argumentsTruncated(value, depth = 0) {
+  if (depth > 8) return true
+  if (typeof value === "string") return escapeChannelTags(value).length > SYSTEMONE_FIELD_LIMIT
+  if (Array.isArray(value)) {
+    if (value.length > 100) return true
+    return value.some((item) => argumentsTruncated(item, depth + 1))
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value)
+    if (entries.length > 100) return true
+    return entries.some(([, item]) => argumentsTruncated(item, depth + 1))
+  }
+  return false
+}
+
+export function mcpChatTruncated(value) {
+  let args = "{}"
+  try {
+    args = JSON.stringify(value ?? {}, null, 2)
+  } catch {
+    return false // nicht serialisierbar: buildMcpMessages nutzt Platzhalter
+  }
+  return escapeChannelTags(args).length > SYSTEMONE_FIELD_LIMIT
 }
 
 export function buildSystemoneRequest({ criteria, input, model = "" }) {
@@ -899,6 +935,13 @@ export async function reviewMcp({ criteria, input, project, recent, config }) {
   if (!criteria?.isMcp) return { decision: "ask", reason: "kein MCP-Aufruf" }
   if (criteria.context?.secret) return { decision: "ask", reason: "Geheimnisverdacht: kein Modellaufruf" }
   if (criteria.context?.oversized) return { decision: "ask", reason: "unanalysierbar: kein Modellaufruf" }
+  // Jede Kuerzung, Tiefenbegrenzung oder ausgelassene Feldgruppe fragt ohne
+  // Modell nach (fail closed, Systemone- und Chat-Pfad). Die Chat-Darstellung
+  // wird zusaetzlich geprueft, weil sie formatiert versandt und am Limit
+  // abgeschnitten wuerde, auch wenn die Systemone-Form noch passt.
+  if (argumentsTruncated(input ?? {}) || mcpChatTruncated(input ?? {})) {
+    return { decision: "ask", reason: "unanalysierbar: Argumente zu gross: kein Modellaufruf" }
+  }
 
   if (cfg.mcpBackend === "systemone") {
     const result = await requestSystemone(buildSystemoneRequest({ criteria, input, model: cfg.model }), cfg)

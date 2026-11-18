@@ -757,3 +757,166 @@ Belegt am 18.11.2026: `node test.mjs` 899/899, `node test-index.mjs` 17/17,
 `python -m pytest tests -q` 146 bestanden und 1 übersprungen, Ruff, Ruff-Format
 und Pyright grün, `actionlint` ohne Befund. `bench-shell.mjs` wurde nicht
 gemessen: Es braucht einen laufenden Reviewer.
+
+## Nachtrag 18.11.2026: Ruff 0.17.5 und minimatch-Befund
+
+Ruff 0.17.5 liegt im PyPI-Index vor (`pip index versions ruff`: LATEST
+0.17.5, INSTALLED 0.17.4). Vorher (0.17.4, alte Pins): `ruff check` grün,
+`ruff format --check` 2 Dateien bereits formatiert (nicht 13 —
+`include = ["*.py", "*.pyi"]` nimmt nur zwei Python-Dateien), `pyright`
+0 Fehler, `pytest` 146 bestanden und 1 übersprungen.
+Geändert: `requirements-dev.txt` auf `ruff==0.17.5`, `pyproject.toml`
+`[tool.ruff]` `required-version` auf `==0.17.5`. Kein
+`requirements-ci.txt` im Guard-Repo; Eltern-`requirements-ci.txt` bleibt
+bei 0.17.4 — Guard und Parent weichen danach ab. Nachher mit lokalem
+`pip install ruff==0.17.5`: alle vier Gates grün (2 Dateien formatiert,
+0 Pyright-Fehler). Lokal danach auf 0.17.4 zurückgestellt; mit den neuen
+Pins bricht die lokale 0.17.4 deshalb bewusst ab
+(`Required version ... does not match`) — CI installiert aus
+`requirements-dev.txt` und ist grün. Unter 0.17.5 ändert sich nichts an
+der Formatierung. `tools/ci/check_ci_pins.py` im Guard-Repo nicht
+vorhanden (Eltern-Repo-Code).
+
+minimatch (GHSA-g3hv-75wg-m249): `npm audit` meldet `minimatch`
+`>=7.0.0 <11.0.1` als fehlerhaft; erste fehlerfreie Fassung aus dem Index
+11.0.1, jüngste 11.0.9. `@opencode/plugin` aktuell `^2.3.0` (gelöst
+2.3.0), neueste Fassung 2.3.2. Sowohl 2.3.0 als auch 2.3.2 ziehen über
+`@opencode/util` exakt `minimatch 10.2.5` und `glob 13.0.5` (zusätzlich
+`minimatch 9.0.9` über `glob 10.5.0`/`rimraf`). `glob 14.0.2` würde
+`minimatch ^11.0.5` bringen, kommt aber in keiner 2.3er-`@opencode/plugin`
+vor. Deshalb keine `@opencode/plugin`-Erhöhung: sie würde den Alert nicht
+schließen und die Lock-Datei unnötig umschreiben. Zweiter Weg (später,
+nicht implementiert): `overrides` in `package.json` auf
+`minimatch >=11.0.1` (z. B. 11.0.9) und `glob >=14.0.2` prüfen, falls
+`@opencode` keine neue Fassung liefert.
+Die Dependabot-PR `dependabot/pip/ruff-0.17.5` ist remote und wurde nicht
+lokal ausgecheckt; Merge bleibt beim Nutzer. Stand bleibt Branch `main`.
+
+## Nachtrag 18.11.2026: minimatch-Override
+
+`package.json` führt neu `"overrides": { "minimatch": "11.0.9", "glob":
+"14.0.6" }` (hinter `devDependencies`). Belegt: JSON gültig, `node
+test-index.mjs` 17/17, `node test.mjs` 899/899. Offene Wirkung: `npm
+install` war als Agent blockiert (`Permission denied: shell`), daher ist
+`package-lock.json` unverändert, `npm audit` meldet weiter 28
+Schwachstellen und `npm ls` markiert die Override-Versionen als
+`invalid`. Nächster Schritt (Nutzer): `npm install` von Hand, danach
+`npm audit` und `npm ls minimatch` / `npm ls glob` erneut prüfen.
+
+## Nachtrag 18.11.2026: Audit geschlossen und gemessen
+
+Der Nutzer hat `npm install` und `npm audit fix` selbst ausgeführt.
+`npm audit` meldet 0 Schwachstellen; `npm ls minimatch`/`glob` zeigt nur
+noch `11.0.9`/`14.0.6`; `test-index.mjs` 17/17 und `test.mjs` 899/899
+bleiben grün. Die Ruff-Pins sind im Eltern-Repo jetzt ebenfalls auf 0.17.5,
+lokal liegt Ruff 0.17.5; Guard und Parent sind wieder gleich. Die
+Eltern-Prüfung `test_home_agents_sync` bleibt rot (Vorab-Drift der
+Home-Spiegel, nicht pinbedingt) und die Eltern-`AGENTS.md` nennt Ruff noch
+auf 0.17.4. Die Bench-Läufe vom 18.11.2026 (Reviewer via
+`start-reviewer.ps1`, danach gestoppt): `bench-model.mjs` 14/14,
+`bench-shell.mjs` 23/23, je dreimal, Regelmäßigkeit 14/14 und 23/23
+einstimmig, Projekt-Schreib-Fälle ohne Regression. Der Watchdog- und
+Reviewer-Start steht über die vorhandenen geplanten Aufgaben
+(`permission-guard reviewer` bei Anmeldung, `watchdog` alle 5 Minuten)
+und über `ensureRunning` beim Plugin.
+
+## Nachtrag 18.11.2026: Review-Welle 1 (P0-1 bis P0-11) umgesetzt
+
+Alle elf P0-Befunde aus `.full-review/05-final-report.md` (Basis `ceb85cf`)
+sind am aktuellen Code nachgestellt und geschlossen. Jede Änderung hat einen
+Negativtest (P0-8: vier Faelle, je ein Ordner plus deny-Prioritaet in beiden
+Reihenfolgen; P0-5: ergaenzte Antworttests). Details je Befund mit
+Vorher/Nachher, Testname und Gate in `.full-review/fix-log.md`. Gateway:
+`node test.mjs` 913/913, `node test-wiring.mjs` 13/13, `node bench-mcp.mjs`
+33/33, `node test-index.mjs` 17/17, `python -m pytest tests -q` 148
+bestanden und 1 uebersprungen, `ruff check`, `ruff format --check` und
+`pyright` (0 Fehler) gruen; gegen den laufenden Reviewer gemessen:
+`bench-model.mjs --repeat 3` 14/14, `bench-shell.mjs --repeat 3` 23/23, je
+einstimmig.
+
+Gueltige Lesart (Nutzerentscheid, umgesetzt): P0-5 gibt nur exakt „Ja"/„Yes"
+nach Trim frei; ein Satzzeichen `.` oder `!` am Ende zaehlt als Satzzeichen,
+nicht als Zusatzaussage; jeder Zusatz (Komma, zweites Wort) bleibt
+Rueckfrage. P0-11 fragt bei jeder Kuerzung, Tiefenbegrenzung oder
+ausgelassenen Feldgruppe ohne Modell nach; die Textgrenze ist 32000 Zeichen
+(Guard, beide Modellpfade), der Server-Kontext 32768.
+
+Naechste Schritte (nicht umgesetzt, bewusst zurueckgestellt):
+- **P0-5 Prompt-Schaerfung (Textvorschlag, nicht im Code):** Die Shell-Frage
+  fragt heute „Is this command safe to run without asking the user?" mit
+  Ja-Gruenden zuerst. Vorschlag: Kriterien statt „harmlos?" — die Antwort
+  soll nur bei nachweislich nur-lesendem oder nur-projektintern-schreibendem
+  Befehl „Ja" lauten, bei jeder Unsicherheit „Nein"; dazu zwei Negativ-
+  Beispiele im Prompt (Verwenden-gesendeter Schlüssel, Pfad ausserhalb).
+  Messauftrag: `bench-shell.mjs --repeat 3` (23 Faelle) und `bench-model.mjs
+  --repeat 3` (14 Faelle) vorher/nachher, plus Replay-Vergleich der
+  Fehlfreigaben; erst bei nicht-schlechterer Trennung uebernehmen.
+- **P0-9 offen:** nur `--basetemp` wurde geschlossen (getrennt, `=`, `:`).
+  Andere pytest-Optionen mit Schreibwirkung (z. B. `-o`, `--junit-xml`,
+  `--html`, `-p no:cacheprovider` u. a.) sind nicht bewiesen und brauchen
+  eine eigene Probe, bevor irgendetwas geraten wird.
+- **P1-03 offen (Shell-Pfad):** deny gewinnt jetzt im Edit-Pfad unabhaengig
+  von der Zielreihenfolge; der analoge Shell-Pfad bleibt als offen vermerkt.
+- **P0-11 Server-Stapel:** Testserver auf Port 8081 mit `-c 32768` beladen
+  (Modell laeuft, `/health` ok, 2000-Zeichen-Anfrage in 252 ms). Eingaben ab
+  etwa 4000 Zeichen scheitern am physischen Stapel (ubatch 1024, „input
+  ... is too large to process"); der Reviewer antwortet darauf mit `ask`
+  (fail closed), aber ein grosses Argument faellt damit praktisch auf
+  Rueckfrage zurueck. Eine Stapel-Anhebung (`-ub`) war nicht beauftragt und
+  bleibt ein eigener, zu messender Schritt; der produktive Server auf 8080
+  wurde nicht neu gestartet (kein Deploy).
+
+## Nachtrag 18.11.2026: Abnahme-Nacharbeiten (acht Blocker)
+
+Die Abnahme war FAIL; alle acht Blocker und zwei kleine Punkte sind im
+Arbeitsbaum behoben (je Probe-rot → Fix → gruen; Nachweise in
+`.full-review/fix-log.md`). Gate: `node test.mjs` 921/921,
+`node test-wiring.mjs` 13/13, `node bench-mcp.mjs` 33/33,
+`node test-index.mjs` 19/19 (isoliertes Temp), `pytest` 149 bestanden und
+1 uebersprungen, Ruff, Ruff-Format, Pyright gruen; `bench-model` 14/14
+einstimmig. Beide READMEs nennen jetzt 32000 Zeichen (JSON) statt 16 KB.
+
+Beobachtung (kein P0, kuenftiger Schritt, nicht ohne Auftrag umsetzen):
+OpenCode begrenzt Werkzeug-Ergebnisse ueber `tool_output {max_lines,
+max_bytes}` in der Konfiguration — das betrifft die Ausgabeseite nach der
+Ausfuehrung, nicht die P0-11-Eingabekuerzung der Argumente auf der
+Eingabeseite vor der Ausfuehrung. Ob die Ausgabegrenze als zusaetzliche
+Grenz-Markierung (Schritt G) genutzt werden kann, ist ein eigener
+Entscheidungsauftrag.
+
+## Nachtrag 18.11.2026: 2. Abnahme (acht Befunde)
+
+Alle acht Befunde im Arbeitsbaum geschlossen (Nachweise in
+`.full-review/fix-log.md`). Gate: `node test.mjs` 925/925,
+`node test-wiring.mjs` 13/13, `node bench-mcp.mjs` 33/33,
+`node test-index.mjs` 23/23 (isoliertes Temp), `pytest` 149 bestanden und
+1 uebersprungen, Ruff, Ruff-Format, Pyright gruen; `bench-model` 14/14
+einstimmig (llama-server 8080 lief, Health 200).
+
+Weiter offen (nicht umgesetzt): P0-5-Prompt-Schaerfung (Textvorschlag mit
+Messauftrag aus dem vorherigen Nachtrag); andere pytest-Optionen ausser
+`--basetemp`; P1-03-Shell-Pfad. Zur 32k-Grenze gilt: die
+Modell-Verarbeitung grosser Eingaben ist nicht zugesagt — der
+standalone-Server mit zweiter Instanz startete mit `-ub 8192` gar nicht
+(CUDA-Graphen-Fehler), LM Studio verarbeitet sie (andere Version);
+fail closed (`ask`) bleibt die Zusage. Beobachtung zum Modell: eine
+MMProj-Datei (~900 MB) taucht im Modell-Setup auf — ob Vision-
+_MMProj für Clef-Flash noetig oder falsch verdrahtet ist, ist offen und
+kein Code-Eingriff ohne Auftrag.
+
+## Nachtrag 18.11.2026: 3. Abnahme (sieben Befunde, Weg A)
+
+Prinzip dieser Runde: unsicher → `ask` → Reviewer (nur wenn statisch
+`ask`) → wenn Reviewer unsicher → `ask` (fail closed). Erkennbar
+gefährliche Parameter (z. B. bekannte Schreib-Header, falsche FileMode)
+bleiben `unpruefbar` ohne Modellweg. Details in `.full-review/fix-log.md`.
+Gate: `node test.mjs` 932/932, `node test-wiring.mjs` 13/13,
+`node bench-mcp.mjs` 33/33, `node test-index.mjs` 23/23 (isoliertes Temp),
+`pytest` 149 bestanden und 1 uebersprungen, Ruff, Ruff-Format, Pyright
+gruen; `bench-model` 14/14 einstimmig.
+
+**MORGEN-Schritt (Weg B, NICHT umgesetzt):** Sandbox-ADR als eigener
+Entscheidungsauftrag. Ziel: weniger `ask` bei gleicher fail-closed-
+Härte. Messung vorher/nachher: Rate der Rückfragen
+(`replay.mjs --all`, `stats.mjs`) und Gate 7/7 gruen. Erst nach
+ARC-Auftrag umsetzen; die P0-Fixes bleiben davon unberuehrt.

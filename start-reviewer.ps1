@@ -72,7 +72,7 @@ $log = Join-Path $env:TEMP "permission-guard-reviewer-$Port.log"
 # gedacht. --no-op-offload gehoert nicht dazu: Er bremst auch den reinen
 # CPU-Build (Smoke 17.11.2026, zwei Aufrufe ueber 6000 ms).
 $gpuLayers = $Cpu ? '0' : 'all'
-$serverArgs = @('-m', $ModelPath, '-c', '4096', '-np', '1', '--port', "$Port", '--no-webui', '-ngl', $gpuLayers, '--jinja')
+$serverArgs = @('-m', $ModelPath, '-c', '32768', '-np', '1', '--port', "$Port", '--no-webui', '-ngl', $gpuLayers, '--jinja')
 if ($DraftPath) { $serverArgs += @('--model-draft', $DraftPath) }
 $proc = Start-Process -FilePath $Server -WindowStyle Hidden -ArgumentList $serverArgs `
   -PassThru -RedirectStandardOutput $log -RedirectStandardError "$log.err"
