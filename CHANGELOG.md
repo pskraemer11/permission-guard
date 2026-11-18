@@ -8,10 +8,64 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **Zeilenenden und BOM (18.11.2026):** `.gitattributes` setzt den Standard
+  `* text=auto eol=lf` und nimmt Binärdateien (`*.png`, `*.jpg`, `*.jpeg`,
+  `*.gif`, `*.ico`, `*.gguf`, `*.woff`, `*.woff2`) aus; die bisherigen
+  Endungsregeln bleiben. `.editorconfig` beschreibt denselben Stand für
+  Editoren (UTF-8 ohne BOM, LF, Abschlusszeile; PowerShell 4 Leerzeichen;
+  Markdown behält Leerzeichen am Zeilenende). `scripts/enable-hooks.ps1` setzt
+  pro Klon zusätzlich `core.autocrlf false` und `core.eol lf`. `ci.yml` hat den
+  neuen Job `zeilenenden`: `git ls-files -z --eol` lässt CRLF in getrackten
+  Textdateien scheitern, eine Prüfung auf `EF BB BF` meldet BOM-Dateien;
+  gemeldet wird nur der Dateiname.
+- **Dependabot (18.11.2026):** `.github/dependabot.yml` aus dem
+  Eltern-Repository übernommen: `pip` (findet `requirements-dev.txt` über den
+  Dateinamen) und `github-actions`, wöchentlich, höchstens fünf offene
+  Pull-Requests.
+- **Schlüsseldateien als Geheimnispfad (18.11.2026):** `guard.js` ergänzt
+  `SECRET_PATHS` um die Endungen `*.pem`, `*.key`, `*.ppk`, `*.pfx`, `*.p12`,
+  `*.asc`, `*.ovpn`, `*.kdbx`; ein Treffer bleibt `ask` mit dem Grund
+  `Geheimnis: Schlüsseldatei`. Das Muster verlangt Punkt und Trennung, `keys.txt`
+  bleibt lesbar.
+- **Ausnahmen der Schreibfreigabe (18.11.2026):** `guard.js` lässt einfaches
+  Erstellen und Überschreiben im Projekt weiterhin ohne Rückfrage durch, nimmt
+  aber Ziele unter `.git/`, `.githooks/` und `.github/` sowie die Dateien
+  `shell-reviewer.config.json` und `opencode.jsonc` aus. Diese bleiben `ask`
+  mit statischem Grund (`geschützte Ablage …`, `Konfigurationsdatei`); Löschen
+  und Rekursion ändern sich nicht.
+
 - **Skill-Baseline ergänzt (17.11.2026):** `hook-regeln.yml` prüft den Push-/PR-Bereich mit demselben `pre-push`-Hook lokal (gitleaks 8.30.1, `GITHOOKS_TEST_GATE=0`, fail closed bei unlesbaren Revisionen); der Verhaltensproben-Schritt des Eltern-Repositories entfällt, weil `tools/githooks-test/` hier nicht existiert. `scripts/enable-hooks.ps1` setzt `core.hooksPath .githooks` pro Klon. `requirements-dev.txt` pinnt `pip-audit==2.10.1`; `ci.yml` führt `pip_audit --strict` im Python-Job aus. Ruff prüft jetzt die Bandit-`S`-Regeln; `assert` (`S101`) und `subprocess` (`S603`) sind in `tests/*` ignoriert, der Produktivcode war schon sauber.
 
 ### Geändert
 
+- **`scripts/enable-hooks.ps1` (18.11.2026):** Das Skript setzt seit dem
+  18.11.2026 neben `core.hooksPath .githooks` auch `core.autocrlf false` und
+  `core.eol lf`; es meldet beide Werte am Ende und bricht bei jedem
+  fehlgeschlagenen `git config` mit Exit 1 ab.
+- **Zeilenenden der Stapeldateien (18.11.2026):** `.gitattributes` legt `*.bat`,
+  `*.cmd` und `*.sln` auf `text eol=crlf`; `*.ps1` bleibt bei `text eol=lf`, weil
+  PowerShell LF versteht, cmd.exe aber CRLF braucht. `.editorconfig` spiegelt
+  das mit `[*.{bat,cmd}]` und `end_of_line = crlf`. Der CI-Job `zeilenenden`
+  prüft CRLF nur noch dort, wo `.gitattributes` `eol=lf` verlangt. Im Repository
+  ist derzeit keine `.bat`-, `.cmd`- oder `.sln`-Datei getrackt.
+- **Testzahlen (18.11.2026):** `test.mjs` 882 → 899 (elf Fälle für die
+  Geheimnis-Endungen und die beiden Schreibweisen, sechs für die Ausnahmen der
+  Schreibfreigabe); `README.md` und `README_de.md` nennen an je vier Stellen die
+  neue Summe und führen die neue Rückfrage-Zeile in der Tabelle.
+- **Schwellen aus der Konfigurationsdatei geprüft (18.11.2026):** `reviewer.js`
+  ergänzt `THRESHOLD_BOUNDS` und das exportierte `sanitizeThresholds`;
+  `loadConfig` verwirft Werte außerhalb des Bands und fällt still auf den
+  Standard zurück. Band: `mcpThreshold` und `shellThreshold` ab 0,5 bis unter 1,
+  `secretsThreshold` über 0 bis 0,5. Grund: `"shellThreshold": 0` setzte bisher
+  jede Wahrscheinlichkeit auf `allow` (Befund 13.11.2026); bei den
+  Secrets-Werten liegt die Freigabe auf der anderen Seite, deshalb die
+  spiegelverkehrte Grenze. Dieselbe Bandprüfung gilt jetzt auch für
+  `PERMISSION_GUARD_REVIEWER_THRESHOLD` und
+  `PERMISSION_GUARD_REVIEWER_SHELL_THRESHOLD`, die bisher nur `0 < n < 1`
+  prüften. Direkt übergebene Werte (`overrides` aus dem Code) bleiben
+  unverändert. `test.mjs` 873 → 882 (neun Fälle für das Band); `README.md` und
+  `README_de.md` nennen an je vier Stellen die neue Summe und beschreiben das
+  gültige Band samt stillem Rückfall.
 - **`AGENTS.md` (17.11.2026):** Der Satz zur Byte-Identität der Hooks war so nicht wahr: `pre-commit` weicht von der Vorlage ab, weil deren Skill-Struktur-Check hier keinen `skills/`-Ordner findet und Commits blockieren würde. Die Abweichung ist jetzt dokumentiert.
 
 - **Optionaler CPU-Start des Reviewers (17.11.2026):** `start-reviewer.ps1`
@@ -193,6 +247,14 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Behoben
 
+- **Datumsangabe in der Beispiel-Konfiguration (18.11.2026):**
+  `shell-reviewer.config.example.json` nannte „Standard seit 05.11.2026“; der
+  Code-Standard `systemone` wurde am 13.11.2026 gesetzt. Die Angabe lautet
+  jetzt 13.11.2026. Kein Verhaltensunterschied.
+- **Standard-Backend in beiden READMEs (18.11.2026):** Die Backend-Tabelle für
+  Ebene 3 markierte `chat` als Standard. Seit dem 13.11.2026 ist `systemone`
+  der Standard; `README.md` und `README_de.md` nennen ihn jetzt mit
+  „(default)" bzw. „(Standard)".
 - **CI-Privacy-Scan bei neuen Testpfaden (17.11.2026):** `test.mjs` nutzt
   für drei Außenziele jetzt `C:/outside/guard-review-nicht-schreiben.txt`
   statt `C:/Users/…`. Der Ort bleibt außerhalb des Projekts, die

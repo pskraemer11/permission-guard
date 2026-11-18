@@ -65,7 +65,7 @@ Beide Programme liegen hier: das OpenCode-Plugin (Node) und der Codex-Guard
 (Python). Die Tests laufen getrennt, weil die Laufzeiten getrennt sind:
 
 ```powershell
-node test.mjs                     # OpenCode-Seite, 873 Fälle
+node test.mjs                     # OpenCode-Seite, 899 Fälle
 python -m pytest tests -q         # Codex-Seite, 146 bestanden, 1 uebersprungen
 python -m ruff check .            # Lint des Python-Teils
 python -m pyright                 # Typprüfung des Python-Teils
@@ -509,6 +509,7 @@ Version ist ein Flag (`--version`), Status liefert `stats`.
 | Schreibziel mit Platzhalter (Wildcard)                                          | `ask`                                           |
 | `Remove-Item` ohne Ziel (`Get-ChildItem \| Remove-Item`)                        | `deny` (Entscheidung 10.11.2026)                |
 | Schreiben in `<Projekt>\.git`, `~/.config/opencode`, `~/.claude`, `~/.codex`    | `deny` (Entscheidung 25.10.2026)                |
+| Schreiben in `<Projekt>\.githooks`, `<Projekt>\.github`, `opencode.jsonc`       | `ask` (Entscheidung 18.11.2026)                 |
 | Rekursives Löschen auf den Arbeitsordner selbst                                 | `deny` (Entscheidung 25.10.2026)                |
 | `git push`                                                                      | `ask` (statisch und Guard)                      |
 | `git branch -D`, `git checkout .`, `git restore .`                              | `deny` (Guard; `branch -D` zusätzlich statisch) |
@@ -548,7 +549,7 @@ einen Umsetzung wirkt nicht auf die andere.
 | Modell      | ja, Ebene 1/3 für unklare Fälle über `llama-server`                | nein                                                         |
 | Laufzeit    | im OpenCode-Prozess, synchron                                      | eigener Prozess je Aufruf, synchron                          |
 | Fehlerfall  | Ausnahme wird protokolliert; statische Regeln entscheiden          | Hook startet nicht: Codex meldet und lässt laufen            |
-| Tests       | `node test.mjs` (873 Fälle)                                        | `python -m pytest tests -q` (146 bestanden, 1 uebersprungen) |
+| Tests       | `node test.mjs` (899 Fälle)                                        | `python -m pytest tests -q` (146 bestanden, 1 uebersprungen) |
 
 **Warum getrennt.** Codex kennt kein `ask`; ein Hook kann nur verweigern oder
 durchlassen. Der Codex-Teil ist ein schmaler Katalog harter Fälle; den Rest
@@ -848,7 +849,7 @@ Der Index dient der Vorauswahl, der eigene 18-Befehl-Satz bleibt maßgeblich.
 .\start-reviewer.ps1 -ModelPath "D:\…\anderes.gguf" -Port 8081
 .\start-reviewer.ps1 -Cpu -Server "C:\…\llama-server.exe"   # ohne GPU-Offload
 node smoke-reviewer.mjs                    # 9 Fälle gegen die laufende Konfiguration
-node test.mjs                              # 873 Unit-Tests
+node test.mjs                              # 899 Unit-Tests
 node test-index.mjs                        # 17 Integrationsfälle (Fake-OpenCode)
 node test-wiring.mjs                       # 13 Verdrahtungstests (Fake-git)
 .\start-reviewer.ps1 -Stop
@@ -1035,10 +1036,10 @@ nur mit erneuter Messung.
 
 `mcpBackend` wählt den Weg:
 
-| Wert              | Weg                                                             | Gemessen (14 Graubereich-Fälle) |
-| ----------------- | --------------------------------------------------------------- | ------------------------------- |
-| `chat` (Standard) | `chat/completions`, Antwortwort mit Grammatik                   | 12/14 bei 12B, 13/14 bei 26B    |
-| `systemone`       | `/v1/systemone`, Entscheidungsmodell liefert Wahrscheinlichkeit | **14/14** mit Clef-Flash, 75 ms |
+| Wert                   | Weg                                                             | Gemessen (14 Graubereich-Fälle) |
+| ---------------------- | --------------------------------------------------------------- | ------------------------------- |
+| `chat`                 | `chat/completions`, Antwortwort mit Grammatik                   | 12/14 bei 12B, 13/14 bei 26B    |
+| `systemone` (Standard) | `/v1/systemone`, Entscheidungsmodell liefert Wahrscheinlichkeit | **14/14** mit Clef-Flash, 75 ms |
 
 Im `systemone`-Modus entfällt der Prompt: Der Zustand ist `{tool, arguments}`,
 die Frage eine `choice` zwischen „reads" und „changes", und `mcpThreshold`
@@ -1060,6 +1061,11 @@ Freigabe-Fälle 0,94–0,97, Änderungen 0,02–0,06 — 14/14 bei jeder Schwell
 0,5 bis 0,9. Bei mehreren Segmenten zählt das **schwächste** Ergebnis; ein
 harmloses Segment darf ein schreibendes nicht überdecken. Der statische
 `neverAutoApprove`-Filter läuft weiterhin davor.
+
+Gültig sind `mcpThreshold` und `shellThreshold` ab 0,5 bis unter 1 und
+`secretsThreshold` über 0 bis 0,5. Werte außerhalb dieses Bands verwirft
+`loadConfig` still und nutzt den Standard; ein `"shellThreshold": 0` gibt
+deshalb nicht mehr jede Wahrscheinlichkeit frei.
 
 ### Schritt E: Testregime vor der Aktivierung
 
@@ -1212,7 +1218,7 @@ node replay.mjs                # Messung: wie viele Befehle laufen ohne Rueckfra
 node analyze.mjs               # Punkt-8-Analyse: Woher genau kommt "nicht einordenbar"
 ```
 
-873 Fälle in den Gruppen ohne/mit Projektbezug, CLI-Allowlists, Hilfe und
+899 Fälle in den Gruppen ohne/mit Projektbezug, CLI-Allowlists, Hilfe und
 Version, gitleaks, sqlite3/gh, Netz-Lesen, Verweigerung & Geheimnis-Ersetzung,
 python, Interpreters, Ruff-Bootstrap, Reviewer (Risikoliste, Fehlalarme,
 Antwortformat, Aufbau), MCP (Erkennung, Schlüssel, Geheimnisverdacht,

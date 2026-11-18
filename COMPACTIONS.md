@@ -2009,3 +2009,131 @@ messen, deployen, dokumentieren.
   ist der check-runs-Endpoint.
 - `gh api dependabot/alerts` bestaetigt: Alert 2 = minimatch, medium; identisch
   mit der Remote-Meldung beim Push auf den Default-Branch.
+
+================ Compaction 18.11.2026 / Review-Abgleich ================
+## Objective
+- **Current:** Abgleich des Review-Berichts vom 13.11.2026 gegen den heutigen
+  Code; offene Punkte schliessen und dokumentieren.
+- **Completed:** Bericht im Claude-Transkript gefunden und rekonstruiert, alle
+  zehn Befunde der zweiten Runde am Code nachgestellt, zwei Restpunkte behoben.
+
+## Important Details
+- **Decisions:** Der Bericht ist keine Datei; er liegt als Tool-Ergebnis zweier
+  Hintergrund-Auftraege im Transkript
+  (`~/.claude/projects/C--Users-.../6767ad57-...jsonl`, Zeilen 518 und 557).
+  Er wurde daraus gelesen, nicht neu reviewt. Die Bandpruefung folgt dem
+  repo-eigenen Vorschlag aus der Compaction vom 13.11.: mcp/shell ab 0,5 bis
+  unter 1, secrets ueber 0 bis 0,5. Ungueltige Werte fallen still auf den
+  Default zurueck, wie bei den Umgebungsvariablen schon ueblich. `overrides`
+  aus dem Code bleiben ungeprueft, weil sie nicht aus einer Datei stammen.
+  Punkte 3 und 4 der alten Offen-Liste werden als erledigt berichtet, nicht
+  als "gefixt": sie waren schon vor dieser Session durch spaetere Arbeit weg.
+- **Bug / Finding:** `"shellThreshold": 0` in der Laufzeitkonfiguration hob
+  jede Wahrscheinlichkeit auf `allow`; der zweite Weg (Env-Variablen) hatte
+  dieselbe Luecke. Beide READMEs nannten `chat` als Standard-Backend, obwohl
+  `DEFAULTS` seit 13.11. `systemone` setzt. Die Gegenprobe
+  `echo it's; rm -rf /tmp/x` zeigt keine offene Umgehung: Die statische Liste
+  greift nicht, `guard.js` verweigert trotzdem mit "Pfad nicht bestimmbar".
+- **Architecture:** Keine neuen Abhaengigkeiten, keine Umstrukturierung.
+  `sanitizeThresholds` ist exportiert, damit `test.mjs` das Band direkt pruefen
+  kann, ohne eine lokale `shell-reviewer.config.json` vorauszusetzen (die Datei
+  gibt es im Repo nicht).
+
+## Work State
+### Completed
+- Alle zehn Befunde der Runde 2 geschlossen: `#` in Zeichenketten, `$(…)` und
+  `@(…)` verweigern; `New-Object`, `-M`/`-B`/`-OutF` und `git config --unset`,
+  `git stash -u` fragen nach; `-Target` verweigert.
+- Punkte 3 (Geheimnis-Pfade lesen) und 4 (Projekt-Schreiben) belegt:
+  `.ssh/id_rsa`, `.aws/credentials`, `.env` und `token-count.txt` ergeben `ask`
+  mit statischem Grund; Projekt-Schreibvorgaenge und `git add` sind `allow`.
+- Schwellenband in `reviewer.js` samt Env-Overrides; neun Testfaelle in
+  `test.mjs`; README-Default in beiden Fassungen korrigiert.
+- `CHANGELOG.md`, `PLANUNG.md` und dieser Block sind nachgezogen.
+### Active
+- Gates erneut laufen lassen und Ergebnis berichten; Commit erst auf Anweisung.
+### Blocked
+- Keiner. `bench-model.mjs` und `bench-shell.mjs` brauchen einen laufenden
+  Reviewer (Port 8080) und wurden nicht erneut gemessen.
+
+## Next Move
+1. `node test.mjs`, `node test-wiring.mjs`, `node bench-mcp.mjs` erneut laufen
+   lassen und die Zahlen nennen.
+2. Nutzer entscheidet ueber Commit und Push; der Zweig `main` liegt zwei
+   Commits vor `origin/main`.
+
+## Relevant Files
+- `reviewer.js`: `THRESHOLD_BOUNDS`, `sanitizeThresholds`, `loadConfig`.
+- `test.mjs`: Block `thresholdChecks`, Summe 873 → 882.
+- `README.md`, `README_de.md`: Backend-Tabelle markiert `systemone`.
+- `CHANGELOG.md`, `PLANUNG.md`: Eintrag und Nachtrag 18.11.2026.
+
+## Important Context
+- Restrisiko Zugangsdaten: Dateien ohne Geheimnis-Namen im Pfad erfasst nur die
+  Secrets-Achse des Entscheidungsmodells, nicht die statische Liste.
+- Entscheidungs-Timeout 2000 ms bei einem Server-Slot (`-np 1`) kann unter
+  Last `ask` erzeugen; Nachwaermen ist eingebaut.
+- Der Audit-Anhang liest vor jedem Schreiben neu, ist aber nicht atomar
+  (aus dem Code abgeleitet, nicht gemessen).
+- Fremd im Arbeitsbaum: `review/C--Users-...-permission-guard.lnk`, eine
+  Windows-Verknuepfung von Claude Code; nicht angefasst, nicht versioniert.
+
+================ Compaction 18.11.2026 / 11:40 ================
+## Objective
+- **Current:** Zeilenenden im Guard-Repo auf LF gebracht, Dependabot ergaenzt,
+  Geheimnis-Endungen und Ausnahmen der Schreibfreigabe eingebaut.
+- **Completed:** `.gitattributes` mit Standard `* text=auto eol=lf` und
+  Binaerausnahmen, neue `.editorconfig`, `enable-hooks.ps1` setzt autocrlf/eol,
+  CI-Job `zeilenenden`, `.github/dependabot.yml`, `SECRET_PATHS` erweitert,
+  Schreibfreigabe mit Ausnahmen. Kein Commit, kein Push, kein Deploy.
+
+## Important Details
+- **Decisions:** `* text=auto eol=lf` statt `* text eol=lf`: "text" ohne "auto"
+  haette auch Binaerdateien umgeschrieben. `*.ps1` bleibt LF (PowerShell
+  versteht LF), `*.bat`/`*.cmd`/`*.sln` sind CRLF (cmd.exe). Der CI-Job prueft
+  CRLF deshalb nur bei `eol=lf`. `.git` bleibt `deny` statt `ask`, einfaches
+  Loeschen einer benannten Datei bleibt `allow` (Nutzerentscheid 29.10.2026,
+  drei bestehende Tests) - beides bewusst abweichend von der Auftragsliste.
+- **Bug / Finding:** `git add --renormalize .` schreibt nur den Index. Weil
+  dort schon LF lag, blieb die Arbeitskopie CRLF; erst
+  `staging/normalize-eol.mjs` (einmalig, nicht versioniert) stellte die 14
+  Dateien um. `git restore`/`git reset` sind in dieser Installation statisch
+  verboten, deshalb ist der Index nach dem Auftrag gestaged.
+- **Architecture:** Keine neuen Abhaengigkeiten. Die Ausnahmeliste der
+  Schreibfreigabe (`ASK_ONLY_DIRS`, `ASK_ONLY_FILES`, `writeAskOnly`) sitzt in
+  `guard.js` neben `scopeWrites` und liefert Gruende ohne deny-Praefix, damit
+  `evaluate` daraus `ask` macht. `scopeEdit` (Schreibwerkzeug) blieb unberuehrt.
+
+## Work State
+### Completed
+- Alle Gates am 18.11.2026: `test.mjs` 899/899 (vorher 882),
+  `test-index.mjs` 17/17, `test-wiring.mjs` 13/13, `bench-mcp.mjs` 33/33 und
+  `--change` 33/33, `pytest` 146 bestanden und 1 uebersprungen, Ruff,
+  Ruff-Format und Pyright gruen, `actionlint` ohne Befund.
+- `git ls-files --eol` meldet fuer alle 62 getrackten Dateien `w/lf`.
+### Active
+- Nutzer entscheidet ueber Commit und Push; der Index ist gestaged, zwei neue
+  Dateien (`.editorconfig`, `.github/dependabot.yml`) sind noch untracked.
+### Blocked
+- `bench-shell.mjs` und `bench-model.mjs` brauchen einen laufenden Reviewer und
+  wurden nicht gemessen; ein Serverstart war nicht Teil des Auftrags.
+
+## Next Move
+1. Neue Dateien stagen, committen, pushen (Nutzer).
+2. `bench-shell.mjs` gegen einen laufenden Reviewer messen, wenn die
+   Schreibfreigabe-Liste im Modellpfad geprueft werden soll.
+
+## Relevant Files
+- `.gitattributes`, `.editorconfig`, `.github/workflows/ci.yml`,
+  `.github/dependabot.yml`, `scripts/enable-hooks.ps1`.
+- `guard.js`: `SECRET_PATHS`, `ASK_ONLY_DIRS`, `ASK_ONLY_FILES`,
+  `writeAskOnly`, Aufruf in `scopeWrites`.
+- `test.mjs`: elf Faelle fuer Geheimnis-Endungen und Schreibweisen, sechs fuer
+  die Ausnahmen der Schreibfreigabe.
+- `CHANGELOG.md`, `PLANUNG.md`, `README.md`, `README_de.md`.
+
+## Important Context
+- Der Auftrag verlangte dreizehn neue Testfaelle fuer die Endungen; es gibt
+  acht Endungen, also acht Faelle plus Gegenprobe `keys.txt`.
+- Die CI-Pruefung meldet nur Dateinamen, nie Inhalte, und laeuft auf
+  `ubuntu-latest` ohne Netz.

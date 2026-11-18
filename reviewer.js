@@ -307,10 +307,40 @@ export function neverAutoApprove(raw, extraRisky = []) {
 
 // --- Konfiguration ---------------------------------------------------------
 
+// Schwellen sind die einzige Huerde zwischen Modellurteil und allow: eine Datei
+// mit "shellThreshold": 0 hebt jede Wahrscheinlichkeit auf allow (Befund
+// 13.11.2026). Freigabe verlangt p >= Schwelle (mcp/shell) bzw. p <= Schwelle
+// (secrets), deshalb liegt die Secrets-Grenze auf der anderen Seite. Gueltig ist
+// nur ein Band, in dem das Urteil ueberhaupt etwas traegt; alles andere faellt
+// still auf den Standard zurueck, wie schon bei den Umgebungsvariablen.
+// Uebergebene Werte (`overrides`) bleiben unveraendert: sie stammen aus dem
+// Code, nicht aus einer Datei.
+const THRESHOLD_BOUNDS = {
+  mcpThreshold: (n) => n >= 0.5 && n < 1,
+  shellThreshold: (n) => n >= 0.5 && n < 1,
+  secretsThreshold: (n) => n > 0 && n <= 0.5,
+}
+
+export function sanitizeThresholds(source) {
+  const out = {}
+  if (!source || typeof source !== "object") return out
+  for (const [key, value] of Object.entries(source)) {
+    const allowed = THRESHOLD_BOUNDS[key]
+    if (!allowed) {
+      out[key] = value
+      continue
+    }
+    const n = Number(value)
+    if (Number.isFinite(n) && allowed(n)) out[key] = n
+  }
+  return out
+}
+
 export function loadConfig(overrides = {}) {
   let fromFile = {}
   try {
-    fromFile = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"))
+    // Die Datei ist der einzige vom Benutzer editierbare Weg zu einer Schwelle.
+    fromFile = sanitizeThresholds(JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")))
   } catch {
     // Ohne Datei gelten die Defaults; das Plugin bleibt funktionsfaehig.
   }
@@ -328,12 +358,12 @@ export function loadConfig(overrides = {}) {
   if (env.PERMISSION_GUARD_REVIEWER_BACKEND) config.mcpBackend = env.PERMISSION_GUARD_REVIEWER_BACKEND
   if (env.PERMISSION_GUARD_REVIEWER_THRESHOLD) {
     const n = Number(env.PERMISSION_GUARD_REVIEWER_THRESHOLD)
-    if (Number.isFinite(n) && n > 0 && n < 1) config.mcpThreshold = n
+    if (Number.isFinite(n) && THRESHOLD_BOUNDS.mcpThreshold(n)) config.mcpThreshold = n
   }
   if (env.PERMISSION_GUARD_REVIEWER_SHELL_BACKEND) config.shellBackend = env.PERMISSION_GUARD_REVIEWER_SHELL_BACKEND
   if (env.PERMISSION_GUARD_REVIEWER_SHELL_THRESHOLD) {
     const n = Number(env.PERMISSION_GUARD_REVIEWER_SHELL_THRESHOLD)
-    if (Number.isFinite(n) && n > 0 && n < 1) config.shellThreshold = n
+    if (Number.isFinite(n) && THRESHOLD_BOUNDS.shellThreshold(n)) config.shellThreshold = n
   }
   if (env.PERMISSION_GUARD_GIT_SHADOW === "1" || env.PERMISSION_GUARD_GIT_SHADOW === "shadow") {
     config.gitShadow = "shadow"

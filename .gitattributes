@@ -1,6 +1,23 @@
 # Zeilenenden: Hooks laufen in der Bash und brauchen LF. Quelltext bleibt LF,
 # unabhaengig von core.autocrlf der jeweiligen Maschine. Ohne den Pin schreibt
 # Git bei core.autocrlf=true beim naechsten Checkout CRLF in die Arbeitskopie.
+#
+# Standard fuer alle Dateien, die Git als Text erkennt: LF. "text" ohne "auto"
+# wuerde auch Binaerdateien umschreiben; text=auto prueft vorher auf Nullbytes.
+# Die Ausnahmen darunter decken die Faelle ab, in denen diese Erkennung nicht
+# greift oder eine eigene Endung gewuenscht ist.
+* text=auto eol=lf
+
+# Binaerdateien: unveraendert, kein Diff.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.gguf binary
+*.woff binary
+*.woff2 binary
+
 .githooks/* text eol=lf
 *.js text eol=lf
 *.mjs text eol=lf
@@ -8,6 +25,11 @@
 *.jsonl text eol=lf
 *.md text eol=lf
 *.ps1 text eol=lf
+# cmd.exe braucht CRLF; PowerShell versteht LF. Deshalb bleibt *.ps1 oben bei LF,
+# waehrend Stapeldateien und Loesungsdateien CRLF behalten.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.sln text eol=crlf
 *.py text eol=lf
 *.sh text eol=lf
 *.toml text eol=lf
@@ -15,6 +37,7 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 *.conf text eol=lf
+.editorconfig text eol=lf
 .gitignore text eol=lf
 .gitattributes text eol=lf
 LICENSE text eol=lf

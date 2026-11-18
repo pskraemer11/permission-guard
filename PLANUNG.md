@@ -1,6 +1,6 @@
 # PLANUNG — permission-guard
 
-Stand: 17.11.2026
+Stand: 18.11.2026
 
 ## Wozu dieses Dokument
 
@@ -705,3 +705,55 @@ Belegt: `ruff check`, `ruff format --check`, `pyright`, `pytest`
 `git diff --check` grün; `pip_audit` lokal durchgelaufen.
 
 Der nächste Schritt bleibt der vom Nutzer ausgeführte Commit und Push.
+
+## Nachtrag 18.11.2026: Review-Befunde vom 13.11. abgeglichen
+
+Der Review-Bericht vom 13.11. lag nicht als Datei vor, sondern als Ergebnis
+zweier Hintergrund-Aufträge im Claude-Transkript (Runde 1 mit acht Befunden über
+`b4b5d31..946e7e6`, Runde 2 mit zehn Befunden über `guard.js`, `index.js`,
+`audit.js` und `reviewer.js`). Er wurde daraus rekonstruiert und am heutigen
+Code nachgestellt: Alle zehn Befunde der zweiten Runde sind geschlossen
+(unter anderem `#` in Zeichenketten, `$(…)`/`@(…)`, `New-Object`, `-M`/`-B`/
+`-OutF`, `-Target`, `git config --unset`, `git stash -u`). Punkte 3 und 4 der
+alten Offen-Liste haben sich durch spätere Arbeit erledigt: `guard.js` fragt
+vor dem Lesen bekannter Geheimnis-Pfade nach, und Projekt-Schreibvorgänge sind
+im Fragetext benannt und statisch entschieden.
+
+Offen war die Schwelle: `"shellThreshold": 0` in der Laufzeitkonfiguration hob
+jede Wahrscheinlichkeit auf `allow`. Behoben mit `THRESHOLD_BOUNDS` in
+`reviewer.js` (Bandprüfung auch für die beiden Umgebungsvariablen). Ebenfalls
+korrigiert: Beide READMEs nannten `chat` als Standard-Backend, obwohl der Code
+seit 13.11. `systemone` setzt. Die Fehlaussage in
+`shell-reviewer.config.example.json` („systemone (Standard seit 05.11.2026)")
+bleibt vorerst stehen und ist hier vermerkt.
+
+Belegt: `node test.mjs` 882/882, `node test-wiring.mjs` 13/13 und
+`node bench-mcp.mjs` 33/33 am 18.11.2026. `bench-model.mjs` und
+`bench-shell.mjs` brauchen einen laufenden Reviewer und wurden nicht erneut
+gemessen (letzter Stand 14.11.2026: 14/14 und 23/23).
+
+## Nachtrag 18.11.2026 (Fortsetzung): Zeilenenden, Dependabot, Zugangsdaten
+
+Die Dateiliste zeigte fünfzehn Dateien mit CRLF in der Arbeitskopie, obwohl
+`.gitattributes` sie längst auf LF pinnt. Ursache: Der Pin kam erst mit
+`a655bcb`, die Arbeitskopie stammt aus einem älteren Checkout. `.gitattributes`
+setzt jetzt den Standard `* text=auto eol=lf` und nimmt Binärdateien aus;
+`.editorconfig` beschreibt denselben Stand für Editoren. `*.bat`, `*.cmd` und
+`*.sln` bleiben bewusst CRLF (cmd.exe), `*.ps1` bleibt LF.
+
+Beobachtung zum Vorgehen: `git add --renormalize .` schreibt nur den Index neu.
+Weil dort schon LF lag, blieb die Arbeitskopie unverändert CRLF; erst ein
+einmaliges Skript (nicht versioniert) hat die vierzehn Dateien umgestellt.
+`git ls-files --eol` zeigt danach für alle 62 getrackten Dateien `w/lf`.
+
+Neu außerdem: `.github/dependabot.yml` (pip für `requirements-dev.txt`,
+github-actions, wöchentlich, Grenze 5), die Endungen `*.pem`, `*.key`, `*.ppk`,
+`*.pfx`, `*.p12`, `*.asc`, `*.ovpn` und `*.kdbx` als Geheimnispfade, und die
+Ausnahmen der Schreibfreigabe (`.git/`, `.githooks/`, `.github/`,
+`shell-reviewer.config.json`, `opencode.jsonc` bleiben `ask`).
+
+Belegt am 18.11.2026: `node test.mjs` 899/899, `node test-index.mjs` 17/17,
+`node test-wiring.mjs` 13/13, `node bench-mcp.mjs` 33/33 (auch `--change`),
+`python -m pytest tests -q` 146 bestanden und 1 übersprungen, Ruff, Ruff-Format
+und Pyright grün, `actionlint` ohne Befund. `bench-shell.mjs` wurde nicht
+gemessen: Es braucht einen laufenden Reviewer.

@@ -66,7 +66,7 @@ Both programs live here: the OpenCode plugin (Node) and the Codex guard
 (Python). The tests run separately because the runtimes are separate:
 
 ```powershell
-node test.mjs                     # OpenCode side, 873 cases
+node test.mjs                     # OpenCode side, 899 cases
 python -m pytest tests -q         # Codex side, 146 passed, 1 skipped
 python -m ruff check .            # lint of the Python part
 python -m pyright                 # type check of the Python part
@@ -509,6 +509,7 @@ version is a flag (`--version`), status is provided by `stats`.
 | write target with a wildcard                                                  | `ask`                                           |
 | `Remove-Item` without a target (`Get-ChildItem \| Remove-Item`)               | `deny` (decision 10.11.2026)                    |
 | writing into `<project>\.git`, `~/.config/opencode`, `~/.claude`, `~/.codex`  | `deny` (decision 25.10.2026)                    |
+| writing into `<project>\.githooks`, `<project>\.github`, `opencode.jsonc`     | `ask` (decision 18.11.2026)                     |
 | recursive deletion on the working folder itself                               | `deny` (decision 25.10.2026)                    |
 | `git push`                                                                    | `ask` (static and guard)                        |
 | `git branch -D`, `git checkout .`, `git restore .`                            | `deny` (guard; `branch -D` additionally static) |
@@ -548,7 +549,7 @@ implementation does not affect the other.
 | Model       | yes, level 1/3 for unclear cases via `llama-server`                | no                                                         |
 | Runtime     | inside the OpenCode process, synchronous                           | own process per call, synchronous                          |
 | Failure     | exception is logged; static rules decide                           | hook does not start: Codex reports and lets it run         |
-| Tests       | `node test.mjs` (873 cases)                                        | `python -m pytest tests -q` (146 passed, 1 skipped)        |
+| Tests       | `node test.mjs` (899 cases)                                        | `python -m pytest tests -q` (146 passed, 1 skipped)        |
 
 **Why separate.** Codex has no `ask`; a hook can only deny or let through. The
 Codex part is a narrow catalogue of hard cases; the sandbox covers the rest.
@@ -842,7 +843,7 @@ The index serves pre-selection; our own 18-command set remains authoritative.
 .\start-reviewer.ps1 -ModelPath "D:\…\anderes.gguf" -Port 8081
 .\start-reviewer.ps1 -Cpu -Server "C:\…\llama-server.exe"   # no GPU offload
 node smoke-reviewer.mjs                    # 9 cases against the running configuration
-node test.mjs                              # 873 unit tests
+node test.mjs                              # 899 unit tests
 node test-index.mjs                        # 17 integration cases (fake OpenCode)
 node test-wiring.mjs                       # 13 wiring tests (fake git)
 .\start-reviewer.ps1 -Stop
@@ -1028,10 +1029,10 @@ therefore pinned and protected by tests; changes only with a fresh measurement.
 
 `mcpBackend` selects the path:
 
-| Value            | Path                                                  | Measured (14 grey-area cases)    |
-| ---------------- | ----------------------------------------------------- | -------------------------------- |
-| `chat` (default) | `chat/completions`, answer word via grammar           | 12/14 at 12B, 13/14 at 26B       |
-| `systemone`      | `/v1/systemone`, decision model returns a probability | **14/14** with Clef-Flash, 75 ms |
+| Value                 | Path                                                  | Measured (14 grey-area cases)    |
+| --------------------- | ----------------------------------------------------- | -------------------------------- |
+| `chat`                | `chat/completions`, answer word via grammar           | 12/14 at 12B, 13/14 at 26B       |
+| `systemone` (default) | `/v1/systemone`, decision model returns a probability | **14/14** with Clef-Flash, 75 ms |
 
 In `systemone` mode the prompt disappears: the state is `{tool, arguments}`,
 the question a `choice` between "reads" and "changes", and `mcpThreshold`
@@ -1053,6 +1054,11 @@ changing): allow cases 0.94–0.97, changes 0.02–0.06 — 14/14 at every thres
 from 0.5 to 0.9. With several segments the **weakest** result counts; a
 harmless segment must not mask a writing one. The static `neverAutoApprove`
 filter still runs before it.
+
+Valid values are `mcpThreshold` and `shellThreshold` from 0.5 up to but not
+including 1, and `secretsThreshold` above 0 up to 0.5. `loadConfig` silently
+discards values outside that band and uses the default, so
+`"shellThreshold": 0` no longer approves every probability.
 
 ### Step E: test regime before activation
 
@@ -1206,7 +1212,7 @@ node replay.mjs                # measurement: how many commands run without a pr
 node analyze.mjs               # point-8 analysis: where exactly "not classifiable" comes from
 ```
 
-873 cases in the groups without/with project reference, CLI allowlists, help and
+899 cases in the groups without/with project reference, CLI allowlists, help and
 version, gitleaks, sqlite3/gh, network reads, denial & secret replacement,
 python, interpreters, Ruff bootstrap, reviewer (risk list, false alarms,
 answer format, structure), MCP (detection, keys, secret suspicion, criteria,

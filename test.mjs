@@ -5,7 +5,7 @@ import { summarizeShadow } from "./git-shadow-report.mjs"
 import { shadowPath } from "./shadow.js"
 import { summarizeAudit } from "./mcp-report.mjs"
 import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMcpAnswer, review, reviewMcp, scheduleWarmup, segments, warmup } from "./reviewer.js"
-import { buildShellSystemoneRequest, buildSystemoneRequest, sanitizeArguments, systemoneVerdict } from "./reviewer.js"
+import { buildShellSystemoneRequest, buildSystemoneRequest, sanitizeArguments, sanitizeThresholds, systemoneVerdict } from "./reviewer.js"
 import { parseLine, summarize } from "./stats.mjs"
 import { createHash } from "node:crypto"
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
@@ -78,6 +78,21 @@ const base = [
   ["Remove-Item -Recurse -Force x", "ask"],
   ["Get-ChildItem | Remove-Item", "ask"],
   ["Get-Content .env", "ask"],
+  // Zugangsdaten (18.11.2026): die Bindestrich-Schreibweise "api-key" und die
+  // deutsche Schreibweise "Passwort" deckt der Begriff bereits ab.
+  ["Get-Content .\\api-key.txt", "ask"],
+  ["Get-Content .\\Passwort.txt", "ask"],
+  // Schluessel-, Zertifikats- und Tresordateien: die Endung genuegt.
+  ["Get-Content .\\server.pem", "ask"],
+  ["Get-Content .\\signatur.key", "ask"],
+  ["Get-Content .\\schluessel.ppk", "ask"],
+  ["Get-Content .\\zertifikat.pfx", "ask"],
+  ["Get-Content .\\zertifikat.p12", "ask"],
+  ["Get-Content .\\signatur.asc", "ask"],
+  ["Get-Content .\\profil.ovpn", "ask"],
+  ["Get-Content .\\tresor.kdbx", "ask"],
+  // Gegenprobe: "keys.txt" endet nicht auf ".key" und bleibt lesbar.
+  ["Get-Content .\\keys.txt", "allow"],
   ["Get-Content \"$HOME/.ssh/config\"", "ask"],
   ["Set-Content $HOME/.ssh/authorized_keys \"x\"", "deny"],
   ["echo \"x\" > out.txt", "ask"],
@@ -135,6 +150,15 @@ const scoped = [
   ["New-Item -ItemType Directory -Force -Path \"C:\\p\\build\"", "allow"],
   ["New-Item \"x.md\"", "allow"],
   ["mkdir build", "allow"],
+  // Explizite Freigabe-Liste (18.11.2026): einfaches Erstellen und
+  // Ueberschreiben im Projekt bleibt erlaubt; Hooks, CI-Workflows und die
+  // Konfiguration des Guards sind ausgenommen und bleiben Rueckfrage.
+  ["Set-Content \"C:\\p\\neu.md\" \"x\"", "allow"],
+  ["Set-Content \"C:\\p\\CHANGELOG.md\" \"x\" -Force", "allow"],
+  ["Set-Content \"C:\\p\\.github\\workflows\\x.yml\" \"x\"", "ask"],
+  ["Set-Content \"C:\\p\\.githooks\\pre-commit\" \"x\"", "ask"],
+  ["Set-Content \"C:\\p\\shell-reviewer.config.json\" \"{}\"", "ask"],
+  ["Set-Content \"C:\\p\\opencode.jsonc\" \"{}\"", "ask"],
   // Loeschen (Nutzerentscheid 29.10.2026): Rekursion, "-Force", Platzhalter
   // und Verzeichnisziele werden rueckgefragt. Nur das einfache Loeschen
   // einer benannten Datei im Projekt bleibt erlaubt.
@@ -1492,6 +1516,41 @@ for (const [name, ok] of systemoneChecks) {
 }
 console.log("-- Ebene 3: Entscheidungsmodell\n")
 
+// --- Schwellen aus der Konfigurationsdatei ---
+// Eine Schwelle bei 0 hebt jede Wahrscheinlichkeit auf allow. Die Datei ist der
+// einzige vom Benutzer editierbare Weg dorthin (Befund 13.11.2026).
+const thresholdChecks = []
+{
+  const rejected = sanitizeThresholds({
+    mcpThreshold: 0,
+    shellThreshold: 0.4,
+    secretsThreshold: 0.9,
+    extraRisky: ["x"],
+  })
+  thresholdChecks.push(["Schwelle 0 wird verworfen", !("mcpThreshold" in rejected)])
+  thresholdChecks.push(["Schwelle unter 0,5 wird verworfen", !("shellThreshold" in rejected)])
+  thresholdChecks.push(["Secrets-Schwelle ueber 0,5 wird verworfen", !("secretsThreshold" in rejected)])
+  thresholdChecks.push(["andere Schluessel bleiben erhalten", Array.isArray(rejected.extraRisky) && rejected.extraRisky[0] === "x"])
+
+  const kept = sanitizeThresholds({ mcpThreshold: 0.8, shellThreshold: 0.5, secretsThreshold: 0.5 })
+  thresholdChecks.push([
+    "gueltige Schwellen bleiben",
+    kept.mcpThreshold === 0.8 && kept.shellThreshold === 0.5 && kept.secretsThreshold === 0.5,
+  ])
+
+  const edge = sanitizeThresholds({ mcpThreshold: 1, shellThreshold: "0.7", secretsThreshold: 0 })
+  thresholdChecks.push(["Schwelle 1 wird verworfen", !("mcpThreshold" in edge)])
+  thresholdChecks.push(["Textwert wird zur Zahl", edge.shellThreshold === 0.7])
+  thresholdChecks.push(["Secrets-Schwelle 0 wird verworfen", !("secretsThreshold" in edge)])
+
+  thresholdChecks.push(["kein Objekt ergibt leere Konfiguration", Object.keys(sanitizeThresholds(null)).length === 0])
+}
+for (const [name, ok] of thresholdChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- Schwellen\n")
+
 // --- Aufwaermlauf: Endpunkt folgt dem Backend ---
 const warmupChecks = []
 {
@@ -1997,6 +2056,6 @@ const total =
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
-  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + warmupChecks.length + abortWarmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + reviewBlock.length + pipelineBlocks.length + blockReasons.length + 1 + secretsChecks.length + editCases.length + 2 + 5 + 3 + 3 + 1
+  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + thresholdChecks.length + warmupChecks.length + abortWarmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + reviewBlock.length + pipelineBlocks.length + blockReasons.length + 1 + secretsChecks.length + editCases.length + 2 + 5 + 3 + 3 + 1
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

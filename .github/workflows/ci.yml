@@ -71,6 +71,41 @@ jobs:
           fi
           echo "Keine Benutzerpfade oder Schluessel gefunden."
 
+  zeilenenden:
+    name: Zeilenenden und BOM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Auschecken
+        uses: actions/checkout@v7
+
+      - name: Nur LF und kein BOM in getrackten Textdateien
+        run: |
+          set -euo pipefail
+          fehler=0
+          # `git ls-files -z --eol` nennt je Datei die Endung im Index (i/...) und
+          # in der Arbeitskopie (w/...) sowie die Attribute aus .gitattributes.
+          # -z trennt die Datensaetze mit NUL und schuetzt Dateinamen mit
+          # Leerzeichen vor Anfuehrungszeichen. Die Ausgabe nennt nur den
+          # Dateinamen, nie den Inhalt.
+          # Geprueft wird nur, was .gitattributes auf eol=lf festlegt; *.bat,
+          # *.cmd und *.sln tragen dort bewusst eol=crlf.
+          while IFS=$'\t' read -r -d '' meta datei; do
+            case "$meta" in
+              *eol=lf*)
+                case "$meta" in
+                  i/crlf*|i/mixed*|*" w/crlf"*|*" w/mixed"*)
+                    echo "::error::$datei: CRLF statt LF"; fehler=1; continue;;
+                esac;;
+            esac
+            case "$meta" in
+              *attr/text*)
+                if head -c 3 -- "$datei" | od -An -tx1 | grep -q 'ef bb bf'; then
+                  echo "::error::$datei: BOM am Dateianfang"; fehler=1
+                fi;;
+            esac
+          done < <(git ls-files -z --eol)
+          exit "$fehler"
+
   python:
     name: Python (Python ${{ matrix.python }} / ${{ matrix.os }})
     runs-on: ${{ matrix.os }}

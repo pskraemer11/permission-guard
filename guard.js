@@ -46,6 +46,11 @@ const SECRET_PATHS = [
   [/\bLogin Data\b|\bCookies\b/i, "Browser-Profil"],
   [/\brecovery[-_ ]?codes?\b/i, "Wiederherstellungscodes"],
   [/\bbackup[-_ ]?codes?\b/i, "Backup-Codes"],
+  // Schluessel-, Zertifikats- und Tresordateien (Nutzerentscheid 18.11.2026).
+  // Die Endung benennt den Inhalt: privater Schluessel, Zertifikat, VPN-Profil
+  // oder Passwort-Tresor. Der Punkt vor der Endung und die Trennung danach
+  // halten das Muster eng: "monkey.key" trifft, "keys" nicht.
+  [/\.(pem|key|ppk|pfx|p12|asc|ovpn|kdbx)\b/i, "Schluesseldatei"],
 ]
 
 // Geheimnisbegriffe. Fuer den Check gilt eine eng gefasste Ausnahme
@@ -2009,6 +2014,29 @@ function deniedRoots(base, opts) {
   return denied
 }
 
+// Ziele, die die Schreibfreigabe nicht mitdeckt (Nutzerentscheid 18.11.2026).
+// Hooks, CI-Workflows und die Konfiguration des Guards entscheiden ueber
+// spaetere Pruefungen mit; eine Aenderung dort bleibt deshalb Rueckfrage. Der
+// Grund beginnt bewusst mit keinem deny-Praefix ("ausserhalb des Projekts",
+// "geschuetzter Pfad", "rekursiv auf", "unpruefbar:"), damit evaluate() daraus
+// ein "ask" macht. ".git" steht schon in deniedRoots und bleibt dort "deny";
+// es steht hier nur, damit die Liste vollstaendig lesbar ist.
+const ASK_ONLY_DIRS = new Set([".git", ".githooks", ".github"])
+const ASK_ONLY_FILES = new Set(["shell-reviewer.config.json", "opencode.jsonc"])
+
+// Ein Ziel in einem dieser Ordner oder mit einem dieser Namen liefert den
+// Grund, sonst null. Pfade sind bereits normPath't (klein, ohne Endtrenner).
+function writeAskOnly(abs, base) {
+  if (isUnder(abs, base)) {
+    for (const part of abs.slice(base.length).split("\\")) {
+      if (ASK_ONLY_DIRS.has(part)) return `geschuetzte Ablage ${part}`
+    }
+  }
+  const name = String(abs).split("\\").pop()
+  if (ASK_ONLY_FILES.has(name)) return "Konfigurationsdatei"
+  return null
+}
+
 function scopeWrites(statements, options) {
   const opts = options ?? {}
   const emptyVars = new Map()
@@ -2099,6 +2127,14 @@ function scopeWrites(statements, options) {
       if (!roots.some((root) => isUnder(abs, root)) && !approvedRuffTargets.has(abs)) {
         return { ok: false, reason: `ausserhalb des Projekts: ${abs}` }
       }
+    }
+
+    // Freigabe nur fuer einfache Schreibvorgaenge im Projekt. Hooks, CI-
+    // Workflows und die Konfiguration des Guards sind ausgenommen; sie bleiben
+    // Rueckfrage (Nutzerentscheid 18.11.2026).
+    for (const abs of resolved) {
+      const askWhy = writeAskOnly(abs, base)
+      if (askWhy) return { ok: false, reason: `${askWhy}: ${abs}` }
     }
 
     const flags = deletionFlags(command)

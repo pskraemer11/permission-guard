@@ -1,0 +1,22 @@
+# Versions- und Sicherheitsupdates für CI-Pins und GitHub-Actions.
+#
+# Wirkung nur mit Remote: Dependabot laeuft auf GitHub, nicht lokal. Das ist
+# der Ersatz fuer den nie eingerichteten Task-Scheduler — der Zeitplan steht
+# hier, die Pull-Requests prueft danach derselbe Workflow wie jeder Push.
+#
+# Hinweis zur Erkennung: pip nimmt jede .txt im Wurzelverzeichnis, wenn der
+# Dateiname "requirements" enthaelt. requirements-dev.txt trifft das (Quelle:
+# dependabot-core, python/lib/dependabot/python/shared_file_fetcher.rb).
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

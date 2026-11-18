@@ -1,0 +1,24 @@
+# Editor-Einstellungen fuer dieses Repository. Die Datei beschreibt denselben
+# Stand wie .gitattributes: LF in allen Textdateien, UTF-8 ohne BOM.
+# PowerShell-Skripte behalten vier Leerzeichen Einrueckung; in Markdown werden
+# Leerzeichen am Zeilenende nicht entfernt, weil sie dort Zeilenumbrueche und
+# Tabellenabstaende tragen.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.ps1]
+indent_size = 4
+
+# cmd.exe braucht CRLF; PowerShell bleibt bei LF (siehe .gitattributes).
+[*.{bat,cmd}]
+end_of_line = crlf
+
+[*.md]
+trim_trailing_whitespace = false
