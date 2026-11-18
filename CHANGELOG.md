@@ -490,6 +490,32 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   Abschnitt „Befehlszerlegung und Befehlsstil“ vor „Ebene 1“. Er beschreibt die
   Segmentierung, die Modellprüfung je Segment und die Einordnung der
   Umleitungen. Keine Codeänderung.
+- **Abnahme-Nacharbeiten zur Welle 1 (18.11.2026, acht Blocker):** Bindungen verfallen bei Zuweisung im Kontrollfluss (`if/else/try/...`, sonst bliebe `$p=$x` im Block unsichtbar); `-Headers $h`/`-Headers:$h` bleiben `ask`; die Chat-Darstellung (formatiertes JSON) wird vor dem Limit geschnitten geprueft — je Pfad Systemone und Chat nachgewiesen; erkannte sende-/schreibende Parameter (`-OutFile:`, `gh -f..`, `--basetemp=..`) bleiben `ask` ohne Modellweg (Verdrahtungstest mit permissiver Attrappe); Codex-Hook erkennt `-Recurse:$true` und `rm -rfd`; ein Klammerausdruck im `File::Open`-Argument bleibt `ask`, die Dreiargument-Leseform wieder `allow`; Headerwert `Accept='text/plain;q=0.9'` korrekt geparst; personenbezogener Pfad in `docs/Claude Auto Modus …:571` maskiert (`C:/outside/permission-guard`); beide READMEs nennen 32000 Zeichen statt 16 KB. Gate: `test.mjs` 921/921, `pytest` 149 bestanden und 1 uebersprungen, `test-index` 19/19, `bench-model` 14/14 einstimmig.
+- **2. Abnahme (18.11.2026):** Schleifenvariable einer `foreach`-Zuweisung verfaellt jetzt mit (`$p`-Bindung im Loop, auch `${p}`-Formen); Header-Hashtabellen werden vollstaendig geprueft (`@{Accept='ok';Authorization='demo'}`) und Parameterabkuerzungen (`-He`, `-Head`) erkannt; `File::Open`-Argumente nur exakt als Enum oder Zeichenkettenform anerkannt (kein Suffix-Vergleich); unsichere `File::Open`-Argumente bleiben `ask` ohne Modellweg (Verdrahtungstest mit permissiver Attrappe); `unpruefbar`-Gruende enthalten keine Befehlswerte mehr (Diagnose-Log-Regressionstest, Dummy: 0 Treffer); Codex-Hook erkennt Kurzbuendel beliebiger Laenge (`rm -rffvd`); `test.mjs` nutzt neutralen Pfad `C:/outside/run.py` (CI-Privacy-Scan); Fix-Log-Pfade maskiert. Gate: `test.mjs` 925/925, `test-index` 23/23, `pytest` 149 bestanden und 1 uebersprungen, `bench-model` 14/14 einstimmig.
+- **3. Abnahme (18.11.2026):** Kontrollfluss-Bindungen vollstaendig ungültig (auch `${p}`, innere Schleifenvariablen, Skriptbloecke); `${p}=Schreibbefehl` wird RHS-klassifiziert (deny ausserhalb); Header-Hashtabelle wird dem echten Parameterwert zugeordnet (zitierte URL täuscht sie nicht vor) und numerische Variablen (`$1`) abgelehnt; `File::Open`-Argumente zitatsbewusst zerlegt (Komma im Dateinamen kein Trenner); Codex-Hook erkennt `-irf` und unbekannte rekursive Bündel (deny); Gründe und `commandSummary()` ohne Befehlswerte, Log-Test mit `guardLogDir()` und Positivnachweis. Weg-A-Prinzip: unsicher → `ask` → Reviewer nur bei statischem `ask` → sonst `ask`. Gate: `test.mjs` 932/932, `test-index` 23/23, `pytest` 149 bestanden und 1 uebersprungen, `bench-model` 14/14 einstimmig.
+- **Review-Welle 1, P0-1 bis P0-11 (18.11.2026, Basis `ceb85cf`):** elf belegte
+  Umgehungen geschlossen, je ein Negativtest (P0-8 vier Faelle, je ein Fall je
+  Ordner plus deny-Prioritaet in beiden Reihenfolgen; P0-5 ergaenzte
+  Antworttests). `test.mjs` 913/913, `pytest` 148 bestanden und 1
+  uebersprungen, `bench-mcp` 33/33, `test-wiring` 13/13, `test-index` 17/17,
+  Ruff, Ruff-Format und Pyright gruen; `bench-model` 14/14 und `bench-shell`
+  23/23 einstimmig gegen den laufenden Reviewer gemessen. Details je Befund in
+  `.full-review/fix-log.md`. Im Einzelnen: P0-8 `scopeEdit()` fragt `.githooks`
+  und `.github` wie der Shell-Weg nach (`writeAskOnly`), deny gewinnt
+  unabhaengig von der Zielreihenfolge; P0-5 nur exakt „Ja"/„Yes" (nach Trim,
+  Satzzeichen `.`/`!` am Ende erlaubt, kein Praefix); P0-1 Netz-Parameter am
+  Doppelpunkt wie am Gleichheitszeichen zerlegt; P0-2 `gh api -f/-F/-X`
+  angehaengt als sendend; P0-9 `--basetemp` in allen Formen `ask`; P0-10
+  vertrauliche und unbekannte Header `ask`; P0-3 `[System.IO.File]` nur
+  nachweislich lesend (`Open` nur mit `FileMode::Open` + `FileAccess::Read`);
+  P0-4 Bindungen sequenziell, unaufloesbare Variable `ask` ohne Modellweg;
+  P0-6/P0-7 Codex-Hook: angehaengte Git-Optionen, gebuendelte Schalter
+  (`-rfv`), Abkuerzung (`-Rec`), Array-Ziele, alles `deny`; P0-11 jede
+  Kuerzung/Tiefenbegrenzung ohne Modell `ask` und Grenze 32000 Zeichen
+  (Guard-Oversized 16 KB → 32 KB, Server `-c 32768`). Offen bleiben: P0-5
+  Prompt-Schaerfung (Textvorschlag in `PLANUNG.md`), andere pytest-Optionen
+  als `--basetemp` (nicht bewiesen, eigene Probe noetig), Shell-Pfad von
+  P1-03 (nur Edit-Pfad geschlossen).
 
 ## [0.1.0] - 2026-11-05
 

@@ -156,6 +156,9 @@ def inner_text(parts: list[str]) -> str:
     return " ".join(rest)
 
 
+GIT_FLAGS_WITH_VALUE_PREFIXES = tuple(f"{name}=" for name in GIT_FLAGS_WITH_VALUE if name.startswith("--"))
+
+
 def git_subcommand(parts: Iterable[str]) -> tuple[str, list[str]] | None:
     """Liefert (Unterkommando, Rest) fuer eine git-Tokenfolge."""
     rest = list(parts)
@@ -168,6 +171,13 @@ def git_subcommand(parts: Iterable[str]) -> tuple[str, list[str]] | None:
         token = rest[index]
         if token in GIT_FLAGS_WITH_VALUE:
             index += 2
+            continue
+        # Angehängte Formen: "-C<wert>", "-c<wert>" und "--git-dir=<wert>".
+        if token.startswith(("-C", "-c")) and token not in {"-C", "-c"} and len(token) > 2:
+            index += 1
+            continue
+        if token.startswith(GIT_FLAGS_WITH_VALUE_PREFIXES):
+            index += 1
             continue
         if token in GIT_FLAGS_PLAIN:
             index += 1
@@ -286,6 +296,56 @@ def is_robocopy_mirror(parts: list[str]) -> bool:
     return any(token.lower().lstrip("/-") == "mir" for token in parts[1:])
 
 
+def is_recursive_token(token: str) -> bool:
+    """Prueft ein Schaltertoken auf Rekursion.
+
+    Gebuendelte POSIX-Kurzflags ("-rfv", "-rfd"), exakte Langformen und
+    eindeutige PowerShell-Abkuerzungen ("-Rec" ist nur Praefix von
+    "-Recurse"). Ein angehaengter Wert ("-Recurse:$true") gehoert nicht zum
+    Schaltnamen. "-Force" ist kein Rekursionsschalter und bleibt aussen vor.
+    """
+    lower = token.lower()
+    name = lower.split(":", 1)[0].split("=", 1)[0]
+    if name in RECURSIVE_FLAGS:
+        return True
+    if name.startswith("--") or not name.startswith("-"):
+        return False
+    stripped = name[1:]
+    if "recurse".startswith(stripped):
+        return True
+    # Gueltige Kurzbuendel beliebiger Laenge ("-rffvd", "-rdf", "-irf"):
+    # jedes Zeichen muss ein bekannter POSIX-Schalter sein; "i"/"I"
+    # (interaktiv) gehoert dazu. Ein unbekannter Buchstabe im Buendel
+    # bleibt fail closed (deny weiter unten in decide).
+    return stripped.isalpha() and "r" in stripped and all(char in "rfvqdIi" for char in stripped)
+
+
+def has_unknown_recursive_bundle(parts: list[str]) -> bool:
+    """Meldet ein Kurzbuendel mit Rekursion, das nicht vollstaendig bekannt ist.
+
+    Gilt nur fuer die POSIX-artigen Loeschbefehle (rm/ri/rmdir/rd/del/erase):
+    bei Remove-Item (PowerShell) wuerde ein langes Parameternwort wie
+    -Force sonst als unbekanntes Buendel gelesen.
+    """
+    if not parts:
+        return False
+    name = parts[0].lower().removesuffix(".exe")
+    if name not in {"rm", "ri", "rmdir", "rd", "del", "erase"}:
+        return False
+    for token in parts[1:]:
+        flag = token.lower().split(":", 1)[0].split("=", 1)[0]
+        if flag.startswith("--") or not flag.startswith("-"):
+            continue
+        stripped = flag[1:]
+        if not stripped or stripped == "r":
+            continue
+        if "recurse".startswith(stripped):
+            continue
+        if stripped.isalpha() and "r" in stripped and not all(char in "rfvqdIi" for char in stripped):
+            return True
+    return False
+
+
 def is_mass_deletion(parts: list[str], root: Path | None, relative_ok: bool) -> bool:
     """Prueft, ob rekursiv geloescht wird, ohne freigegebenes Ziel."""
     if not parts:
@@ -294,12 +354,14 @@ def is_mass_deletion(parts: list[str], root: Path | None, relative_ok: bool) -> 
     if name not in DELETE_COMMANDS:
         return False
     flags = {part.lower() for part in parts[1:]}
-    recursive = bool(flags & RECURSIVE_FLAGS) or SHELL_RECURSIVE in flags
+    recursive = any(is_recursive_token(part) for part in parts[1:]) or SHELL_RECURSIVE in flags
     if not recursive:
         return False
     # Schalter der Windows-Shell (/s, /q) sind keine Ziele; ein absolutes
     # POSIX-Ziel wie /etc dagegen schon (Review 17.11.2026).
-    targets = [part for part in parts[1:] if not part.startswith("-") and not PATH_FLAG.match(part)]
+    raw_targets = [part for part in parts[1:] if not part.startswith("-") and not PATH_FLAG.match(part)]
+    # Array-Ziele ("staging/x,src") sind mehrere Ziele in einem Token.
+    targets = [piece for part in raw_targets for piece in part.split(",") if piece.strip()]
     if not targets:
         return True
     roots = delete_roots(root)
@@ -321,7 +383,7 @@ def segment_reason(parts: list[str], root: Path | None, relative_ok: bool) -> st
         return REASON_HISTORY
     if is_robocopy_mirror(parts):
         return REASON_MIRROR
-    if is_mass_deletion(parts, root, relative_ok):
+    if is_mass_deletion(parts, root, relative_ok) or has_unknown_recursive_bundle(parts):
         return REASON_DELETE
     return None
 

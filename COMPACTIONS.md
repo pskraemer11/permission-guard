@@ -2210,3 +2210,115 @@ messen, deployen, dokumentieren.
 ## Important Context
 - `review/` und `staging/` bleiben ungetrackt und gehoeren nicht in den Commit.
 - Profile-Daten: Lock-Diff 850 Zeilen nach `npm install` (transitive Kette), `git ls-files --eol` bleibt der EOL-Nachweis.
+
+## Nachtrag 18.11.2026: Welle 1 (P0-1 bis P0-11)
+
+**Warum:** Die Voll-Review (`.full-review/05-final-report.md`, Basis `ceb85cf`)
+hat elf belegte Wege gezeigt, auf denen ein schreibender oder sendender
+Befehl ohne Rueckfrage durchging. Der Auftrag war die Welle 1 als Ganzes,
+mit den Nutzerentscheiden (P0-5 nur exakt „Ja"/„Yes"; P0-9 nur `--basetemp`;
+P0-11 zweistufig mit 32k-Grenze und Servermessung; P1-03 nur als
+Edit-Vorbedingung).
+
+**Was gilt jetzt:**
+- Edit-Weg und Shell-Weg pruefen dieselben Schutzordner (`.githooks`,
+  `.github` bleiben `ask`); deny gewinnt im Edit-Pfad unabhaengig von der
+  Zielreihenfolge.
+- Modellfreigabe nur bei exakt „Ja"/„Yes" (Satzzeichen `.`/`!` am Ende
+  erlaubt, kein Praefix). Urteil `ask` aus Addition unaufloesbarer Variablen
+  erreicht das Modell nie.
+- Netz-, gh-, pytest- und Header-Pruefung arbeiten auf Parameterebene
+  (Doppelpunkt-Form, angehaengte Kurzflags, `--basetemp`, vertrauliche Header).
+- `[System.IO.File]` ist nur mit nachweislich lesenden Methoden frei; die
+  4-Argument-Leseform (`FileMode::Open`, `FileAccess::Read`) bleibt erlaubt.
+- Variablenbindungen gelten sequenziell; ein spaeterer Wert heilt keinen
+  frueheren Gebrauch.
+- Codex-Hook erkennt angehaengte Git-Optionen, gebuendelte Schalter,
+  PowerShell-Abkuerzungen und Array-Ziele.
+- Gekuerzte oder zu tiefe MCP-Argumente fragen ohne Modell nach; Textgrenze
+  32000 Zeichen, Server-Kontext 32768.
+
+**Messung (18.11.2026, gelaufener Reviewer):** `node test.mjs` 913/913,
+`node test-wiring.mjs` 13/13, `node bench-mcp.mjs` 33/33,
+`node test-index.mjs` 17/17, `pytest` 148 bestanden und 1 uebersprungen,
+Ruff, Ruff-Format, Pyright gruen; `bench-model` 14/14 und `bench-shell`
+23/23 einstimmig. Testserver auf 8081 mit `-c 32768` lief (`/health` ok,
+2000-Zeichen-Anfrage 252 ms, bereitgestellt 6125 MiB); Eingaben ab etwa
+4000 Zeichen scheitern aber am physischen Stapel (ubatch 1024) und fallen
+damit auf `ask` zurueck (fail closed). Prod-Server 8080 neu zu starten war
+nicht beauftragt (kein Deploy); die Stapel-Anhebung bleibt ein eigener,
+zu messender Schritt. Vollstaendige Nachweise je Befund in
+`.full-review/fix-log.md`.
+
+**Offen:** P0-5 Prompt-Schaerfung (nur Textvorschlag mit Messauftrag in
+`PLANUNG.md`), andere pytest-Optionen als `--basetemp` (nicht bewiesen),
+Shell-Pfad von P1-03. Nichts committet (Auftrag); Deploy bleibt beim Nutzer.
+
+## Next Move
+1. Freigabe abwarten, dann committen (Doku und Fix-Log sind im Arbeitsbaum).
+2. P0-5-Prompt und Stapel-Anhebung als eigene Aufträge mit Messung
+   (`bench-shell`/`bench-model` vorher/nachher).
+
+## Nachtrag 18.11.2026: 2. Abnahme (acht Befunde)
+
+**Was galt zuletzt:** Acht Punkte aus der 2. Abnahme, alle im Arbeitsbaum:
+`foreach`-Schleifenvariable verfaellt wie Kontrollfluss-Zuweisungen
+(inklusive `${p}`-Formen); Header-Hashtabellen vollstaendig (alle
+Schluessel) und Parameterabkuerzungen (`-He`, `-Head`) erkannt;
+FileMode/FileAccess nur exakt als Enum oder Zeichenkettenform; unsichere
+`File::Open`-Argumente ohne Modellweg; `unpruefbar`-Gruende ohne
+Befehlswerte (Diagnose-Log-Regressionstest); Codex-Kurzbuendel beliebiger
+Laenge; `test.mjs` CI-Pfad neutral; Fix-Log maskiert.
+
+**Gate (18.11.2026):** `node test.mjs` 925/925, `node test-wiring.mjs` 13/13,
+`node bench-mcp.mjs` 33/33, `node test-index.mjs` 23/23 (isoliertes Temp),
+`pytest` 149 bestanden und 1 uebersprungen, Ruff, Ruff-Format, Pyright
+gruen; `bench-model` 14/14 einstimmig (llama-server 8080 lief, Health 200).
+Nichts committet; der ubatch-Stand (LMS-Test, Modell-33/33, llama-server
+mit zweiter Instanz nicht startbar) gilt unveraendert.
+
+**Weg A (18.11.2026):** Unsicher → `ask` → Reviewer (nur wenn statisch
+`ask`) → sonst `ask`. Das ist das Prinzip dieser Runde; weitere
+Spezial-Suffixe werden nicht angehaengt. Weg B (Sandbox-ADR) bleibt ein
+eigener Schritt im PLANUNG-Nachtrag vom 18.11.2026 und wird nicht umgesetzt.
+
+## Nachtrag 18.11.2026: 3. Abnahme (sieben Befunde)
+
+**Was gilt jetzt zusaetzlich:** Kontrollfluss-Bindungen vollstaendig
+ungültig (auch `${p}`, innere Schleifenvariablen, Skriptbloecke);
+`${p}=Schreibbefehl` wird RHS-klassifiziert; Header-Hashtabelle dem echten
+Parameterwert zugeordnet (zitierte URL verdeckt sie nicht), numerische
+Variablen abgelehnt; `File::Open`-Argumente zitatsbewusst zerlegt; Codex
+erkennt `-irf` und unbekannte rekursive Bündel; `unpruefbar`-Gründe und
+`commandSummary()` ohne Befehlswerte; Log-Test mit `guardLogDir()` und
+positivem Schreibnachweis.
+
+**Gate (18.11.2026):** `node test.mjs` 932/932, `node test-wiring.mjs` 13/13,
+`node bench-mcp.mjs` 33/33, `node test-index.mjs` 23/23 (isoliertes Temp),
+`pytest` 149 bestanden und 1 uebersprungen, Ruff, Ruff-Format, Pyright
+gruen; `bench-model` 14/14 einstimmig. Details in `.full-review/fix-log.md`.
+
+## Nachtrag 18.11.2026: Abnahme-Nacharbeiten (acht Blocker)
+
+**Warum:** Die Abnahme hat die Welle 1 nicht abgenommen (FAIL): acht Punkte
+- drei davon kritisch mit Umgehung (`if`-Bindung, `-Headers $h`,
+  Chat-Kuerzung), ein kritischer Modell-Hebel (`nicht einordenbar` gab
+  erkannte Parameter an das Modell), Codex-Switches mit Wert, ein
+  Klammerausdruck im Dateizugriff, ein personenbezogener Pfad in den
+  geaenderten `docs/`, falsche 16-KB-Aussage in den READMEs.
+
+**Was gilt jetzt zusaetzlich:** Bindungen verfallen bei Zuweisung im
+Kontrollfluss; `-Headers` als Variable bleibt `ask`; die versandte
+Chat-Darstellung wird vor dem Abschneiden geprueft (je Pfad nachgewiesen);
+erkannte sende-/schreibende Parameter bleiben `ask` ohne Modellweg;
+`-Recurse:$true` und `rm -rfd` erkennt der Codex-Hook; Klammerausdruck im
+`File::Open`-Argument bleibt `ask`; `Accept='text/plain;q=0.9'` bleibt
+lesend; `docs/Claude Auto Modus …:571` nennt `C:/outside/permission-guard`;
+beide READMEs nennen 32000 Zeichen (JSON).
+
+**Gate (18.11.2026):** `node test.mjs` 921/921, `node test-wiring.mjs` 13/13,
+`node bench-mcp.mjs` 33/33, `node test-index.mjs` 19/19 (isoliertes Temp),
+`pytest` 149 bestanden und 1 uebersprungen, Ruff, Ruff-Format, Pyright
+gruen; `bench-model` 14/14 einstimmig (Reviewer lief). Details je Blocker in
+`.full-review/fix-log.md`. Nichts committet; der ubatch-Stand aus dem
+Vornachtrag gilt unveraendert (Messung nicht ausgefuehrt).

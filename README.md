@@ -66,8 +66,8 @@ Both programs live here: the OpenCode plugin (Node) and the Codex guard
 (Python). The tests run separately because the runtimes are separate:
 
 ```powershell
-node test.mjs                     # OpenCode side, 899 cases
-python -m pytest tests -q         # Codex side, 146 passed, 1 skipped
+node test.mjs                     # OpenCode side, 932 cases
+python -m pytest tests -q         # Codex side, 149 passed, 1 skipped
 python -m ruff check .            # lint of the Python part
 python -m pyright                 # type check of the Python part
 ```
@@ -549,7 +549,7 @@ implementation does not affect the other.
 | Model       | yes, level 1/3 for unclear cases via `llama-server`                | no                                                         |
 | Runtime     | inside the OpenCode process, synchronous                           | own process per call, synchronous                          |
 | Failure     | exception is logged; static rules decide                           | hook does not start: Codex reports and lets it run         |
-| Tests       | `node test.mjs` (899 cases)                                        | `python -m pytest tests -q` (146 passed, 1 skipped)        |
+| Tests       | `node test.mjs` (932 cases)                                        | `python -m pytest tests -q` (149 passed, 1 skipped)        |
 
 **Why separate.** Codex has no `ask`; a hook can only deny or let through. The
 Codex part is a narrow catalogue of hard cases; the sandbox covers the rest.
@@ -843,8 +843,8 @@ The index serves pre-selection; our own 18-command set remains authoritative.
 .\start-reviewer.ps1 -ModelPath "D:\…\anderes.gguf" -Port 8081
 .\start-reviewer.ps1 -Cpu -Server "C:\…\llama-server.exe"   # no GPU offload
 node smoke-reviewer.mjs                    # 9 cases against the running configuration
-node test.mjs                              # 899 unit tests
-node test-index.mjs                        # 17 integration cases (fake OpenCode)
+node test.mjs                              # 932 unit tests
+node test-index.mjs                        # 23 integration cases (fake OpenCode)
 node test-wiring.mjs                       # 13 wiring tests (fake git)
 .\start-reviewer.ps1 -Stop
 ```
@@ -924,7 +924,7 @@ Catalogue rules:
 - Target kinds come from the **shape** (`https://…` → `url`, `C:\…` → `path`)
   and only then from the field name. Nested arguments (e.g.
   `files: [{ path }]`) are counted to depth 3.
-- Large arguments (> 16 KB) count as `unanalysierbar` — separate from
+- Large arguments (more than 32000 characters as JSON) count as `unanalysierbar` — separate from
   "destructive", so that a size limit is never mistaken for a finding.
 - Argument values do not leave the function; the log holds only field names,
   target kinds and counts.
@@ -944,7 +944,7 @@ applies. Both are pure and testable without a backend.
 
 Order and limits:
 
-- **`unanalysierbar` first.** Arguments above 16 KB yield `ask`, even if tool or
+- **`unanalysierbar` first.** Arguments above 32000 characters (as JSON) yield `ask`, even if tool or
   text looked destructive — a size limit is not a finding.
   Then the emergency brake, then secret suspicion, then empty arguments.
 - **Intent comes from the tool name; arguments may only sharpen it.** A field
@@ -1000,7 +1000,7 @@ The local model receives exactly two messages: a system message with the
 decision rule and a user message with three channels
 (`TRUSTED-USER-INTENT`, `UNTRUSTED-PENDING-ACTION`, `UNTRUSTED-RECENT-TOOLS`).
 It sees tool name, intent, target kinds and the arguments as JSON; cases with
-secret suspicion or more than 16 KB of arguments never reach it. The answer is
+secret suspicion or more than 32000 characters of arguments never reach it. The answer is
 restricted by a grammar to `Ja` or `Nein` (`root ::= "Ja" | "Nein"`),
 `max_tokens` 8, `temperature` 0, timeout 2500 ms.
 
@@ -1109,7 +1109,7 @@ from "Two backends for level 3" applies.
 - **MCP `sync` is writing:** `sync` and `sync_status` prompt.
 - **404 on `/systemone`:** A backend without this protocol (LM Studio, chat
   GGUF) gets the decision via the chat path.
-- **Arguments:** channel tags neutralised, texts limited to 8000 characters.
+- **Arguments:** channel tags neutralised, texts limited to 32000 characters. Any truncation, depth limit or dropped field prompts without a model call (fail closed).
 - **Shell time budget:** one budget for all segments together.
 - **Warm-up:** both paths with mixed backends.
 - **Audit:** re-read state before every append (two plugin instances).
@@ -1205,14 +1205,14 @@ node test.mjs
 node test-wiring.mjs            # fake git: deny prevents execution
 node test-index.mjs             # plugin wiring
 node bench-mcp.mjs              # 33 fixed MCP cases
-python -m pytest tests -q      # Codex guard, 146 passed, 1 skipped
+python -m pytest tests -q      # Codex guard, 149 passed, 1 skipped
 python -m ruff check .         # Python lint
 python -m pyright              # Python type check
 node replay.mjs                # measurement: how many commands run without a prompt
 node analyze.mjs               # point-8 analysis: where exactly "not classifiable" comes from
 ```
 
-899 cases in the groups without/with project reference, CLI allowlists, help and
+932 cases in the groups without/with project reference, CLI allowlists, help and
 version, gitleaks, sqlite3/gh, network reads, denial & secret replacement,
 python, interpreters, Ruff bootstrap, reviewer (risk list, false alarms,
 answer format, structure), MCP (detection, keys, secret suspicion, criteria,

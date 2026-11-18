@@ -146,6 +146,44 @@ def test_allows(command: str) -> None:
     assert guard.first_reason(command) is None
 
 
+def test_git_global_options_attached_forms_block() -> None:
+    """P0-6: angehaengte globale Git-Optionen duerfen Verbote nicht umgehen."""
+    for command in (
+        "git --git-dir=.git reset --hard HEAD",
+        "git -C. push",
+        "git -C./ push",
+        "git --work-tree=.git push",
+    ):
+        assert guard.first_reason(command) is not None, command
+
+
+def test_bundled_and_abbreviated_delete_flags_block() -> None:
+    """P0-7: gebuendelte und abgekuerzte Schalter plus Array-Ziele."""
+    for command in (
+        "rm -rfv src",
+        "Remove-Item -Rec src",
+        "Remove-Item -Recurse staging/x,src",
+    ):
+        assert guard.first_reason(command) is not None, command
+
+
+def test_hook_json_denies_parameter_and_bundled_delete_forms() -> None:
+    """Abnahme Blocker 5: Hook-JSON auf stdin, Exit 0 und deny-Entscheidung."""
+    for command in ("Remove-Item -Recurse:$true src", "rm -rfd src", "rm -rffvd src", "rm -irf src"):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT)],
+            input=json.dumps({"tool_name": "Bash", "tool_input": {"command": command}}),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0
+        decision = json.loads(result.stdout)
+        output = decision["hookSpecificOutput"]
+        assert output["permissionDecision"] == "deny"
+        assert output["permissionDecisionReason"] == guard.REASON_DELETE
+
+
 def test_reason_matches_category() -> None:
     assert guard.first_reason("git push") == guard.REASON_PUSH
     assert guard.first_reason("git reset --hard") == guard.REASON_HISTORY

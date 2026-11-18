@@ -819,3 +819,104 @@ einstimmig, Projekt-Schreib-Fälle ohne Regression. Der Watchdog- und
 Reviewer-Start steht über die vorhandenen geplanten Aufgaben
 (`permission-guard reviewer` bei Anmeldung, `watchdog` alle 5 Minuten)
 und über `ensureRunning` beim Plugin.
+
+## Nachtrag 18.11.2026: Review-Welle 1 (P0-1 bis P0-11) umgesetzt
+
+Alle elf P0-Befunde aus `.full-review/05-final-report.md` (Basis `ceb85cf`)
+sind am aktuellen Code nachgestellt und geschlossen. Jede Änderung hat einen
+Negativtest (P0-8: vier Faelle, je ein Ordner plus deny-Prioritaet in beiden
+Reihenfolgen; P0-5: ergaenzte Antworttests). Details je Befund mit
+Vorher/Nachher, Testname und Gate in `.full-review/fix-log.md`. Gateway:
+`node test.mjs` 913/913, `node test-wiring.mjs` 13/13, `node bench-mcp.mjs`
+33/33, `node test-index.mjs` 17/17, `python -m pytest tests -q` 148
+bestanden und 1 uebersprungen, `ruff check`, `ruff format --check` und
+`pyright` (0 Fehler) gruen; gegen den laufenden Reviewer gemessen:
+`bench-model.mjs --repeat 3` 14/14, `bench-shell.mjs --repeat 3` 23/23, je
+einstimmig.
+
+Gueltige Lesart (Nutzerentscheid, umgesetzt): P0-5 gibt nur exakt „Ja"/„Yes"
+nach Trim frei; ein Satzzeichen `.` oder `!` am Ende zaehlt als Satzzeichen,
+nicht als Zusatzaussage; jeder Zusatz (Komma, zweites Wort) bleibt
+Rueckfrage. P0-11 fragt bei jeder Kuerzung, Tiefenbegrenzung oder
+ausgelassenen Feldgruppe ohne Modell nach; die Textgrenze ist 32000 Zeichen
+(Guard, beide Modellpfade), der Server-Kontext 32768.
+
+Naechste Schritte (nicht umgesetzt, bewusst zurueckgestellt):
+- **P0-5 Prompt-Schaerfung (Textvorschlag, nicht im Code):** Die Shell-Frage
+  fragt heute „Is this command safe to run without asking the user?" mit
+  Ja-Gruenden zuerst. Vorschlag: Kriterien statt „harmlos?" — die Antwort
+  soll nur bei nachweislich nur-lesendem oder nur-projektintern-schreibendem
+  Befehl „Ja" lauten, bei jeder Unsicherheit „Nein"; dazu zwei Negativ-
+  Beispiele im Prompt (Verwenden-gesendeter Schlüssel, Pfad ausserhalb).
+  Messauftrag: `bench-shell.mjs --repeat 3` (23 Faelle) und `bench-model.mjs
+  --repeat 3` (14 Faelle) vorher/nachher, plus Replay-Vergleich der
+  Fehlfreigaben; erst bei nicht-schlechterer Trennung uebernehmen.
+- **P0-9 offen:** nur `--basetemp` wurde geschlossen (getrennt, `=`, `:`).
+  Andere pytest-Optionen mit Schreibwirkung (z. B. `-o`, `--junit-xml`,
+  `--html`, `-p no:cacheprovider` u. a.) sind nicht bewiesen und brauchen
+  eine eigene Probe, bevor irgendetwas geraten wird.
+- **P1-03 offen (Shell-Pfad):** deny gewinnt jetzt im Edit-Pfad unabhaengig
+  von der Zielreihenfolge; der analoge Shell-Pfad bleibt als offen vermerkt.
+- **P0-11 Server-Stapel:** Testserver auf Port 8081 mit `-c 32768` beladen
+  (Modell laeuft, `/health` ok, 2000-Zeichen-Anfrage in 252 ms). Eingaben ab
+  etwa 4000 Zeichen scheitern am physischen Stapel (ubatch 1024, „input
+  ... is too large to process"); der Reviewer antwortet darauf mit `ask`
+  (fail closed), aber ein grosses Argument faellt damit praktisch auf
+  Rueckfrage zurueck. Eine Stapel-Anhebung (`-ub`) war nicht beauftragt und
+  bleibt ein eigener, zu messender Schritt; der produktive Server auf 8080
+  wurde nicht neu gestartet (kein Deploy).
+
+## Nachtrag 18.11.2026: Abnahme-Nacharbeiten (acht Blocker)
+
+Die Abnahme war FAIL; alle acht Blocker und zwei kleine Punkte sind im
+Arbeitsbaum behoben (je Probe-rot → Fix → gruen; Nachweise in
+`.full-review/fix-log.md`). Gate: `node test.mjs` 921/921,
+`node test-wiring.mjs` 13/13, `node bench-mcp.mjs` 33/33,
+`node test-index.mjs` 19/19 (isoliertes Temp), `pytest` 149 bestanden und
+1 uebersprungen, Ruff, Ruff-Format, Pyright gruen; `bench-model` 14/14
+einstimmig. Beide READMEs nennen jetzt 32000 Zeichen (JSON) statt 16 KB.
+
+Beobachtung (kein P0, kuenftiger Schritt, nicht ohne Auftrag umsetzen):
+OpenCode begrenzt Werkzeug-Ergebnisse ueber `tool_output {max_lines,
+max_bytes}` in der Konfiguration — das betrifft die Ausgabeseite nach der
+Ausfuehrung, nicht die P0-11-Eingabekuerzung der Argumente auf der
+Eingabeseite vor der Ausfuehrung. Ob die Ausgabegrenze als zusaetzliche
+Grenz-Markierung (Schritt G) genutzt werden kann, ist ein eigener
+Entscheidungsauftrag.
+
+## Nachtrag 18.11.2026: 2. Abnahme (acht Befunde)
+
+Alle acht Befunde im Arbeitsbaum geschlossen (Nachweise in
+`.full-review/fix-log.md`). Gate: `node test.mjs` 925/925,
+`node test-wiring.mjs` 13/13, `node bench-mcp.mjs` 33/33,
+`node test-index.mjs` 23/23 (isoliertes Temp), `pytest` 149 bestanden und
+1 uebersprungen, Ruff, Ruff-Format, Pyright gruen; `bench-model` 14/14
+einstimmig (llama-server 8080 lief, Health 200).
+
+Weiter offen (nicht umgesetzt): P0-5-Prompt-Schaerfung (Textvorschlag mit
+Messauftrag aus dem vorherigen Nachtrag); andere pytest-Optionen ausser
+`--basetemp`; P1-03-Shell-Pfad. Zur 32k-Grenze gilt: die
+Modell-Verarbeitung grosser Eingaben ist nicht zugesagt — der
+standalone-Server mit zweiter Instanz startete mit `-ub 8192` gar nicht
+(CUDA-Graphen-Fehler), LM Studio verarbeitet sie (andere Version);
+fail closed (`ask`) bleibt die Zusage. Beobachtung zum Modell: eine
+MMProj-Datei (~900 MB) taucht im Modell-Setup auf — ob Vision-
+_MMProj für Clef-Flash noetig oder falsch verdrahtet ist, ist offen und
+kein Code-Eingriff ohne Auftrag.
+
+## Nachtrag 18.11.2026: 3. Abnahme (sieben Befunde, Weg A)
+
+Prinzip dieser Runde: unsicher → `ask` → Reviewer (nur wenn statisch
+`ask`) → wenn Reviewer unsicher → `ask` (fail closed). Erkennbar
+gefährliche Parameter (z. B. bekannte Schreib-Header, falsche FileMode)
+bleiben `unpruefbar` ohne Modellweg. Details in `.full-review/fix-log.md`.
+Gate: `node test.mjs` 932/932, `node test-wiring.mjs` 13/13,
+`node bench-mcp.mjs` 33/33, `node test-index.mjs` 23/23 (isoliertes Temp),
+`pytest` 149 bestanden und 1 uebersprungen, Ruff, Ruff-Format, Pyright
+gruen; `bench-model` 14/14 einstimmig.
+
+**MORGEN-Schritt (Weg B, NICHT umgesetzt):** Sandbox-ADR als eigener
+Entscheidungsauftrag. Ziel: weniger `ask` bei gleicher fail-closed-
+Härte. Messung vorher/nachher: Rate der Rückfragen
+(`replay.mjs --all`, `stats.mjs`) und Gate 7/7 gruen. Erst nach
+ARC-Auftrag umsetzen; die P0-Fixes bleiben davon unberuehrt.

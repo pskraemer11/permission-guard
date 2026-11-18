@@ -53,7 +53,7 @@ function loadCases() {
       if (item[field] === undefined) throw new Error(`Zeile ${index + 1}: Feld ${field} fehlt`)
     }
     if (!(item.want in WANT_LABEL)) throw new Error(`Zeile ${index + 1}: unbekanntes Soll ${item.want}`)
-    if (item.input && item.input.body === OVERSIZED) item.input = { ...item.input, body: "x".repeat(20000) }
+    if (item.input && item.input.body === OVERSIZED) item.input = { ...item.input, body: "x".repeat(40000) }
     cases.push(item)
   }
   return cases

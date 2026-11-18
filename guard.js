@@ -294,6 +294,68 @@ function firstToken(statement) {
   return m ? m[1] : ""
 }
 
+// [System.IO.File] nur fuer nachweislich lesende Methoden. "Open" ist nur
+// mit FileMode::Open und FileAccess::Read lesend; die 2-Argument-Form
+// (File::Open mit FileMode) gibt ReadWrite und bleibt Rueckfrage, ebenso
+// Create/Append/Truncate und jede unbekannte Methode (z. B. AppendText).
+const FILE_READ_METHODS = new Set(["readalltext", "readallbytes", "readalllines", "exists", "openread"])
+
+function fileOpenIsReadOnly(s) {
+  const openParen = s.indexOf("(")
+  const closeParen = s.lastIndexOf(")")
+  if (openParen < 0 || closeParen <= openParen) return false
+  // Zitatsbyewusst zerlegen: ein Komma in einer Zeichenketten-Datei
+  // ("C:/outside/a,'Open','Read',b.txt") ist Teil des Namens, kein Trenner.
+  const args = []
+  let depth = 0
+  let current = ""
+  let quote = null
+  for (let k = 0; k < s.slice(openParen + 1, closeParen).length; k++) {
+    const ch = s[openParen + 1 + k]
+    if (quote) {
+      current += ch
+      if (quote === '"' && ch === "`") {
+        if (openParen + 1 + k + 1 < closeParen) current += s[++k]
+        continue
+      }
+      if (ch === quote) {
+        if (openParen + 1 + k + 1 < closeParen && s[openParen + 1 + k + 1] === quote) current += s[++k]
+        else quote = null
+      }
+      continue
+    }
+    if (ch === "'" || ch === '"') { quote = ch; current += ch; continue }
+    if (ch === "," && depth === 0) {
+      args.push(current)
+      current = ""
+      continue
+    }
+    if (ch === "[" || ch === "(" || ch === "{") depth++
+    if (ch === "]" || ch === ")" || ch === "}") depth--
+    current += ch
+  }
+  args.push(current)
+  // Nur exakt die Enum-Literale oder Zeichenkettenform zaehlen: "[System.IO.FileMode]::Open"
+  // oder "'Open'". Kein Suffix-Vergleich — ein berechneter oder
+  // angehaengter Ausdruck ist nicht eindeutig lesend und bleibt Rueckfrage.
+  const isEnumOrLiteral = (arg, type, value) => {
+    const a = arg.trim()
+    const literal = /^["']([^"']*)["']$/.exec(a)
+    if (literal) return literal[1].trim().toLowerCase() === value
+    const enumMatch = new RegExp(`^(?:\\[(?:system\\.)?io\\.${type}\\]|${type})::([a-z]+)$`, "i").exec(a)
+    return enumMatch?.[1].toLowerCase() === value
+  }
+  // Ein Klammerausdruck im Argument ist eigener Code und wird hier nicht
+  // bewertet — die Form bleibt Rueckfrage (fail closed).
+  if (args.some((arg) => arg.includes("("))) return false
+  // File::Open(path, FileMode.Open, FileAccess.Read) mit drei Argumenten:
+  // der Zugriff ist lesend. Die 2-Argument-Form gibt ReadWrite und bleibt
+  // Rueckfrage; vier Argumente mit FileShare sind die Leseform dahinter.
+  if (args.length === 3) return isEnumOrLiteral(args[1], "filemode", "open") && isEnumOrLiteral(args[2], "fileaccess", "read")
+  if (args.length < 4) return false
+  return isEnumOrLiteral(args[1], "filemode", "open") && isEnumOrLiteral(args[2], "fileaccess", "read")
+}
+
 function classifyDotNet(statement, ctx) {
   const s = statement.trim()
   const m = /^\[((?:[^\[\]]|\[[^\[\]]*\])*)\]::(\w+)/.exec(s)
@@ -306,6 +368,17 @@ function classifyDotNet(statement, ctx) {
       // im Speicher, nur File/Directory.Replace ersetzt echte Dateien.
       if (method === "replace" && /^(?:(?:system\.)?(?:text\.)?regularexpressions\.|)regex$/i.test(type)) return "read"
       return "write"
+    }
+    if (/^(?:system\.)?io\.file$/i.test(type)) {
+      if (method === "open") {
+        if (fileOpenIsReadOnly(s)) return "read"
+        // Erkannte unsichere File::Open-Argumente (Create, Klammer-Schreiben)
+        // bleiben Rueckfrage ohne Modellweg.
+        if (ctx) ctx.dangerParam = true
+        return "unknown"
+      }
+      if (FILE_READ_METHODS.has(method)) return "read"
+      return "unknown"
     }
     if (!TYPE_READ.test(`[${type}]`)) return "unknown"
     return "read"
@@ -758,8 +831,8 @@ function classifyStatement(raw, ctx = {}) {
   // Array- oder Hashtable-Literal ist ein Ausdruck.
   if (/^@[({]/.test(s)) return hasRedirection(s) ? "filewrite" : "read"
 
-  // Zuweisung: $x = <ausdruck>
-  const assign = /^\$[\w:]+(?:\.\w+)*\s*(=|\+=|-=|\*=|\/=)\s*([\s\S]*)$/.exec(s)
+  // Zuweisung: $x = <ausdruck> (auch ${x} = ...)
+  const assign = /^\$\{?[\w:]+(?:\.\w+)*\}?\s*(=|\+=|-=|\*=|\/=)\s*([\s\S]*)$/.exec(s)
   if (assign) {
     const rhs = assign[2].trim()
     if (!rhs) return "noop"
@@ -784,8 +857,8 @@ function classifyStatement(raw, ctx = {}) {
   // .NET-Statikaufruf
   if (s.startsWith("[")) return classifyDotNet(s, ctx)
 
-  // Methodenaufruf auf Variable: $x.Add(...)
-  const varMethod = /^\$[\w:]+(?:\.\w+)*\.(\w+)\s*\(/.exec(s)
+  // Methodenaufruf auf Variable: $x.Add(...) (auch ${x}.Add(...))
+  const varMethod = /^\$\{?[\w:]+\}?(?:\.\w+)*\.(\w+)\s*\(/.exec(s)
   if (varMethod) {
     const method = varMethod[1].toLowerCase()
     if (WRITE_METHODS.has(method)) return "write"
@@ -875,9 +948,9 @@ function classifyCommand(s, lower, ctx) {
   }
   if (base === "gitleaks" || base === "gitleaks.exe") return classifyGitleaks(s)
   if (base === "sqlite3" || base === "sqlite3.exe") return classifySqlite(s)
-  if (base === "gh" || base === "gh.exe") return classifyGh(s)
+  if (base === "gh" || base === "gh.exe") return classifyGh(s, ctx)
 
-  if (NET_CMD_NAMES.has(base)) return classifyNetwork(s)
+  if (NET_CMD_NAMES.has(base)) return classifyNetwork(s, ctx)
   if (base === "python" || base === "python.exe" || base === "py" || base === "py.exe") return classifyPython(s, ctx)
 
   if (lower === "new-object") return classifyNewObject(s)
@@ -1210,7 +1283,7 @@ export function mcpCriteria(action, metadata, agent, sessionID) {
   const fromArgs = Boolean(argIntent) && MCP_INTENT_RANK[argIntent.intent] > MCP_INTENT_RANK[nameIntent.intent]
   let oversized = false
   try {
-    oversized = JSON.stringify(input ?? {}).length > 16384
+    oversized = JSON.stringify(input ?? {}).length > 32000
   } catch {
     // Nicht serialisierbar: wie "zu gross" behandeln (unanalysierbar).
     oversized = true
@@ -1595,46 +1668,6 @@ function resolveTarget(token, opts, base, vars) {
   return normPath(t)
 }
 
-function buildVarMap(statements) {
-  const counts = new Map()
-  const values = new Map()
-  for (const statement of statements) {
-    const text = statement.trim()
-    let name
-    let value
-    const literal = /^\$(\w+)\s*=\s*(?:"([^"]*)"|'([^']*)')\s*$/.exec(text)
-    if (literal) {
-      name = literal[1]
-      value = literal[2] ?? literal[3] ?? ""
-    } else {
-      // Nutzerentscheid 26.10.2026: Join-Path mit literalen Argumenten aufloesen.
-      // Ohne das bleibt "$p = Join-Path $env:TEMP \"x\"" unaufloesbar und jede
-      // Schreibpruefung endet in einer Rueckfrage, deren Inhalt niemand sieht.
-      const join = /^\$(\w+)\s*=\s*Join-Path\s+(.+)$/i.exec(text)
-      if (!join) continue
-      const parts = []
-      let ok = true
-      for (const raw of tokenizeCli(join[2])) {
-        const token = raw.replace(/^["']|["']$/g, "")
-        if (!token || token.startsWith("-")) { ok = false; break }
-        parts.push(token)
-      }
-      if (!ok || !parts.length) continue
-      name = join[1]
-      value = parts.join("\\").replace(/\\{2,}/g, "\\")
-    }
-    const key = name.toLowerCase()
-    counts.set(key, (counts.get(key) ?? 0) + 1)
-    values.set(key, value)
-  }
-  const out = new Map()
-  for (const [key, count] of counts) {
-    // Nur eindeutig zugewiesene Variablen sind verlaesslich.
-    if (count === 1) out.set(key, values.get(key))
-  }
-  return out
-}
-
 // .NET-Methoden und die Argumentpositionen, die Dateien veraendern.
 const DOTNET_TARGET_INDICES = {
   copy: [0, 1],
@@ -1882,7 +1915,7 @@ const DELETION_PARAMETERS = new Set([
 
 const ANY_LOCATION_RE = /(?:^|[;{(\s])(?:cd|chdir|set-location|sl)\b/i
 const LOCATION_STACK_RE = /\b(?:push-location|pop-location)\b|\b(?:set-location|sl)\b[^\n]*\s-stack\b/i
-const ASSIGNMENT_RE = /(?:^|[;{\s])\$[\w:]+(?:\.\w+)*\s*(?:=|\+=|-=|\*=|\/=)/
+const ASSIGNMENT_RE = /(?:^|[;{\s])\$(?:\{?\w+\}?|[\w:]+(?:\.\w+)*)\s*(?:=|\+=|-=|\*=|\/=)/
 const CONTROL_STATEMENT_RE = /^(?:if|elseif|else|while|foreach|for|switch|function|filter|try|catch|finally|do|process|begin|end|param)\b(?=\s|\()/i
 
 function resolveDeletionParameter(name) {
@@ -1948,12 +1981,12 @@ function deletionEscalation(statement, targets, flags = deletionFlags(statement)
 // andere wird aus der Karte entfernt und spaeter als unpruefbar verweigert.
 function updateVarMap(statement, vars) {
   const text = statement.trim()
-  const literal = /^\$(\w+)\s*=\s*(?:"([^"]*)"|'([^']*)')\s*$/.exec(text)
+  const literal = /^\$\{?(\w+)\}?\s*=\s*(?:"([^"]*)"|'([^']*)')\s*$/.exec(text)
   if (literal) {
     vars.set(literal[1].toLowerCase(), literal[2] ?? literal[3] ?? "")
     return true
   }
-  const join = /^\$(\w+)\s*=\s*Join-Path\s+(.+)$/i.exec(text)
+  const join = /^\$\{?(\w+)\}?\s*=\s*Join-Path\s+(.+)$/i.exec(text)
   if (join) {
     const key = join[1].toLowerCase()
     const parts = []
@@ -1969,14 +2002,14 @@ function updateVarMap(statement, vars) {
     else vars.delete(key)
     return true
   }
-  const assignment = /^\$(\w+)\s*(?:=|\+=|-=|\*=|\/=)/.exec(text)
+  const assignment = /^\$\{?(\w+)\}?\s*(?:=|\+=|-=|\*=|\/=)/.exec(text)
   if (assignment) {
     vars.delete(assignment[1].toLowerCase())
     // Nur ein Literal gilt als reine Bindung. Alles andere (Befehl, Aufruf,
     // .NET-Methode) wird weiter geprueft, sonst waere "$x = Remove-Item ..."
     // unsichtbar.
     const rhs = text.slice(assignment[0].length).trim()
-    return /^(?:-?\d+(?:\.\d+)?|"[^"]*"|'[^']*'|\$[\w:.]+|\$null|\$true|\$false)$/i.test(rhs)
+    return /^(?:-?\d+(?:\.\d+)?|"[^"]*"|'[^']*'|\$\{?\w+\}?|\$null|\$true|\$false)$/i.test(rhs)
   }
   return false
 }
@@ -2069,7 +2102,7 @@ function scopeWrites(statements, options) {
       return { ok: false, reason: `unpruefbar: Location-Stack: ${text.slice(0, 60)}` }
     }
 
-    const masked = stripStrings(text)
+    const masked = stripStrings(text).replace(/\$\{[^}]*\}/g, "$VAR$")
     const open = (masked.match(/{/g) ?? []).length
     const close = (masked.match(/}/g) ?? []).length
     const control = CONTROL_STATEMENT_RE.test(text)
@@ -2218,7 +2251,14 @@ export function scopeEdit(resources, options = {}) {
     }
     if (!roots.some((root) => isUnder(abs, root))) {
       deny ??= { decision: "deny", reason: "ausserhalb des Projekts" }
+      continue
     }
+    // Dieselbe Rueckfrage-Klasse wie im Shell-Weg (scopeWrites): Hooks,
+    // CI-Workflows und Guard-Konfiguration werden nicht ohne Nachfrage
+    // geaendert. deny behält Vorrang, weil deny vor ask geprueft wird und
+    // kein fruehes return die Reihenfolge der Ziele entscheiden lässt.
+    const askOnly = writeAskOnly(abs, base)
+    if (askOnly) ask ??= { decision: "ask", reason: askOnly }
   }
   if (deny) return deny
   if (ask) return ask
@@ -2301,7 +2341,8 @@ function tokenizeCli(statement) {
 // Zusaetzlich fail closed: Variablen-Splatting (@p, Inhalt unsichtbar),
 // positionale Hashtables ausserhalb von -Headers sowie -Credential/-Token und
 // Co., weil damit mehr als die Anfrage selbst den Rechner verlaesst.
-// Unbekannte Flags (Encoding, Redirects, Header-Inhalt) sind unbedenklich.
+// Unbekannte Flags (Encoding, Redirects) sind unbedenklich; der
+// Header-Inhalt ist es nicht (siehe NET_SAFE_HEADERS).
 const NET_CMD_NAMES = new Set(["invoke-webrequest", "invoke-restmethod", "iwr", "irm"])
 const NET_BLOCK_FLAGS = new Set([
   "-outfile", "-infile", "-body", "-form",
@@ -2322,26 +2363,201 @@ function netFlagKind(flag) {
   return null
 }
 
-function classifyNetwork(statement) {
+// Header, die Geheimnisse tragen oder Datenabfluss möglich machen. Nur die
+// harmlosen lesenden Header bleiben zulässig; jeder unbekannte Headername
+// oder Variablenwert fragt konservativ nach.
+const NET_SAFE_HEADERS = new Set(["accept", "accept-encoding", "accept-language", "content-type", "user-agent"])
+const NET_SECRET_HEADERS = new Set(["authorization", "cookie", "x-api-key"])
+
+// Hashtabellen aus dem Befehlstext (mit Zitaten) herausloesen. Eintraege
+// trennt ein Semikolon ausserhalb von Zeichenketten und verschachtelten
+// Abschnitten; ein Semikolon in einem Wert bleibt Teil des Werts. Ein "@{"
+// in einer Zeichenketten-URL zaehlt NICHT als Hashtable (zitierter Text ist
+// Datenmaterial, keine Ausfuehrung).
+function rawHashtableTables(statement) {
+  const source = String(statement ?? "")
+  const out = []
+  let quote = null
+  let i = 0
+  while (i < source.length) {
+    const ch = source[i]
+    if (quote) {
+      if (quote === '"' && ch === "`") { i += 2; continue }
+      if (ch === quote) {
+        if (source[i + 1] === quote) { i += 2; continue }
+        quote = null
+      }
+      i++
+      continue
+    }
+    if (ch === "'" || ch === '"') { quote = ch; i++; continue }
+    if (ch === "@" && source[i + 1] === "{") {
+      const start = i
+      let depth = 1
+      let innerQuote = null
+      let j = i + 2
+      while (j < source.length && depth > 0) {
+        const c = source[j]
+        if (innerQuote) {
+          if (innerQuote === '"' && c === "`") { j += 2; continue }
+          if (c === innerQuote) {
+            if (source[j + 1] === innerQuote) { j += 2; continue }
+            innerQuote = null
+          }
+        } else if (c === "'" || c === '"') innerQuote = c
+        else if (c === "{") depth++
+        else if (c === "}") depth--
+        j++
+      }
+      out.push({ start, end: j, body: source.slice(start + 2, Math.max(start + 2, j - 1)) })
+      i = Math.max(j, start + 2)
+      continue
+    }
+    i++
+  }
+  return out
+}
+
+// Token-Spannen wie tokenizeCli, aber mit Quellpositionen. Das verbindet
+// ein Token mit seiner echten Stelle im Befehlstext.
+function statementTokenSpans(statement) {
+  const source = String(statement ?? "")
+  const out = []
+  let current = ""
+  let start = null
+  let quote = null
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i]
+    if (quote) {
+      if (quote === '"' && ch === "`") {
+        if (i + 1 < source.length) current += source[i++]
+        continue
+      }
+      if (ch === quote) quote = null
+      else current += ch
+      continue
+    }
+    if (ch === '"' || ch === "'") { quote = ch; if (start === null) start = i; continue }
+    if (/\s/.test(ch)) {
+      if (start !== null) out.push({ start, end: i })
+      current = ""
+      start = null
+      continue
+    }
+    if (start === null) start = i
+    current += ch
+  }
+  if (start !== null) out.push({ start, end: source.length })
+  return out
+}
+
+function splitHashtableEntries(body) {
+  const out = []
+  let current = ""
+  let quote = null
+  let depth = 0
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i]
+    if (quote) {
+      current += ch
+      if (ch === quote) {
+        if (body[i + 1] === quote) current += body[++i]
+        else quote = null
+      }
+      continue
+    }
+    if (ch === "'" || ch === '"') { quote = ch; current += ch; continue }
+    if (ch === "{" || ch === "(" || ch === "[") depth++
+    if (ch === "}" || ch === ")" || ch === "]") depth = Math.max(0, depth - 1)
+    if (ch === ";" && depth === 0) { out.push(current); current = ""; continue }
+    current += ch
+  }
+  if (current.trim()) out.push(current)
+  return out
+}
+
+function headersAreHarmless(tokens, startIndex, statement) {
+  // Die Rohform aus dem Befehlstext ist massgeblich, damit beide
+  // Eintraege einer Hashtable geprueft werden (auch ohne Leerzeichen
+  // um das Semikolon). Die Tabelle ist diejenige, die an der Stelle des
+  // aktuellen Tokens beginnt (zitierter "@{…}"-Text in einer URL zaehlt
+  // nicht). Mehrdeutiges (keine Tabelle an dieser Stelle) bleibt Rueckfrage.
+  const spans = statementTokenSpans(statement)
+  const span = spans[startIndex]
+  const tables = rawHashtableTables(statement)
+  const rawBody = tables.find((table) => span && table.start >= span.start && table.start < span.end)?.body
+    ?? tables.find((table) => span && table.start >= span.start)?.body
+  if (rawBody === undefined) return false
+  const body = rawBody.toLowerCase()
+  if (!body.trim()) return false
+  const keys = []
+  for (const entry of splitHashtableEntries(body)) {
+    const eq = entry.indexOf("=")
+    if (eq < 0) return false
+    const key = entry.slice(0, eq).trim().replace(/^["']|["']$/g, "").toLowerCase()
+    if (!/^[a-z0-9-]+$/.test(key)) return false
+    keys.push(key)
+    const value = entry.slice(eq + 1).trim()
+    // Variablenwerte (auch numerische wie $1 und ${...}), Teilausdruecke
+    // und verschachtelte Abschnitte bleiben unlesbar und damit Rueckfrage.
+    if (/(\$|env:|\()/i.test(value)) return false
+  }
+  if (!keys.length) return false
+  if (keys.some((key) => NET_SECRET_HEADERS.has(key))) return false
+  if (keys.some((key) => !NET_SAFE_HEADERS.has(key))) return false
+  return true
+}
+
+function isHeadersParameter(flag) {
+  // PowerShell nimmt eindeutige Abkuerzungen an: -He, -Head, -Hea, …
+  return flag.length >= 3 && "-headers".startsWith(flag)
+}
+
+function classifyNetwork(statement, ctx) {
+  const markDanger = () => { if (ctx) ctx.dangerParam = true }
   const tokens = tokenizeCli(statement)
   for (let i = 1; i < tokens.length; i++) {
     const t = tokens[i]
     const lowerT = t.toLowerCase()
-    const eq = lowerT.indexOf("=")
+    // PowerShell schreibt Parameter auch mit Doppelpunkt: -OutFile:C:\x.
+    // Nur Tokens mit Fuehrungsstrich zaehlen als Parameter; URLs und Pfade
+    // als Wert bleiben unberuehrt.
+    let eq = -1
+    if (t.startsWith("-")) {
+      const eqIndex = lowerT.indexOf("=")
+      const colonIndex = lowerT.indexOf(":")
+      eq = [eqIndex, colonIndex].filter((n) => n > 0).sort((a, b) => a - b)[0] ?? -1
+    }
     const flag = eq > 0 ? lowerT.slice(0, eq) : lowerT
     const kind = netFlagKind(flag)
-    if (kind === "block") return "unknown"
+    if (kind === "block") { markDanger(); return "unknown" }
     if (kind === "method") {
       const value = (eq > 0 ? lowerT.slice(eq + 1) : (tokens[i + 1] ?? "")).toLowerCase()
-      if (!value || value.startsWith("-") || !NET_SAFE_METHODS.has(value)) return "unknown"
+      if (!value || value.startsWith("-") || !NET_SAFE_METHODS.has(value)) { markDanger(); return "unknown" }
       if (eq <= 0) i++ // Wert steht als eigenes Token; wird mitgenommen
       continue
     }
-    if (/^@\w+$/.test(t)) return "unknown" // Splatting: Inhalt unbekannt
+    if (isHeadersParameter(flag)) {
+      // An den Wert als Ganzes gebunden ("-Headers:@{…}", auch "-He:$h")
+      // oder als eigenes Token ("-Headers @{…}", auch "-He $h"). Eine
+      // Variable oder jede nicht lesbare Form ist Rueckfrage ohne Modellweg.
+      const attached = eq > 0 ? lowerT.slice(eq + 1) : null
+      if (attached !== null && attached !== "") {
+        if (!attached.startsWith("@{")) { markDanger(); return "unknown" }
+        if (!headersAreHarmless([t.slice(eq + 1)], 0, statement)) { markDanger(); return "unknown" }
+        continue
+      }
+      const next = tokens[i + 1] ?? ""
+      if (!next.startsWith("@{")) { markDanger(); return "unknown" }
+      continue // die Hashtabelle prueft der naechste Durchlauf
+    }
+    if (/^@\w+$/.test(t)) { markDanger(); return "unknown" } // Splatting: Inhalt unbekannt
     if (t.startsWith("@{")) {
-      // Nur als Parameterwert von -Headers sichtbar und unbedenklich.
-      const prev = (tokens[i - 1] ?? "").toLowerCase().split("=")[0]
-      if (prev !== "-headers") return "unknown"
+      // Nur als Parameterwert von -Headers sichtbar; der Inhalt entscheidet.
+      const prevRaw = (tokens[i - 1] ?? "").toLowerCase()
+      const prev = prevRaw.split(/[:=]/)[0]
+      if (!isHeadersParameter(prev)) { markDanger(); return "unknown" }
+      if (!headersAreHarmless(tokens, i, statement)) { markDanger(); return "unknown" }
     }
   }
   return "read"
@@ -2384,7 +2600,17 @@ function classifyPython(s, ctx) {
   if (!head) return "unknown" // nackte python-Sitzung (REPL)
   if (head === "-m") {
     const module = (tokens[i + 1] ?? "").toLowerCase()
-    if (module === "pytest") return "read"
+    if (module === "pytest") {
+      // "--basetemp" loescht das Zielverzeichnis in jeder Schreibweise
+      // (getrennt, mit "=" oder mit ":"); es bleibt Rueckfrage. Andere
+      // pytest-Optionen werden nicht geraten (offen, siehe PLANUNG.md).
+      const rest = tokens.slice(i + 2).map((t) => t.toLowerCase())
+      if (rest.some((t) => t === "--basetemp" || t.startsWith("--basetemp=") || t.startsWith("--basetemp:"))) {
+        if (ctx) ctx.dangerParam = true
+        return "unknown"
+      }
+      return "read"
+    }
     // pyright (Nutzerentscheid 29.10.2026): Typpruefung nach pyproject.toml.
     // pyright schreibt weder Quelltext noch Bytecode; wie pytest gilt der
     // Aufruf als vertrauenswuerdig. Nur der nackte `pyright` (Sprachebene
@@ -2406,7 +2632,12 @@ function classifyPython(s, ctx) {
   // eingebaute Namensliste ist entfallen - sie haette eine Freigabe auch dann
   // gehalten, wenn das Pruefprotokoll zu `ask` kommt.
   if (!opts.base) return "unknown"
-  const abs = resolveTarget(expandLeadVar(tokens[i], ctx?.vars), opts, ctx?.cwd ?? null, ctx?.vars)
+  const rawArg = tokens[i]
+  const expanded = expandLeadVar(rawArg, ctx?.vars)
+  const abs = resolveTarget(expanded, opts, ctx?.cwd ?? null, ctx?.vars)
+  // Ein Variablenbezug ohne (noch) gueltige Bindung ist unaufloesbar. Die
+  // Rueckfrage dafuer darf das Modell nicht auf allow heben (varUnclear).
+  if (!abs && ctx && /\$\{?\w/.test(rawArg)) ctx.varUnclear = true
   if (!abs) return "unknown"
   const roots = [normPath(opts.base)]
   const gitDirs = [normPath(`${opts.base}\\.git`)]
@@ -2488,9 +2719,11 @@ function classifyNode(s, ctx) {
   const opts = ctx?.opts ?? {}
   if (!opts.base) return "unknown"
   const tokens = tokenizeCli(s)
-  const arg = expandLeadVar(tokens[1] ?? "", ctx?.vars)
+  const rawArg = tokens[1] ?? ""
+  const arg = expandLeadVar(rawArg, ctx?.vars)
   if (!arg || arg.startsWith("-")) return "unknown"
   const abs = resolveTarget(arg, opts, ctx?.cwd ?? null, ctx?.vars)
+  if (!abs && ctx && /\$\{?\w/.test(rawArg)) ctx.varUnclear = true
   if (!abs) return "unknown"
   const root = normPath(`${opts.base}\\tools\\permission-guard`)
   if (!isUnder(abs, root)) return "unknown"
@@ -2593,6 +2826,17 @@ function ghApiIsReadOnly(tokens) {
   const lower = tokens.map((t) => t.toLowerCase())
   for (let i = 0; i < lower.length; i++) {
     const token = lower[i]
+    // Angehängte Kurzformen ("-ftitle=demo", "-XPOST"): "-f"/"-F" schalten
+    // wie die getrennte Form auf POST um, "-X" traegt die Methode im Token.
+    if (/^-[fx]/.test(token) && !token.startsWith("--")) {
+      const flag = token.slice(0, 2)
+      if (flag === "-f" || flag === "-F") {
+        if (token.length > 2) return false
+      } else if (flag === "-x" && token.length > 2 && token[2] !== "=") {
+        if (!GH_READ_METHODS.has(token.slice(2).toUpperCase())) return false
+        continue
+      }
+    }
     // Form "--flag=Wert" (etwa --method=GET) als ein Token.
     const eq = token.indexOf("=")
     if (eq > 0) {
@@ -2614,7 +2858,7 @@ function ghApiIsReadOnly(tokens) {
   return true
 }
 
-function classifyGh(statement) {
+function classifyGh(statement, ctx) {
   const tokens = tokenizeCli(statement)
   const args = tokens.slice(1).filter((a) => !a.startsWith("-"))
   if (args.length < 2) return "unknown"
@@ -2623,8 +2867,10 @@ function classifyGh(statement) {
   if (args[0].toLowerCase() !== "api") return "unknown"
   // `gh api graphql` ist immer POST. args[1] ist der Endpunkt-Pfad, weil
   // Flag-Werte bei der Argumentliste entfernt wurden.
-  if (args[1].toLowerCase() === "graphql") return "unknown"
-  return ghApiIsReadOnly(tokens) ? "read" : "unknown"
+  if (args[1].toLowerCase() === "graphql") { if (ctx) ctx.dangerParam = true; return "unknown" }
+  const readOnly = ghApiIsReadOnly(tokens)
+  if (!readOnly && ctx) ctx.dangerParam = true
+  return readOnly ? "read" : "unknown"
 }
 
 /**
@@ -2739,11 +2985,14 @@ export function evaluate(script, options = {}) {
   let subexpressionAsk = null
   for (const inner of subexpressions(raw)) {
     const r = evaluate(inner, options)
+    // Keine Befehlswerte im Grund: der innere Grund enthaelt den
+    // Teilausdruck und damit Moeglichkeiten Geheimnisse - Diagnose-Logs
+    // duerfen ihn nicht aufnehmen.
     if (r.decision === "deny") {
-      return { decision: "deny", reason: `Teilausdruck: ${r.reason}`, ...(r.message ? { message: r.message } : {}) }
+      return { decision: "deny", reason: "Teilausdruck: unpruefbar", ...(r.message ? { message: r.message } : {}) }
     }
     if (r.decision !== "allow" && !subexpressionAsk) {
-      subexpressionAsk = { decision: r.decision, reason: `Teilausdruck: ${r.reason}`, ...(r.message ? { message: r.message } : {}) }
+      subexpressionAsk = { decision: r.decision, reason: "Teilausdruck: unpruefbar", ...(r.message ? { message: r.message } : {}) }
     }
   }
   // Erst kurz vor einer moeglichen Freigabe anwenden: ein spaeteres deny in
@@ -2801,17 +3050,40 @@ export function evaluate(script, options = {}) {
   const statements = splitStatements(text)
 
   // Aufloesungskontext fuer pfadverankerte Freigaben (node-/python-Skripte
-  // und Pipeline-Bloecke): Variablen aus einfachen Literalzuweisungen und der
-  // Arbeitsordner werden Satz fuer Satz verfolgt. Ein Block darf nicht den
-  // erst spaeter erreichten cd-Zustand erben. Misslingt ein cd-Ziel, wird
+  // und Pipeline-Bloecke): Bindungen werden sequenziell in
+  // Ausfuehrungsreihenfolge verfolgt. Eine spaetere Zuweisung darf einen
+  // frueheren Gebrauch nicht rueckwirkend gueltig machen; "$p = $x" loescht
+  // die Bindung, und ein unaufloesbarer Variablenbezug bleibt Rueckfrage
+  // ohne Modellweg (ctx.varUnclear). Eine Zuweisung in einem
+  // Kontrollfluss (if/else/try/foreach/...) ist nicht nachverfolgbar —
+  // ob sie laeuft, ist unbekannt —, deshalb verfaellt die Bindung der
+  // betroffenen Variablen (fail closed). Ein Block darf nicht den erst
+  // spaeter erreichten cd-Zustand erben. Misslingt ein cd-Ziel, wird
   // relative Pfadaufloesung ab dort abgestellt (fail closed).
-  const vars = buildVarMap(statements)
+  const vars = new Map()
   let cwd = resolveTarget(options.base, options, null, vars)
-  const ctx = { opts: options, vars, cwd }
+  const ctx = { opts: options, vars, cwd, varUnclear: false, dangerParam: false }
+  let braceDepth = 0
 
   const kinds = new Set()
   const unknowns = []
   for (const st of statements) {
+    const text = st.trim()
+    if (text) {
+      const masked = stripStrings(text).replace(/\$\{[^}]*\}/g, "$VAR$")
+      const open = (masked.match(/{/g) ?? []).length
+      const close = (masked.match(/}/g) ?? []).length
+      // Die Schleifenvariable einer foreach-Zuweisung ist ebenfalls eine
+      // nicht nachverfolgte Haltung: ihr Wert ist der aktuelle
+      // Durchlaufswert und darf eine fruehere Bindung nicht ueberschreiben.
+      const loop = /foreach\s*\(\s*(\$\{?\w+\}?)\s+in\b/i.exec(text)
+      if (loop) vars.delete(loop[1].replace(/[$\{\}]/g, "").toLowerCase())
+      if ((braceDepth > 0 || open > 0 || CONTROL_STATEMENT_RE.test(text)) && hasStateChange(text)) {
+        for (const match of text.matchAll(/(\$\{?\w+\}?)\s*(?:=|\+=|-=|\*=|\/=)/g)) vars.delete(match[1].replace(/[$\{\}]/g, "").toLowerCase())
+      }
+      braceDepth = Math.max(0, braceDepth + open - close)
+    }
+    updateVarMap(st, vars)
     ctx.cwd = cwd
     const kind = classifyStatement(st, ctx)
     kinds.add(kind)
@@ -2853,10 +3125,22 @@ export function evaluate(script, options = {}) {
     return { decision: "ask", reason: ctx.blockAsk ?? "Skriptblock: eigener Code im Block nicht bewertet" }
   }
   if (kinds.has("write") || kinds.has("unknown")) {
+    // Unaufloesbare Variable und erkannte sende-/schreibende Parameter
+    // (ctx.dangerParam: Netz-Block-Flag, gh-Senden, --basetemp,
+    // vertraulicher Header) bleiben Rueckfrage ohne Modellweg. index.js
+    // befragt das Modell nur bei "nicht einordenbar"; ein erkannter
+    // Parameter darf nicht per Modell auf allow gehoben werden.
+    // Keine Befehlswerte (Header-Schluessel/-Werte) im Grund: sie landen
+    // im Diagnose-Log (index.js) und duerfen dort nicht stehen.
+    const unknownReason = ctx.varUnclear
+      ? "unpruefbar: Variable unklar"
+      : ctx.dangerParam
+        ? "unpruefbar: sende- oder schreibender Parameter"
+        : `nicht einordenbar: ${unknowns[0] ?? ""}`
     if (write || secrets.length || subexpressionAsk) {
-      return allowUnlessSubexpressionAsk(`nicht einordenbar: ${unknowns[0] ?? ""}`)
+      return allowUnlessSubexpressionAsk(unknownReason)
     }
-    return { decision: "ask", reason: `nicht einordenbar: ${unknowns[0] ?? ""}` }
+    return { decision: "ask", reason: unknownReason }
   }
   if (kinds.has("filewrite")) {
     const scoped = scopeWrites(statements, options)

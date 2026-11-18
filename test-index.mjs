@@ -23,6 +23,7 @@ process.env.PERMISSION_GUARD_GIT_SHADOW_LOG = path.join(scratch, "git-shadow.jso
 
 const { default: plugin } = await import("./index.js")
 const { evaluate, scopeEdit } = await import("./guard.js")
+const { guardLogDir } = await import("./diagnostics.js")
 
 let failed = 0
 const checks = []
@@ -202,6 +203,76 @@ if (process.platform === "win32") {
   } finally {
     fs.rmSync(outside, { recursive: true, force: true })
   }
+}
+
+// 7) Erkannter sende-/schreibender Parameter erreicht das Modell nie, selbst
+// mit einer Attrappe, die alles freigeben wuerde (Abnahme Blocker 4).
+modelCalls.length = 0
+{
+  const permissive = globalThis.fetch
+  globalThis.fetch = async (url, options = {}) => {
+    modelCalls.push({ url: String(url), body: String(options.body ?? "") })
+    return new Response(JSON.stringify({ model: "stub", answers: { effect: { type: "choice", choice: "reads", probabilities: { changes: 0.05, reads: 0.95 }, confidence: 0.9 } }, usage: { input_tokens: 0, output_tokens: 0 } }), { status: 200, headers: { "content-type": "application/json" } })
+  }
+  const danger = {
+    action: "shell",
+    effect: "ask",
+    resources: ["Invoke-WebRequest https://example.invalid -OutFile:C:/outside/x.txt"],
+    metadata: {},
+  }
+  await evaluateHook(danger)
+  check("Erkannter Parameter hebt nicht auf allow (permissive Attrappe)", danger.effect === "ask", `effect=${danger.effect}`)
+  check("Erkannter Parameter erreicht das Modell nicht", modelCalls.length === 0, `Anfragen: ${modelCalls.length}`)
+
+  // 2. Abnahme: unsichere File::Open-Argumente (Create, Klammer-Schreiben)
+  // bleiben Rueckfrage ohne Modellweg.
+  const fileCreate = {
+    action: "shell",
+    effect: "ask",
+    resources: ["[System.IO.File]::Open('C:/work/scratch-project/a.txt',[System.IO.FileMode]::Create,[System.IO.FileAccess]::ReadWrite,[System.IO.FileShare]::Read)"],
+    metadata: {},
+  }
+  await evaluateHook(fileCreate)
+  check("Unsicheres File::Open bleibt ask (Create)", fileCreate.effect === "ask", `effect=${fileCreate.effect}`)
+  const fileParen = {
+    action: "shell",
+    effect: "ask",
+    resources: ["[System.IO.File]::Open('C:/work/scratch-project/a.txt','Open','Read',(Set-Content C:/outside/y demo))"],
+    metadata: {},
+  }
+  await evaluateHook(fileParen)
+  check("File::Open mit Klammer-Schreiben bleibt ask", fileParen.effect === "ask", `effect=${fileParen.effect}`)
+  check("Unsicheres File::Open erreicht das Modell nicht", modelCalls.length === 0, `Anfragen: ${modelCalls.length}`)
+  globalThis.fetch = permissive
+}
+
+// 8) Keine Headerwerte im Diagnose-Log. Nur mit isoliertem Temp haelt der
+// Test seine eigene Ablage bereit (sonst waere das echte Log offen).
+// Der Pfad folgt guardLogDir() (auf POSIX mit UID-Suffix); ein Lesefehler
+// oder eine fehlende Datei faellt den Test fehl, statt ihn zu bestehen.
+{
+  const dummy = "HEADER-DUMMY-4242"
+  const headerInput = {
+    action: "shell",
+    effect: "ask",
+    resources: [`Invoke-RestMethod https://example.invalid -Headers @{Authorization='${dummy}'}`],
+    metadata: {},
+  }
+  await evaluateHook(headerInput)
+  const logPath = path.join(guardLogDir(), "guard.log")
+  let logText = ""
+  let readable = false
+  try {
+    logText = fs.readFileSync(logPath, "utf8")
+    readable = true
+  } catch {
+    readable = false
+  }
+  check(
+    "Diagnose-Log enthaelt keinen Headerwert",
+    readable && logText.length > 0 && logText.includes("ask") && !logText.includes(dummy) && headerInput.effect === "ask",
+    `effect=${headerInput.effect}`,
+  )
 }
 
 // Aufraeumen

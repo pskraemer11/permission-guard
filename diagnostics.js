@@ -23,7 +23,9 @@ export function commandSummary(script) {
   const text = String(script ?? "").trim()
   const first = text.split(/\s+/)[0] ?? ""
   const base = first.split(/[\\/]/).pop() ?? ""
-  const name = base.replace(/[^\w.-]/g, "").slice(0, 40) || "unbekannt"
+  // Nur ein bekannter Programmname landet im Log. Alles andere (auch eine
+  // Hashtable mit Werten) wird "unbekannt"; der Hash bleibt immer an.
+  const name = /^[A-Za-z][\w.-]*$/.test(base) ? base.slice(0, 40) : "unbekannt"
   return `${name}#${shortHash(text).slice(0, 12)}`
 }
 
