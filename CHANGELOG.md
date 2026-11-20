@@ -96,6 +96,14 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **npm in Dependabot und CI (20.11.2026):** `.github/dependabot.yml` führt
+  jetzt `package-ecosystem: npm` (Lockfile `package-lock.json` liegt vor, also
+  prüft Dependabot `@opencode/plugin` und die transitiven Abhängigkeiten).
+  `.github/workflows/ci.yml` prüft mit `npm audit --audit-level=high` als
+  Gegenstück zu `pip_audit`; der Schritt läuft einmal (Linux, Node 22), weil er
+  das Lockfile prüft und nicht die Node-Version. Lokal: `found 0
+  vulnerabilities`, Exit 0. `actionlint` grün.
+
 - **Prompt-Schärfung der Shell-Prüfung (20.11.2026):** `reviewer.js` fragt nicht
   mehr „ist das sicher?", sondern „darf das ohne Rückfrage laufen?", und nennt
   auf der Nein-Seite zusätzlich „uses a credential that appears in the text"

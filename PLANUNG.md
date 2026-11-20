@@ -1167,3 +1167,35 @@ produktive Weg ist `shellBackend: "systemone"`.
 **Offen:** Die Rückfragenrate vor/nach lässt sich nicht rückwirkend messen —
 der Prompt war im Beobachtungsfenster ein anderer. Sie ist ab jetzt über
 `stats.mjs` zu beobachten.
+
+**Nachtrag zur Messbarkeit des Chat-Fallbacks (Nutzer, 20.11.2026):** Der
+Fallback ist mit dem geladenen Modell nicht messbar, weil der Server im
+Embedding-Modus läuft (`-np 1`, Stapel 4096). Für ihn bräuchte es ein
+Chat-Modell (`gemma-4-12B-it-qat-UD-Q4_K_XL`) und die typischen
+Chat-Parameter (`-b 2048 -ub 1024`). Bis dahin bleibt die Prompt-Änderung dort
+ungeprüft.
+
+## Nachtrag 20.11.2026: npm in Dependabot und CI
+
+**Anlass.** `package.json` und `package-lock.json` waren vorhanden, aber
+Dependabot prüfte nur `pip` und `github-actions`; eine Sicherheitsprüfung wie
+`pip_audit` fehlte für JavaScript. Damit war die JS-Seite des Projekts
+schlechter abgesichert als die Python-Seite.
+
+**Umgesetzt.**
+
+- `.github/dependabot.yml`: `package-ecosystem: npm`, `directory: "/"`,
+  wöchentlich, höchstens fünf offene Pull-Requests. Das Lockfile liegt vor,
+  also prüft Dependabot `@opencode/plugin` und die transitiven Abhängigkeiten.
+- `.github/workflows/ci.yml`: Schritt `npm audit --audit-level=high` nach
+  `npm ci`, einmal ausgeführt (`runner.os == 'Linux' && matrix.node == '22'`).
+  Begründung: geprüft wird das Lockfile, nicht die Node-Version; ein Lauf
+  genügt. Der Schritt braucht Netz und gehört deshalb nicht ins lokale Gate —
+  dieselbe Regel wie bei `pip_audit`.
+
+**Belegt:** `npm audit --audit-level=high` lokal `found 0 vulnerabilities`,
+Exit 0; `actionlint` grün (Exit 0, keine Ausgabe).
+
+**Nicht umgesetzt:** `npm audit` in `guard.yml`. Der Workflow wird im
+Eltern-Repository wiederverwendet und prüft den Guard, nicht die Abhängigkeiten
+des aufrufenden Projekts.

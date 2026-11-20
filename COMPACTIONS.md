@@ -2664,3 +2664,37 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
 - `bench-shell.mjs`: 23 Faelle, `shellBackend: "systemone"` fest.
 - `staging/bench-shell-chat.mjs`, `staging/probe-shell-prompt.mjs`,
   `staging/probe-temp-path.mjs`: Messhilfen, nicht versioniert.
+
+
+=============== Compaction 20.11.2026 / 16:40 ================
+## Objective
+- **Current:** npm in Dependabot und CI aufgenommen; Commit steht aus.
+- **Next:** Stufe 3 (vier Achsen), zuletzt Deny-Limits.
+
+## Important Details
+- **Entscheidung (Nutzer):** `package-ecosystem: npm` in `dependabot.yml`
+  aufnehmen und `npm audit --audit-level=high` in die CI. Beides umgesetzt.
+- **Begruendung der Luecke:** `package.json` und `package-lock.json` waren da,
+  Dependabot pruefte aber nur pip und github-actions, und eine
+  Sicherheitspruefung wie `pip_audit` fehlte fuer JavaScript. Die JS-Seite war
+  damit schlechter abgesichert als die Python-Seite.
+- **Laufzeit:** `npm audit` braucht Netz und laeuft deshalb nur in der CI,
+  nicht im lokalen Gate (gleiche Regel wie `pip_audit`). Der Schritt laeuft
+  einmal (Linux, Node 22), weil er das Lockfile prueft, nicht die
+  Node-Version.
+- **Belegt:** lokal `found 0 vulnerabilities`, Exit 0; `actionlint` Exit 0.
+- **Chat-Fallback (Nutzer):** Mit dem geladenen Modell nicht messbar, weil der
+  Server im Embedding-Modus laeuft. Fuer ihn braeuchte es ein Chat-Modell
+  (`gemma-4-12B-it-qat-UD-Q4_K_XL`) und `-b 2048 -ub 1024`. Die
+  Prompt-Aenderung dort bleibt bis dahin ungeprueft.
+
+## Work State
+- **Completed:** `.github/dependabot.yml`, `.github/workflows/ci.yml`,
+  `PLANUNG.md`, `CHANGELOG.md`.
+- **Active:** Commit.
+- **Blocked:** keiner.
+
+## Next Move
+1. Commit.
+2. Stufe 3 (vier Achsen) mit eigener Messung und Schwellenkalibrierung.
+3. Danach Deny-Limits (zurueckgestellt).
