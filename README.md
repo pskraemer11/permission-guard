@@ -1106,15 +1106,16 @@ here: `ggml-org/Clef-Flash-GGUF`, `Q4_K_M` — 23/23 on the shell cases. A file
 name is no proof: only a model whose GGUF metadata carries
 `<arch>.decision.type` is a decision model for llama.cpp; check the metadata,
 not the repository title. With `-np 1` (our setting) several prompts run one
-after another; parallel slots would be possible, but are not measured.
+after another; parallel slots were measured on 20.11.2026 and brought nothing
+(1.01–1.03x on five short commands with `-np 5 --kv-unified`).
 
 Not every repository with "clef" or "jev" in its name works. Checked on
 20.11.2026:
 
 | Repository | GGUF metadata | `/v1/systemone` |
 | --- | --- | --- |
-| `ggml-org/Clef-Flash-GGUF` | `architecture = clef`, `clef.decision.type = clef` | yes, measured |
-| `ggml-org/Kev-4B-GGUF` | `architecture = qwen35`, decision type `kev` per model card | yes, per model card |
+| `ggml-org/Clef-Flash-GGUF` | `architecture = clef`, `clef.decision.type = clef` | yes, measured 23/23 at 0.65 |
+| `ggml-org/Kev-4B-GGUF` | `architecture = qwen35`, `qwen35.decision.type = kev` | yes — Q4_K_M 23/23 at 0.50, Q8_0 22/23 |
 | `NANI-Nithin/clef-flash-GGUF` | `architecture = qwen35`, no decision metadata | **no** — language tower only, the joint schema head is not in the file |
 | `ngquocvinh/Jev-Omni-GGUF` | `architecture = gemma4`, no decision metadata | **no** — needs a Python adapter that applies the decision head |
 | `mradermacher/Jeff-1.1-Qwen-4B-GGUF` | `architecture = qwen35`, no decision metadata | **no** — Jev-format, not the llama.cpp API |

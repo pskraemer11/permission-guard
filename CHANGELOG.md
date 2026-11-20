@@ -29,6 +29,12 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   `Jev-Omni` (Python-Adapter) und `Jeff-1.1` (Jev-Format) nicht. Ein fehlendes
   Metadatum kann auch am Quantisierer liegen; bei diesen drei Fällen belegt die
   Original-Karte, dass der Decision-Head separat liegt oder fehlt.
+- **Kev-4B gemessen (20.11.2026):** Q4_K_M (2,83 GB) trifft mit
+  `shellThreshold` 0,50 alle 23 Shell-Fälle; mit Clef-Schwelle 0,65 nur 20/23.
+  Q8_0 (4,18 GB) trifft 22/23 (`write-git-add` 0,495). Die Schwellen sind
+  modellabhängig. `-np 5 --kv-unified` brachte bei fünf kurzen Anfragen keinen
+  Gewinn (Faktor 1,01–1,03). Weitere Modelle aus der ggml-Collection stehen als
+  Vormerk in `PLANUNG.md`.
 - **`pdftotext` und `pandoc` (20.11.2026):** `guard.js` prüft beide mit eigenen
   Funktionen statt über `READ_BINARIES`. `pdftotext` gilt als lesend, solange
   keine Ausgabedatei folgt (oder `-` als Ziel steht); die 14 Optionen mit

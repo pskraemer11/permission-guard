@@ -1272,6 +1272,33 @@ Jev-Omni und Jeff liegt der Decision-Head im Original als eigene Datei
 ganz. Ein GGUF des Backbones kann ihn also nicht enthalten. Für andere Dateien
 gilt: die Karte des Originals lesen, nicht nur den Quant beurteilen.
 
-**Parallele Verarbeitung:** Unser Server läuft mit `-np 1`, also einem Slot;
-mehrere Prompts werden nacheinander abgearbeitet. Mit `-np N` wären sie
-parallel möglich, kosten aber KV-Cache je Slot. Nicht gemessen.
+**Parallele Verarbeitung (gemessen 20.11.2026):** Fünf verschiedene Befehle,
+Kev-4B Q4, nur dieses Modell geladen. `-np 1`: 1211–1244 ms für fünf Anfragen
+sequenziell, 1233–1242 ms „parallel" (wird serialisiert). `-np 5
+--kv-unified`: 845–865 ms sequenziell, 836–840 ms parallel — Faktor
+1,01–1,03. Die parallele Ausführung bringt bei diesen kurzen Anfragen also
+nichts; die GPU ist gesättigt. Der Unterschied zwischen den beiden
+Serverkonfigurationen (1211 gegen 845 ms) ist ein Nebenbefund, nicht die
+Wirkung der Parallelität.
+
+## Vormerk 20.11.2026: weitere Decision-Modelle messen
+
+Nach dem Umbau: die Modelle aus der ggml-Collection
+(<https://huggingface.co/collections/ggml-org/decision-models>, 16 Einträge)
+auf ihre Schwellenwerte messen. Bisher gemessen, jeweils nur ein Modell geladen:
+
+| Modell | Größe | `shellThreshold` | Treffer |
+| --- | --- | --- | --- |
+| `ggml-org/Clef-Flash` Q4_K_M | 7,7 GB | 0,65 | 23/23 |
+| `ggml-org/Kev-4B` Q4_K_M | 2,83 GB | 0,50 | 23/23 |
+| `ggml-org/Kev-4B` Q8_0 | 4,18 GB | 0,50 | 22/23 (`write-git-add` 0,495) |
+
+Je Modell sind `shellThreshold` und die drei Achsen-Schwellen neu zu messen;
+die Werte sind modellabhängig (Clef 0,65 gegen Kev 0,50). Kleine Kandidaten aus
+der Collection: `vllm-d3-edge` (0,7B), `vllm-d3-lite` (1B), `vllm-d3-nano` (2B),
+`Julia-1` (0,1B), `Laya` (0,4B). Laya lag bei der MCP-Messung bei 8/14 und ist
+für die Shell ungeprüft.
+
+Für jeden Lauf gilt: nur ein Modell im VRAM, sonst sind die Latenzzahlen nicht
+belastbar (Befund 20.11.2026 — Clef und Kev gleichzeitig geladen verfälschten
+den Parallelitätstest).

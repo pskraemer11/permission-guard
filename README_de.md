@@ -1118,15 +1118,16 @@ gemessen: `ggml-org/Clef-Flash-GGUF`, `Q4_K_M` — 23/23 bei den Shell-Fällen.
 Ein Dateiname ist kein Beleg: Entscheidungsmodell für llama.cpp ist nur, was in
 den GGUF-Metadaten `<arch>.decision.type` trägt; prüfe die Metadaten, nicht den
 Repositoriumstitel. Mit `-np 1` (unsere Einstellung) laufen mehrere Prompts
-nacheinander; parallele Slots wären möglich, sind aber nicht gemessen.
+nacheinander; parallele Slots wurden am 20.11.2026 gemessen und brachten nichts
+(1,01–1,03x bei fünf kurzen Befehlen mit `-np 5 --kv-unified`).
 
 Nicht jedes Repositorium mit „clef" oder „jev" im Namen funktioniert. Geprüft
 am 20.11.2026:
 
 | Repositorium | GGUF-Metadaten | `/v1/systemone` |
 | --- | --- | --- |
-| `ggml-org/Clef-Flash-GGUF` | `architecture = clef`, `clef.decision.type = clef` | ja, gemessen |
-| `ggml-org/Kev-4B-GGUF` | `architecture = qwen35`, Decision-Typ `kev` laut Modellkarte | ja, laut Modellkarte |
+| `ggml-org/Clef-Flash-GGUF` | `architecture = clef`, `clef.decision.type = clef` | ja, gemessen 23/23 bei 0,65 |
+| `ggml-org/Kev-4B-GGUF` | `architecture = qwen35`, `qwen35.decision.type = kev` | ja — Q4_K_M 23/23 bei 0,50, Q8_0 22/23 |
 | `NANI-Nithin/clef-flash-GGUF` | `architecture = qwen35`, kein Decision-Metadatum | **nein** — nur der Language Tower, der Joint-Schema-Head fehlt in der Datei |
 | `ngquocvinh/Jev-Omni-GGUF` | `architecture = gemma4`, kein Decision-Metadatum | **nein** — braucht einen Python-Adapter für den Decision-Head |
 | `mradermacher/Jeff-1.1-Qwen-4B-GGUF` | `architecture = qwen35`, kein Decision-Metadatum | **nein** — Jev-Format, nicht die llama.cpp-API |

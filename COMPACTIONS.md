@@ -2762,6 +2762,22 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
    je Turn; nur Reviewer-`ask` zaehlt.
 3. Danach G0/G1 (Grenz-Markierung fuer MCP-Ergebnisse).
 
+## Nachtrag 20.11.2026 / 17:26: Kev-4B und Parallelitaet gemessen
+- **Kev-4B Q4_K_M (2,83 GB):** 23/23 bei `shellThreshold` 0,50; 20/23 bei 0,65.
+  Q8_0 (4,18 GB): 22/23 bei 0,50 (`write-git-add` 0,495). Die Schwellen sind
+  modellabhaengig - Clef braucht 0,65, Kev 0,50.
+- **Parallelitaet:** `-np 5 --kv-unified` gegen `-np 1`, fuenf kurze Befehle:
+  Faktor 1,01-1,03, kein Gewinn. Jeweils nur ein Modell geladen; mit Clef und
+  Kev gleichzeitig war der erste Lauf verfaelscht (Nutzerhinweis).
+- **Wichtig fuer weitere Laeufe:** nur ein Modell im VRAM, sonst sind die
+  Latenzzahlen nicht belastbar.
+- **Vormerk in PLANUNG.md:** die 16 Modelle der ggml-Collection nach dem Umbau
+  auf ihre Schwellen messen; kleine Kandidaten sind vllm-d3-edge (0,7B),
+  vllm-d3-lite (1B), vllm-d3-nano (2B), Julia-1 (0,1B), Laya (0,4B).
+- **Zustand:** Clef-Flash laeuft wieder auf 8080 (direkt gestartet, weil
+  `start-reviewer.ps1` im Timeout haengen blieb); der Watchdog wurde fuer die
+  Tests beendet und ist nicht neu gestartet.
+
 ## Relevant Files
 - `reviewer.js`: `SENSITIVE_QUESTION`, `UNTRUSTED_QUESTION`,
   `OBSCURED_QUESTION`, `SHELL_AXES`, `shellThreshold: 0.65`.
