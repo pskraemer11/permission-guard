@@ -5,7 +5,7 @@
   "_backend_lmstudio": "baseUrl http://127.0.0.1:1234/v1, model jev-omni, apiKeyEnv LMS_OpenAI_AUTH_TOKEN (nur chat/completions)",
   "_mcp_backend": "Ebene 3 fuer MCP: chat = Ja/Nein ueber chat/completions; systemone = Entscheidungsmodell ueber /v1/systemone (Kev-4B), Entscheidung per mcpThreshold. Gemessen 20.11.2026 mit Mehrheitsentscheid: Kev-4B 14/14, Clef-Flash 14/14, vllm-d3-mini 14/14.",
   "_shell_backend": "Ebene 1 (Shell) kann denselben Weg nehmen: shellBackend systemone + shellThreshold. Gemessen 20.11.2026 mit Mehrheitsentscheid: Kev-4B 23/23 bei 0.50, Clef-Flash 23/23 bei 0.65.",
-  "_git_shadow": "Variante 3: off = aus, shadow = destruktive Git-Formen mit effect=allow nur protokollieren (keine Wirkung). Ablage: %LOCALAPPDATA%\\opencode\\permission-guard\\git-shadow.jsonl; Auswertung: node git-shadow-report.mjs.",
+  "_git_shadow": "Variante 3: off = aus, shadow = destruktive Git-Formen mit effect=allow nur protokollieren (keine Wirkung). Ablage: %LOCALAPPDATA%\\opencode\\permission-guard\\git-shadow.jsonl; Auswertung: node src/git-shadow-report.mjs.",
   "_result_shield": "Grenz-Markierung fuer MCP-Ergebnisse: off = aus (Standard), annotate = Textinhalte in [ud-<id>]...[/ud-<id>] einschliessen und Systemhinweis ergaenzen, scan = nur im Log zaehlen. ud = untrusted data, absichtlich klein geschrieben zur Unterscheidung von der Quantisierungsbezeichnung UD (Unsloth Dynamic).",
   "_deny_limits": "Rueckfragen-Limit: drei in Folge oder zehn in den letzten fuenfzig ergeben deny. Gezaehlt wird je Sitzung; session.execution.started setzt zurueck. Grenzen: consecutive 1-10, recent 1-50, window 10-200.",
   "enabled": true,

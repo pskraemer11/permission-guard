@@ -304,10 +304,10 @@ def test_decide_handles_apply_patch() -> None:
 
 
 # --- Gemeinsame Faelle mit dem OpenCode-Guard -----------------------------
-# shared-cases.jsonl liegt neben dem Guard. Beide Suiten lesen dieselbe Datei;
-# eine Aenderung auf einer Seite bricht den Test, bis der Wert hier bewusst
-# nachgezogen wird.
-SHARED = Path(__file__).resolve().parents[1] / "shared-cases.jsonl"
+# shared-cases.jsonl liegt neben den JS-Tests unter test/. Beide Suiten lesen
+# dieselbe Datei; eine Aenderung auf einer Seite bricht den Test, bis der Wert
+# hier bewusst nachgezogen wird.
+SHARED = Path(__file__).resolve().parents[1] / "test" / "shared-cases.jsonl"
 
 
 def load_shared() -> list[dict[str, Any]]:

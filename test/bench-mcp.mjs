@@ -15,9 +15,9 @@
 // als korrekt einsortiert; mit --model wird zusaetzlich das lokale Modell
 // befragt (braucht laufenden Server auf der konfigurierten Adresse).
 //
-//   node bench-mcp.mjs
-//   node bench-mcp.mjs --model          # zusaetzlich Ebene 3 messen
-//   node bench-mcp.mjs --change         # nur den Change sehen, nicht die Fälle
+//   node test/bench-mcp.mjs
+//   node test/bench-mcp.mjs --model          # zusaetzlich Ebene 3 messen
+//   node test/bench-mcp.mjs --change         # nur den Change sehen, nicht die Fälle
 //
 // Exitcode 1, sobald ein Soll nicht getroffen wird. Die Erwartung steht in der
 // Fallzeile und wird nicht aus dem Code abgeleitet - sonst prueft das Regime
@@ -26,8 +26,8 @@
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { mcpAction, mcpCriteria, mcpVerdict } from "./guard.js"
-import { loadConfig, reviewMcp } from "./reviewer.js"
+import { mcpAction, mcpCriteria, mcpVerdict } from "../src/guard.js"
+import { loadConfig, reviewMcp } from "../src/reviewer.js"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const CASES_FILE = path.join(HERE, "mcp-cases.jsonl")

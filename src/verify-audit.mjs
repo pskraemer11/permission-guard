@@ -2,9 +2,9 @@
 // Prueft die Audit-Kette (Schritt D, 05.11.2026).
 //
 // Aufruf:
-//   node verify-audit.mjs                 # Standardablage, auch die Rotation
-//   node verify-audit.mjs --file <pfad>   # abweichende Datei
-//   node verify-audit.mjs --last          # nur die aktuelle Generation
+//   node src/verify-audit.mjs                 # Standardablage, auch die Rotation
+//   node src/verify-audit.mjs --file <pfad>   # abweichende Datei
+//   node src/verify-audit.mjs --last          # nur die aktuelle Generation
 //
 // Exit 0 = Kette in Ordnung, 1 = Bruch oder Lesefehler.
 

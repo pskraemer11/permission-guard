@@ -258,7 +258,7 @@ function verify(dbFile, skillsDir) {
   if (problems.length) {
     console.error(`skill-verdicts: ${problems.length} Abweichung(en) in ${dbFile}`)
     for (const line of problems) console.error(`  ${line}`)
-    console.error("  Naechster Schritt: node skill-verdicts.mjs --refresh --write")
+    console.error("  Naechster Schritt: node src/skill-verdicts.mjs --refresh --write")
     process.exit(1)
   }
 

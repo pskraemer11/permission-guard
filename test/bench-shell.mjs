@@ -7,15 +7,15 @@
 //
 // Braucht einen laufenden Reviewer (shell-reviewer.config.json oder Standard).
 //
-//   node bench-shell.mjs
-//   node bench-shell.mjs --repeat 3
+//   node test/bench-shell.mjs
+//   node test/bench-shell.mjs --repeat 3
 //
 // Exit 1, sobald ein Soll nicht getroffen wird; Exit 2 bei Backend-Fehlern.
 
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { loadConfig, neverAutoApprove, review } from "./reviewer.js"
+import { loadConfig, neverAutoApprove, review } from "../src/reviewer.js"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const CASES_FILE = path.join(HERE, "shell-model-cases.jsonl")

@@ -11,17 +11,17 @@
 //
 // Braucht einen laufenden Reviewer (shell-reviewer.config.json).
 //
-//   node bench-model.mjs
-//   node bench-model.mjs --repeat 3
-//   node bench-model.mjs --json
+//   node test/bench-model.mjs
+//   node test/bench-model.mjs --repeat 3
+//   node test/bench-model.mjs --json
 //
 // Exit 1, sobald ein Soll nicht getroffen wird.
 
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { mcpCriteria } from "./guard.js"
-import { loadConfig, reviewMcp } from "./reviewer.js"
+import { mcpCriteria } from "../src/guard.js"
+import { loadConfig, reviewMcp } from "../src/reviewer.js"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const CASES_FILE = path.join(HERE, "mcp-model-cases.jsonl")

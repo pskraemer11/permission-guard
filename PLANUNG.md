@@ -1527,9 +1527,28 @@ Plugin-Lader `index.js` dort erwartet. `.githooks/test-gate.conf` führt
 und `pull` in einem Aufruf; bricht ab, wenn eine Prüfung rot ist, und lässt den
 Branch dann stehen.
 
-**Stufe 2 offen.** `src/` für die Module (`guard.js`, `reviewer.js`,
-`index.js`, `audit.js`, `diagnostics.js`, `shadow.js`) und `test/` für Tests
-und Fixtures; dabei Importe, Deploy-Abbildung, CI und Doku nachziehen.
+**Stufe 2 umgesetzt (21.11.2026).** `src/` trägt die sechs Module und die sieben
+Berichtswerkzeuge, `test/` die drei Testsuiten, das Messwerkzeug-Trio
+(`bench-mcp`, `bench-model`, `bench-shell`), `smoke-reviewer.mjs` und die vier
+Falllisten. Wurzel bleibt, was das Projekt steuert: `package.json`,
+`pyproject.toml`, `codex_guard.py`, `shell-reviewer.config.example.json`, die
+Dokumente und `.github/`/`.githooks/`.
+
+**Was der Umzug erzwungen hat.** Die Tests importieren `../src/`, im flachen
+Ziel liefe das ins Leere. Deshalb liefert `deploy.ps1` nur noch aus, was dort
+läuft: sechs Module, vier Berichtswerkzeuge, `stats.mjs`, beide READMEs und die
+drei PowerShell-Skripte. Fünf alte Kopien im Ziel (`test.mjs`,
+`smoke-reviewer.mjs`, `bench-model.mjs`, `shared-cases.jsonl`,
+`mcp-model-cases.jsonl`) sind von Hand zu löschen; der Guard verweigert das
+Löschen in seinem Laufzeitverzeichnis.
+
+**Mitgezogen:** `classifyNode` (eine führende Ebene `src/`/`test/` wird
+abgezogen), `.githooks/test-gate.conf` (Präfixe `src/`, `test/`; Testbefehl
+`node test/test.mjs && node test/test-index.mjs`), `ci.yml`, `guard.yml`,
+`package.json` (`files`, `exports`, `scripts`; `diagnostics.js` fehlte dort),
+`tests/test_codex_guard.py` (Pfad zur Fallliste), `README.md`, `README_de.md`,
+`AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md`. `docs/adr/0002` nennt die alten
+Pfade weiter und trägt einen Nachtrag dazu.
 
 ## Nachtrag 21.11.2026: Guard erlaubt die eigenen Prüfskripte im Guard-Ordner
 

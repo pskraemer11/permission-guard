@@ -44,7 +44,7 @@
 // laut Nutzertest die ausdrueckliche Anweisung "Antworte nur mit Ja oder Nein",
 // sonst antwortet es ausfuehrlich. Genau das steht im Systemprompt.
 //
-// Ohne Netz und ohne OpenCode testbar: `node test.mjs`
+// Ohne Netz und ohne OpenCode testbar: `node test/test.mjs`
 
 import fs from "node:fs"
 import path from "node:path"

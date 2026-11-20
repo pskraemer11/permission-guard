@@ -789,3 +789,17 @@ Zeile in `start-reviewer.ps1`.
 *Grenze.* Die Schwellen wurden auf denselben Fällen bestimmt, auf denen sie
 geprüft wurden. Die Zahlen beschreiben eine Obergrenze. Ob das kleinere Modell
 auf ungesehenen Fällen ebenso robust ist, zeigt diese Messung nicht.
+
+## Nachtrag 21.11.2026: Ablageorte im Repository
+
+Die Dateien liegen seit dem 21.11.2026 in Unterordnern: die Module und
+Berichtswerkzeuge unter `src/`, Node-Tests, Messwerkzeuge und Falllisten unter
+`test/`, die Betriebsskripte unter `scripts/`. Pfadangaben in diesem Dokument
+nennen den Stand davor.
+
+Das ausgelieferte Plugin bleibt flach. Der Lader liest
+`~/.config/opencode/plugins/permission-guard/index.js` von oberster Ebene;
+`deploy.ps1` und `deploy.sh` bilden deshalb jeden Quellpfad auf seinen
+Dateinamen im Ziel ab. Tests, Falllisten und Messwerkzeuge werden nicht mehr
+ausgeliefert — sie importieren `../src/` und liefen im flachen Ziel ins Leere.
+

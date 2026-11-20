@@ -7,7 +7,7 @@
 // Muster, das guard.js spaeter freigibt, braucht einen Testfall.
 //
 // Aufruf:
-//   node analyze.mjs [logdatei] [--since <datum>] [--limit <n>]
+//   node src/analyze.mjs [logdatei] [--since <datum>] [--limit <n>]
 //                    [--patterns <n>] [--detail <text>]
 //
 //   --since/--limit   wie bei replay.mjs

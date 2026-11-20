@@ -8,13 +8,13 @@
 ## Prüfen
 
 ```powershell
-node test.mjs          # muss vollständig grün sein
-node bench-mcp.mjs     # 33/33 Weiterleitungen, 9 Verbote
+node test/test.mjs          # muss vollständig grün sein
+node test/bench-mcp.mjs     # 33/33 Weiterleitungen, 9 Verbote
 ```
 
-Änderungen an `reviewer.js` zusätzlich gegen ein laufendes Modell messen
-(`node bench-model.mjs --repeat 3`); ohne Modell bleibt das Gate
-`bench-mcp.mjs --model` aus.
+Änderungen an `src/reviewer.js` zusätzlich gegen ein laufendes Modell messen
+(`node test/bench-model.mjs --repeat 3`); ohne Modell bleibt das Gate
+`test/bench-mcp.mjs --model` aus.
 
 ## Regeln
 
