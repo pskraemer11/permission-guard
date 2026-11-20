@@ -542,6 +542,10 @@ const interp = [
   ["node tools/permission-guard/replay.mjs --top 15", "allow"],
   ["node tools/permission-guard/analyze.mjs --patterns 10 --detail \"$x\"", "allow"],
   ["node .\\tools\\permission-guard\\test.mjs 2>&1", "allow"],
+  ["node tools\\permission-guard\\test-index.mjs", "allow"],
+  ["node tools\\permission-guard\\test-wiring.mjs", "allow"],
+  ["node tools\\permission-guard\\bench-mcp.mjs --change", "allow"],
+  ["node tools\\permission-guard\\smoke-reviewer.mjs", "allow"],
   [`node "${projBase}\\tools\\permission-guard\\replay.mjs"`, "allow"],
   [`cd "${projBase}\\tools\\permission-guard"\nnode test.mjs`, "allow"],
   ["$dir = \"tools\\permission-guard\"\nnode \"$dir\\analyze.mjs\"", "allow"],
@@ -728,6 +732,22 @@ run(net, undefined, "Netz-Lesen")
 run(denyForms, undefined, "Verweigerung & Geheimnis-Ersetzung")
 run(py, undefined, "python eng freigegeben")
 run(interp, interpOptions, "Interpreters: node-Selbstskripte, python im Projekt")
+
+// Workspace ist der Guard-Ordner selbst (Arbeit im Unter-Repo): Die eigenen
+// Skripte liegen dann direkt im Workspace, nicht unter tools/permission-guard.
+const guardBase = "C:\\work\\repo\\tools\\permission-guard"
+const guardBaseOptions = { ...interpOptions, base: guardBase, roots: [guardBase] }
+const nodeBaseChecks = [
+  ["node test.mjs im Guard-Ordner -> allow", evaluate("node test.mjs", guardBaseOptions).decision === "allow"],
+  ["node test-index.mjs im Guard-Ordner -> allow", evaluate("node test-index.mjs", guardBaseOptions).decision === "allow"],
+  ["node .\\test.mjs im Guard-Ordner -> allow", evaluate("node .\\test.mjs", guardBaseOptions).decision === "allow"],
+  ["fremdes test.mjs in anderem Ordner -> ask", evaluate("node test.mjs", { ...interpOptions, base: "C:\\work\\other" }).decision === "ask"],
+]
+for (const [name, ok] of nodeBaseChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- Interpreters: Workspace ist der Guard-Ordner\n")
 run(ruffConfigBootstrap, ruffConfigOptions, "Ruff-Konfigurationsbootstrap, exakt begrenzt")
 
 // --- Gemeinsame Faelle mit dem Codex-Guard ---------------------------------
@@ -2427,7 +2447,7 @@ const total =
   base.length + scoped.length + gitGuardrails.length + cli.length + helpVersion.length + gitleaks.length +
   readOnlyCli.length +
   docTools.length +
-  net.length + denyForms.length + py.length + interp.length +
+  net.length + denyForms.length + py.length + interp.length + nodeBaseChecks.length +
   ruffConfigBootstrap.length + sharedChecks.length + messageChecks.length + 3 +
   shadowChecks.length + shadowReportChecks.length + shadowPathChecks.length +
   mcpObs.length + mcpKeys.length + mcpSecChecks.length +

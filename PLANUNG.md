@@ -1530,3 +1530,20 @@ Branch dann stehen.
 **Stufe 2 offen.** `src/` für die Module (`guard.js`, `reviewer.js`,
 `index.js`, `audit.js`, `diagnostics.js`, `shadow.js`) und `test/` für Tests
 und Fixtures; dabei Importe, Deploy-Abbildung, CI und Doku nachziehen.
+
+## Nachtrag 21.11.2026: Guard erlaubt die eigenen Prüfskripte im Guard-Ordner
+
+**Befund.** Ein Prüfagent hat nachgewiesen, warum die Sitzung zweimal in die
+Deny-Sperre lief: Die `node`-Allow-Regel verankert auf
+`<workspace>\tools\permission-guard`. Ist der Workspace schon dieser Ordner,
+lautet die erwartete Wurzel `…\permission-guard\tools\permission-guard` — ein
+Pfad, den es nicht gibt. Folge: `node test.mjs` war dort `ask`, drei davon in
+Folge lösten das Deny-Limit aus. Dazu fehlten `test-index.mjs`,
+`test-wiring.mjs` und `bench-mcp.mjs` in `NODE_SELF_SCRIPTS`.
+
+**Umgesetzt.** `classifyNode` prüft zwei Wurzeln: die bisherige und — wenn der
+Ordnername auf `permission-guard` endet — den Workspace selbst. Die Liste der
+Selbst-Skripte enthält jetzt auch `test-index.mjs`, `test-wiring.mjs`,
+`bench-mcp.mjs`, `bench-model.mjs`, `bench-shell.mjs` und
+`smoke-reviewer.mjs`. Vier neue Testfälle in `test.mjs` (985/985), darunter
+die Gegenprobe: ein fremdes `test.mjs` in einem anderen Ordner bleibt `ask`.
