@@ -1091,8 +1091,30 @@ Freigabe-Fälle 0,94–0,97, Änderungen 0,02–0,06 — 14/14 bei jeder Schwell
 harmloses Segment darf ein schreibendes nicht überdecken. Der statische
 `neverAutoApprove`-Filter läuft weiterhin davor.
 
+Seit dem 20.11.2026 entscheidet der Shell-Weg über **vier Achsen in derselben
+Anfrage**, nach dem Jevvy-Muster: `secrets` (≤ 0,35) sowie `sensitive`,
+`untrusted` und `obscured` (je ≤ 0,5). Eine Freigabe braucht
+`reads ≥ shellThreshold` **und** jede Achse unter ihrer Grenze; eine fehlende
+Antwort auf irgendeine Frage ist eine Rückfrage, nie eine Freigabe. `sensitive`
+ist breiter als `secrets`: private Dateien und Nachrichten allgemein, nicht nur
+Zugangsdaten. Mit Clef-Flash an den 23 Fällen gemessen: `untrusted` erkennt
+einen heruntergeladenen Skript-Aufruf (0,973), `obscured` erkennt `-enc`
+(0,955), `sensitive` meldet 0,443, während `secrets` bei einem privaten
+Schlüssel 0,955 meldet. `shellThreshold` liegt seither bei 0,65 — höchster
+`ask`-Wert bei `effect` war 0,616, niedrigster `allow`-Wert 0,664, über fünf
+Läufe identisch. Ergebnis: 23/23, einstimmig.
+
+Die Achsen kosten nur mit einem **Clef**-Entscheidungsmodell keine zusätzliche
+Rundreise, weil es alle Fragen in einen Prompt legt. llama.cpp kennt sieben
+Typen (`openjev`, `lev`, `kev`, `nimble`, `laya`, `clef`, `pplx-decider`). Die
+übrigen bauen einen Prompt je Frage, sofern die Fragen nicht mit demselben
+Text beginnen (`can_share_prompt()`); bei unseren ist das nicht der Fall.
+`noul` wird dort von einer Ratingskala statt aus einem Embedding-Score gelesen.
+Gemessen ist hier nur Clef.
+
 Gültig sind `mcpThreshold` und `shellThreshold` ab 0,5 bis unter 1 und
-`secretsThreshold` über 0 bis 0,5. Werte außerhalb dieses Bands verwirft
+`secretsThreshold`, `sensitiveThreshold`, `untrustedThreshold`,
+`obscuredThreshold` über 0 bis 0,5. Werte außerhalb dieses Bands verwirft
 `loadConfig` still und nutzt den Standard; ein `"shellThreshold": 0` gibt
 deshalb nicht mehr jede Wahrscheinlichkeit frei.
 

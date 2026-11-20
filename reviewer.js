@@ -87,7 +87,11 @@ const DEFAULTS = {
   mcpThreshold: 0.7,
   // Ebene 1 (Shell) nimmt denselben Weg.
   shellBackend: "systemone",
-  shellThreshold: 0.7,
+  // Kalibriert am 20.11.2026 mit fuenf Achsen (Clef-Flash Q4_K_M, 23 Faelle):
+  // hoechster ask-Wert bei `effect` 0,616 (kube-config 0,688, dort greift die
+  // Secrets-Achse mit 0,913), niedrigster allow-Wert 0,664. 0,65 liegt
+  // dazwischen. Die Werte sind ueber fuenf Laeufe exakt konstant.
+  shellThreshold: 0.65,
   // Freigabe braucht zusaetzlich, dass der Befehl nach Modellurteil kaum
   // Zugangsdaten oder private Daten exponiert (Jevvy-Muster: mehrere Achsen,
   // alle muessen bestehen). Die Frage laeuft in derselben systemone-Anfrage
@@ -319,6 +323,12 @@ const THRESHOLD_BOUNDS = {
   mcpThreshold: (n) => n >= 0.5 && n < 1,
   shellThreshold: (n) => n >= 0.5 && n < 1,
   secretsThreshold: (n) => n > 0 && n <= 0.5,
+  // Stufe 3 (20.11.2026): gleiche Richtung wie secrets - hohe Werte sind
+  // schlecht. Jevvy nennt 0,50 fuer sensible, untrusted und obscured; der
+  // Wert ist hier einstellbar, aber nur in diesem Band.
+  sensitiveThreshold: (n) => n > 0 && n <= 0.5,
+  untrustedThreshold: (n) => n > 0 && n <= 0.5,
+  obscuredThreshold: (n) => n > 0 && n <= 0.5,
 }
 
 export function sanitizeThresholds(source) {
@@ -581,11 +591,42 @@ export const SECRETS_QUESTION = {
     "Would running this command expose credentials, API keys, tokens, passwords, or other private data? Reading a file that contains them counts as exposing.",
 }
 
+// Stufe 3 (ADR-0002, Option B): drei weitere Achsen nach dem Jevvy-Muster.
+// Jede ist eine eigene Frage im selben Request und kostet damit keine
+// zusaetzliche Rundreise. Gemessen 20.11.2026 mit Clef-Flash Q4_K_M:
+// `untrusted` erkennt einen heruntergeladenen Skript-Aufruf (0,973), `obscured`
+// ein `-enc`-Kommando (0,955), `sensitive` das Lesen eines privaten Schluessels
+// (0,443, waehrend `secrets` dort 0,955 meldet). Die Achsen trennen also.
+// `sensitive` ist breiter als `secrets`: private Dateien und Nachrichten
+// allgemein gegenueber Zugangsdaten im engeren Sinn.
+export const SENSITIVE_QUESTION = {
+  type: "noul",
+  instructions:
+    "Would running this command reveal private or personal data, such as personal files, messages, photos, or information about the user?",
+}
+
+export const UNTRUSTED_QUESTION = {
+  type: "noul",
+  instructions:
+    "Does this command run code or content from an untrusted source, such as a downloaded script, a remote file, or text the user did not write?",
+}
+
+export const OBSCURED_QUESTION = {
+  type: "noul",
+  instructions: "Is this command obfuscated, encoded, or written in a way that hides what it does?",
+}
+
 export function buildShellSystemoneRequest({ command, model = "", project = "", temp = "" }) {
   return {
     model,
     state: { command: String(command ?? ""), project: String(project ?? ""), temp: String(temp ?? "") },
-    questions: { effect: shellDecisionQuestion(project, temp), secrets: SECRETS_QUESTION },
+    questions: {
+      effect: shellDecisionQuestion(project, temp),
+      secrets: SECRETS_QUESTION,
+      sensitive: SENSITIVE_QUESTION,
+      untrusted: UNTRUSTED_QUESTION,
+      obscured: OBSCURED_QUESTION,
+    },
   }
 }
 
@@ -705,9 +746,19 @@ async function requestSystemone(payload, cfg, timeoutMs = cfg.timeoutMs || 2000)
     const data = await response.json()
     const probability = data?.answers?.effect?.probabilities?.reads
     if (typeof probability !== "number") return { ok: false, reason: "keine Wahrscheinlichkeit" }
-    // Die Secrets-Frage antwortet mit, wenn der Aufruf sie gestellt hat.
-    const secrets = data?.answers?.secrets?.noul
-    return { ok: true, probability, secrets: typeof secrets === "number" ? secrets : null }
+    // Die uebrigen Achsen antworten mit, wenn der Aufruf sie gestellt hat.
+    const axis = (name) => {
+      const value = data?.answers?.[name]?.noul
+      return typeof value === "number" ? value : null
+    }
+    return {
+      ok: true,
+      probability,
+      secrets: axis("secrets"),
+      sensitive: axis("sensitive"),
+      untrusted: axis("untrusted"),
+      obscured: axis("obscured"),
+    }
   } catch (error) {
     return { ok: false, aborted: isTimeoutAbort(error), reason: String(error?.name ?? "Fehler") }
   } finally {
@@ -939,13 +990,47 @@ async function requestCompletion(messages, cfg) {
 // Jedes Segment einzeln bewerten; das schwaechste Ergebnis zaehlt. Ein harmloses
 // Segment darf ein schreibendes nicht ueberdecken. Ein Zeitbudget gilt fuer alle
 // Segmente zusammen, sonst waeren es bis zu Segmentzahl mal timeoutMs.
+// Achsen der Stufe 3 (ADR-0002, Option B). Reihenfolge = Pruefreihenfolge;
+// `secrets` steht zuerst, damit die bestehende Begruendung erhalten bleibt.
+// Fehlt eine Antwort, ist das keine Entwarnung (fail closed, 20.11.2026).
+const SHELL_AXES = [
+  {
+    key: "secrets",
+    threshold: "secretsThreshold",
+    fallback: 0.35,
+    missing: "Modell: keine Antwort auf die Geheimnisfrage",
+    hit: "Modell: exponiert Daten",
+  },
+  {
+    key: "sensitive",
+    threshold: "sensitiveThreshold",
+    fallback: 0.5,
+    missing: "Modell: keine Antwort auf die Sensibel-Frage",
+    hit: "Modell: sensible Daten",
+  },
+  {
+    key: "untrusted",
+    threshold: "untrustedThreshold",
+    fallback: 0.5,
+    missing: "Modell: keine Antwort auf die Herkunftsfrage",
+    hit: "Modell: unvertrauenswuerdige Quelle",
+  },
+  {
+    key: "obscured",
+    threshold: "obscuredThreshold",
+    fallback: 0.5,
+    missing: "Modell: keine Antwort auf die Verschleierungsfrage",
+    hit: "Modell: verschleiert",
+  },
+]
+
 async function shellBySystemone(commands, where, cfg) {
   const segments = (commands ?? []).map((command) => String(command).trim()).filter(Boolean)
   if (!segments.length) return { decision: "ask", reason: "leer" }
   const deadline = Date.now() + Math.max(250, cfg.timeoutMs || 2000)
   let lowest = 1
-  let highestSecrets = 0
-  let missingSecrets = false
+  const highest = Object.fromEntries(SHELL_AXES.map((axis) => [axis.key, 0]))
+  const missing = new Set()
   for (const command of segments) {
     const left = deadline - Date.now()
     if (left <= 0) return { decision: "ask", reason: "Zeitbudget ueberschritten" }
@@ -958,21 +1043,32 @@ async function shellBySystemone(commands, where, cfg) {
       return askAfterAbort(result, cfg)
     }
     lowest = Math.min(lowest, result.probability)
-    // Jede Antwort mit hohem Exponierungsrisiko ist Rueckfrage. Eine fehlende
-    // Antwort ist keine Entwarnung: Wer die Geheimnisfrage nicht beantwortet,
-    // bekommt keine Freigabe (fail closed, Entscheidung 20.11.2026). Das gilt
-    // je Segment, damit eine Antwort nicht fuer eine andere einspringt.
-    if (result.secrets === null) missingSecrets = true
-    else highestSecrets = Math.max(highestSecrets, result.secrets)
+    // Jede Antwort mit hohem Risiko ist Rueckfrage. Eine fehlende Antwort ist
+    // keine Entwarnung: Wer eine Frage nicht beantwortet, bekommt keine
+    // Freigabe. Das gilt je Segment, damit eine Antwort nicht fuer eine andere
+    // einspringt.
+    for (const axis of SHELL_AXES) {
+      const value = result[axis.key]
+      if (typeof value !== "number") missing.add(axis.key)
+      else highest[axis.key] = Math.max(highest[axis.key], value)
+    }
   }
-  if (missingSecrets) {
-    return { decision: "ask", reason: "Modell: keine Antwort auf die Geheimnisfrage", probability: lowest }
-  }
-  if (highestSecrets > (cfg.secretsThreshold ?? 0.35)) {
-    return { decision: "ask", reason: `Modell: exponiert Daten (s=${highestSecrets.toFixed(3)})`, probability: lowest, secrets: highestSecrets }
+  for (const axis of SHELL_AXES) {
+    if (missing.has(axis.key)) {
+      return { decision: "ask", reason: axis.missing, probability: lowest, ...highest }
+    }
+    const limit = cfg[axis.threshold] ?? axis.fallback
+    if (highest[axis.key] > limit) {
+      return {
+        decision: "ask",
+        reason: `${axis.hit} (s=${highest[axis.key].toFixed(3)})`,
+        probability: lowest,
+        ...highest,
+      }
+    }
   }
   const verdict = systemoneVerdict(lowest, cfg.shellThreshold)
-  return { ...verdict, secrets: highestSecrets }
+  return { ...verdict, ...highest }
 }
 
 export async function review({ commands, project, temp, config }) {

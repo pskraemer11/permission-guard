@@ -1081,9 +1081,29 @@ from 0.5 to 0.9. With several segments the **weakest** result counts; a
 harmless segment must not mask a writing one. The static `neverAutoApprove`
 filter still runs before it.
 
+Since 20.11.2026 the shell decision uses **four axes in the same request**,
+after the Jevvy pattern: `secrets` (≤ 0.35) plus `sensitive`, `untrusted` and
+`obscured` (≤ 0.5 each). A release needs `reads ≥ shellThreshold` **and** every
+axis below its limit; a missing answer to any question is a prompt, never a
+release. `sensitive` is broader than `secrets`: private files and messages in
+general, not only credentials. Measured with Clef-Flash on the 23 cases:
+`untrusted` catches a downloaded script (0.973), `obscured` catches `-enc`
+(0.955), `sensitive` reports 0.443 where `secrets` reports 0.955 for a private
+key. `shellThreshold` is 0.65 since then — highest `ask` value at `effect` was
+0.616, lowest `allow` value 0.664, identical across five runs. Result: 23/23,
+unanimous.
+
+The axes cost no extra round trip only with a **Clef** decision model, which
+puts all questions into one prompt. llama.cpp knows seven decision model types
+(`openjev`, `lev`, `kev`, `nimble`, `laya`, `clef`, `pplx-decider`). The others
+build one prompt per question unless the questions share a prefix
+(`can_share_prompt()`); ours do not. `noul` is read from a rating scale there
+instead of an embedding score. Only Clef has been measured here.
+
 Valid values are `mcpThreshold` and `shellThreshold` from 0.5 up to but not
-including 1, and `secretsThreshold` above 0 up to 0.5. `loadConfig` silently
-discards values outside that band and uses the default, so
+including 1, and `secretsThreshold`, `sensitiveThreshold`,
+`untrustedThreshold`, `obscuredThreshold` above 0 up to 0.5. `loadConfig`
+silently discards values outside that band and uses the default, so
 `"shellThreshold": 0` no longer approves every probability.
 
 ### Step E: test regime before activation

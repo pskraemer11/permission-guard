@@ -609,3 +609,42 @@ Durchsetzung.
 - Vier Achsen (Stufe 3): eigene Messung, Schwellen je Achse kalibrieren.
 - Deny-Limits (3/20 gegen 3/10-in-50): zurückgestellt.
 - Skriptblock und `$(…)`-Teilausdruck an den Reviewer: nur mit rotem Fall.
+
+---
+
+## Nachtrag 20.11.2026: Stufe 3 umgesetzt (vier Achsen)
+
+**Status:** umgesetzt; der erste Punkt unter „6. Offen" ist damit erledigt.
+
+*Entscheidung.* Option B aus „Offene Frage 1": drei weitere `noul`-Fragen im
+selben Request wie `effect` und `secrets` — `sensitive`, `untrusted`,
+`obscured`. Jevvys Werte (je ≤ 0,50) wurden **nicht** ungeprüft übernommen,
+sondern am eigenen Modell gemessen.
+
+*Umgesetzt.* `reviewer.js`: `SENSITIVE_QUESTION`, `UNTRUSTED_QUESTION`,
+`OBSCURED_QUESTION`; `buildShellSystemoneRequest` stellt fünf Fragen;
+`requestSystemone` liest vier Achsen; `shellBySystemone` prüft sie über die
+Liste `SHELL_AXES` in fester Reihenfolge (secrets, sensitive, untrusted,
+obscured). Fehlt eine Antwort, ist das eine Rückfrage. Die Schwellen
+`sensitiveThreshold`, `untrustedThreshold` und `obscuredThreshold` sind
+einstellbar, Band wie bei `secrets` (über 0 bis 0,5).
+
+*Kalibrierung.* `shellThreshold` 0,7 → 0,65. Grund: Mit fünf Fragen im Prompt
+liegt der höchste `ask`-Wert bei `effect` bei 0,616 (kube-config 0,688, dort
+greift `secrets` mit 0,913), der niedrigste `allow`-Wert bei 0,664. Über fünf
+Läufe sind die Werte exakt identisch; die Trennkante ist reproduzierbar.
+
+*Messung.* `bench-shell --repeat 3`: 23/23, einstimmig. `bench-model
+--repeat 3`: 14/14. `test.mjs` 962/962 (sieben neue Fälle für die Achsen).
+
+*Beobachtung.* Die Achsen trennen: `untrusted` 0,973 für einen
+heruntergeladenen Skript-Aufruf, `obscured` 0,955 für `-enc`, `sensitive` 0,443
+neben `secrets` 0,955 beim Lesen eines privaten Schlüssels. Bei harmlosen
+Befehlen bleiben alle Achsen unter 0,15.
+
+*Grenze — modellabhängig.* llama.cpp kennt sieben Entscheidungsmodell-Typen
+(`openjev`, `lev`, `kev`, `nimble`, `laya`, `clef`, `pplx-decider`;
+`common/common.h`). Nur **Clef** legt alle Fragen in einen Prompt; bei den
+anderen entstehen bis zu fünf Prompts, und `noul` wird von einer Ratingskala
+gelesen. Gemessen ist ausschließlich Clef-Flash. Mit einem anderen Typ wäre die
+Achsenzahl ein Latenzfaktor und die Schwellen wären neu zu messen.

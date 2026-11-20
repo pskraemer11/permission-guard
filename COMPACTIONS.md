@@ -2698,3 +2698,55 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
 1. Commit.
 2. Stufe 3 (vier Achsen) mit eigener Messung und Schwellenkalibrierung.
 3. Danach Deny-Limits (zurueckgestellt).
+
+
+=============== Compaction 20.11.2026 / 17:20 ================
+## Objective
+- **Current:** Stufe 3 (vier Achsen) umgesetzt, gemessen und dokumentiert;
+  Commit steht aus.
+- **Next:** Commit, dann Deny-Limits (zurueckgestellt).
+
+## Important Details
+- **Entscheidung:** ADR-0002, Offene Frage 1, Option B - drei weitere
+  `noul`-Fragen im selben Request: `sensitive`, `untrusted`, `obscured`.
+  Schwellen je 0,5 (Band ueber 0 bis 0,5, wie `secrets`).
+- **Kalibrierung `shellThreshold` 0,7 -> 0,65:** Mit fuenf Fragen sank der
+  `effect`-Wert bei Schreibzielen im Temp-Ordner. Verteilung: hoechster
+  ask-Wert 0,616 (kube-config 0,688, dort greift `secrets` 0,913), niedrigster
+  allow-Wert 0,664. Ueber fuenf Laeufe exakt identisch - das Modell ist bei
+  gleichem Prompt deterministisch.
+- **Beleg, dass die Achsen trennen:** `untrusted` 0,973 (heruntergeladenes
+  Skript), `obscured` 0,955 (`-enc`), `sensitive` 0,443 neben `secrets` 0,955
+  (privater Schluessel). Harmlose Befehle: alle Achsen unter 0,15.
+- **Modellabhaengigkeit (Nutzerhinweis, nachgelesen):** llama.cpp kennt sieben
+  Decision-Typen (`openjev`, `lev`, `kev`, `nimble`, `laya`, `clef`,
+  `pplx-decider`; `common/common.h`). Nur **clef** legt alle Fragen in einen
+  Prompt. Die anderen bauen einen Prompt je Frage, sofern die Fragen nicht mit
+  demselben Text beginnen (`can_share_prompt()`); unsere tun das nicht.
+  `noul` kommt dort von einer Ratingskala. Schlussfolgerung aus dem Code, nicht
+  gemessen; gemessen ist nur Clef-Flash.
+- **Eigener Fehler, korrigiert:** Ein `/systemone`-Probeaufruf gegen
+  `localhost:8080/systemone` ergab 404; der Pfad ist `/v1/systemone`, weil
+  `baseUrl` auf `/v1` endet. Danach HTTP 200.
+- **Testkorrektur:** Ein Test suchte `/sensibel/`, der Grund heisst aber
+  "sensible Daten". Test auf `/sensible/` geaendert, nicht den Grund.
+
+## Work State
+- **Completed:** `reviewer.js` (drei Fragen, `SHELL_AXES`, vier Schwellen),
+  `shell-reviewer.config.example.json`, `test.mjs` (962/962, sieben neue
+  Faelle), beide READMEs, ADR-0002 (Nachtrag Stufe 3), `PLANUNG.md`,
+  `CHANGELOG.md`.
+- **Active:** Commit.
+- **Blocked:** keiner.
+
+## Next Move
+1. Commit der Stufe 3.
+2. Deny-Limits (ADR, Offene Frage 2): Option B, 3 in Folge / 10 in letzten 50,
+   je Turn; nur Reviewer-`ask` zaehlt.
+3. Danach G0/G1 (Grenz-Markierung fuer MCP-Ergebnisse).
+
+## Relevant Files
+- `reviewer.js`: `SENSITIVE_QUESTION`, `UNTRUSTED_QUESTION`,
+  `OBSCURED_QUESTION`, `SHELL_AXES`, `shellThreshold: 0.65`.
+- `staging/probe-axis-table.mjs`, `staging/probe-spread.mjs`,
+  `staging/probe-four-axes.mjs`: Messhilfen, nicht versioniert.

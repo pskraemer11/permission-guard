@@ -8,6 +8,20 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **Vier Achsen in der Shell-Prüfung (20.11.2026):** `reviewer.js` stellt im
+  selben `/v1/systemone`-Request drei weitere `noul`-Fragen — `sensitive`
+  (private Daten allgemein, breiter als `secrets`), `untrusted` (Code oder
+  Inhalt aus fremder Quelle) und `obscured` (verschleiert oder kodiert). Eine
+  Freigabe braucht `reads ≥ shellThreshold` **und** jede Achse unter ihrer
+  Grenze; eine fehlende Antwort ist eine Rückfrage. Neue Schwellen
+  `sensitiveThreshold`, `untrustedThreshold`, `obscuredThreshold` (je 0,5,
+  Band über 0 bis 0,5). `bench-shell` 23/23 einstimmig, `bench-model` 14/14,
+  `test.mjs` 962/962 (sieben neue Fälle). Mit Clef-Flash gemessen: `untrusted`
+  0,973 für einen heruntergeladenen Skript-Aufruf, `obscured` 0,955 für `-enc`,
+  `sensitive` 0,443 neben `secrets` 0,955 beim privaten Schlüssel.
+  **Grenze:** Nur der Decision-Modell-Typ `clef` legt alle Fragen in einen
+  Prompt; llama.cpp kennt sieben Typen, bei den anderen entstehen bis zu fünf
+  Prompts. Gemessen ist ausschließlich Clef-Flash.
 - **`pdftotext` und `pandoc` (20.11.2026):** `guard.js` prüft beide mit eigenen
   Funktionen statt über `READ_BINARIES`. `pdftotext` gilt als lesend, solange
   keine Ausgabedatei folgt (oder `-` als Ziel steht); die 14 Optionen mit
@@ -95,6 +109,12 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 - **Skill-Baseline ergänzt (17.11.2026):** `hook-regeln.yml` prüft den Push-/PR-Bereich mit demselben `pre-push`-Hook lokal (gitleaks 8.30.1, `GITHOOKS_TEST_GATE=0`, fail closed bei unlesbaren Revisionen); der Verhaltensproben-Schritt des Eltern-Repositories entfällt, weil `tools/githooks-test/` hier nicht existiert. `scripts/enable-hooks.ps1` setzt `core.hooksPath .githooks` pro Klon. `requirements-dev.txt` pinnt `pip-audit==2.10.1`; `ci.yml` führt `pip_audit --strict` im Python-Job aus. Ruff prüft jetzt die Bandit-`S`-Regeln; `assert` (`S101`) und `subprocess` (`S603`) sind in `tests/*` ignoriert, der Produktivcode war schon sauber.
 
 ### Geändert
+
+- **`shellThreshold` 0,7 → 0,65 (20.11.2026):** Mit fünf Fragen im Prompt lag
+  der höchste `ask`-Wert bei `effect` bei 0,616 (kube-config 0,688, dort greift
+  `secrets` mit 0,913), der niedrigste `allow`-Wert bei 0,664. 0,65 liegt
+  dazwischen; über fünf Läufe sind die Werte exakt identisch.
+  `shell-reviewer.config.example.json` nachgezogen.
 
 - **npm in Dependabot und CI (20.11.2026):** `.github/dependabot.yml` führt
   jetzt `package-ecosystem: npm` (Lockfile `package-lock.json` liegt vor, also

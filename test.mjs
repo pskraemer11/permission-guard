@@ -1246,7 +1246,18 @@ globalThis.fetch = async (url, init) => {
     const body = JSON.parse(init?.body ?? "{}")
     const command = String(body?.state?.command ?? "")
     const reads = command.includes("Set-Content") ? 0.1 : 0.95
-    return { ok: true, json: async () => ({ answers: { effect: { probabilities: { reads } }, secrets: { noul: 0.01 } } }) }
+    return {
+      ok: true,
+      json: async () => ({
+        answers: {
+          effect: { probabilities: { reads } },
+          secrets: { noul: 0.01 },
+          sensitive: { noul: 0.01 },
+          untrusted: { noul: 0.01 },
+          obscured: { noul: 0.01 },
+        },
+      }),
+    }
   }
   return { ok: true, json: async () => ({ choices: [{ message: { content: "Ja" } }] }) }
 }
@@ -1872,10 +1883,22 @@ console.log("-- Diagnose\n")
 const secretsChecks = []
 {
   const saved = globalThis.fetch
-  const systemone = (reads, secrets) =>
+  const systemone = (reads, secrets, extra = {}) =>
     async (url) => {
       if (String(url).endsWith("/systemone")) {
-        return { ok: true, status: 200, json: async () => ({ answers: { effect: { probabilities: { reads } }, secrets: { noul: secrets } } }) }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            answers: {
+              effect: { probabilities: { reads } },
+              secrets: { noul: secrets },
+              sensitive: { noul: extra.sensitive ?? 0.01 },
+              untrusted: { noul: extra.untrusted ?? 0.01 },
+              obscured: { noul: extra.obscured ?? 0.01 },
+            },
+          }),
+        }
       }
       return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "Ja" } }] }) }
     }
@@ -1897,7 +1920,19 @@ const secretsChecks = []
     if (String(url).endsWith("/systemone")) {
       const command = String(JSON.parse(init?.body ?? "{}")?.state?.command ?? "")
       const secrets = command.includes("Get-ChildItem") ? undefined : 0.01
-      return { ok: true, status: 200, json: async () => ({ answers: { effect: { probabilities: { reads: 0.9 } }, secrets: { noul: secrets } } }) }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          answers: {
+            effect: { probabilities: { reads: 0.9 } },
+            secrets: { noul: secrets },
+            sensitive: { noul: 0.01 },
+            untrusted: { noul: 0.01 },
+            obscured: { noul: 0.01 },
+          },
+        }),
+      }
     }
     return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "Ja" } }] }) }
   }
@@ -1915,6 +1950,87 @@ for (const [name, ok] of secretsChecks) {
   console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
 }
 console.log("-- Secrets-Achse\n")
+
+// --- Stufe 3 (20.11.2026): sensitive, untrusted, obscured -------------------
+// Jede Achse kann allein die Freigabe blocken; eine fehlende Antwort ebenso.
+const fourAxesChecks = []
+{
+  const saved = globalThis.fetch
+  const systemone = (extra = {}) =>
+    async (url) => {
+      if (String(url).endsWith("/systemone")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            answers: {
+              effect: { probabilities: { reads: 0.9 } },
+              secrets: { noul: extra.secrets ?? 0.01 },
+              sensitive: { noul: extra.sensitive ?? 0.01 },
+              untrusted: { noul: extra.untrusted ?? 0.01 },
+              obscured: { noul: extra.obscured ?? 0.01 },
+            },
+          }),
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "Ja" } }] }) }
+    }
+  const ask = async (extra, more = {}) => {
+    globalThis.fetch = systemone(extra)
+    return review({
+      commands: ["Get-Content data.txt"],
+      project: "P",
+      temp: "T",
+      config: { enabled: true, baseUrl: "http://[IP_ADDRESS]:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500, ...more },
+    })
+  }
+
+  const untrusted = await ask({ untrusted: 0.9 })
+  fourAxesChecks.push(["untrusted ueber Schwelle blockt", untrusted.decision === "ask" && /unvertrauens/.test(String(untrusted.reason))])
+
+  const obscured = await ask({ obscured: 0.9 })
+  fourAxesChecks.push(["obscured ueber Schwelle blockt", obscured.decision === "ask" && /verschleiert/.test(String(obscured.reason))])
+
+  const sensitive = await ask({ sensitive: 0.9 })
+  fourAxesChecks.push(["sensitive ueber Schwelle blockt", sensitive.decision === "ask" && /sensible/.test(String(sensitive.reason))])
+
+  // Eine fehlende Achse ist keine Entwarnung.
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/systemone")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          answers: {
+            effect: { probabilities: { reads: 0.9 } },
+            secrets: { noul: 0.01 },
+            sensitive: { noul: 0.01 },
+            obscured: { noul: 0.01 },
+          },
+        }),
+      }
+    }
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "Ja" } }] }) }
+  }
+  const noUntrusted = await review({ commands: ["Get-Content data.txt"], project: "P", temp: "T", config: { enabled: true, baseUrl: "http://[IP_ADDRESS]:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 } })
+  fourAxesChecks.push(["fehlende Herkunftsantwort ergibt Rueckfrage", noUntrusted.decision === "ask" && /Herkunftsfrage/.test(String(noUntrusted.reason))])
+
+  const clean = await ask({})
+  fourAxesChecks.push(["alle Achsen niedrig ergibt allow", clean.decision === "allow"])
+
+  const strict = await ask({ untrusted: 0.4 })
+  fourAxesChecks.push(["untrusted 0,4 bei Schwelle 0,5 bleibt allow", strict.decision === "allow"])
+
+  const tight = await ask({ untrusted: 0.4 }, { untrustedThreshold: 0.3 })
+  fourAxesChecks.push(["untrusted 0,4 bei Schwelle 0,3 wird Rueckfrage", tight.decision === "ask"])
+
+  globalThis.fetch = saved
+}
+for (const [name, ok] of fourAxesChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- Vier Achsen\n")
 
 // --- Belegtes "zu gross" (20.11.2026) -------------------------------------
 // Der Serverfehler "too large to process" ist ein Beweis, dass niemand die
@@ -2234,6 +2350,6 @@ const total =
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
-  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + thresholdChecks.length + warmupChecks.length + abortWarmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + reviewBlock.length + pipelineBlocks.length + blockReasons.length + 1 + secretsChecks.length + editCases.length + 2 + 11 + 3 + 3 + 1
+  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + thresholdChecks.length + warmupChecks.length + abortWarmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + reviewBlock.length + pipelineBlocks.length + blockReasons.length + 1 + secretsChecks.length + fourAxesChecks.length + editCases.length + 2 + 11 + 3 + 3 + 1
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)
