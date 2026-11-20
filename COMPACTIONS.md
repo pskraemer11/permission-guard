@@ -3274,3 +3274,49 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
 - `docs/adr/0002` und die Forschungsnotizen in `docs/` nennen weiter die alten
   Pfade; der ADR trägt dazu einen Nachtrag.
 - Untracked bleiben: drei Screenshots, ein JPG und `review/`.
+
+
+================ Compaction 21.11.2026 / 00:58 ================
+## Objective
+- **Current:** `scripts/ship.ps1` wartet nur noch auf die erforderlichen
+  Prüfungen. Umgesetzt, geprüft, noch nicht committet.
+- **Completed:** `staging/` auf die neuen Pfade gezogen; PR #17 gemergt.
+
+## Important Details
+- **Vorfall:** Im Push-Lauf 44838614289 blieb der Job „Zeilenenden und BOM"
+  (136641155066) auf `status: in_progress` stehen, obwohl alle Schritte
+  `success` und `completed_at` gesetzt waren. `gh pr checks --watch` wartet auf
+  **alle** Prüfungen, also endlos; die PR-Seite zeigte grün, weil nur fünf
+  Kontexte im Ruleset `baseline` erforderlich sind: die vier
+  `Tests (Node …)`-Jobs und `actionlint`.
+- **Fix:** `gh pr checks --watch --required`, danach eine getrennte Suche nach
+  `state == "FAILURE"` über alle Prüfungen. Ein hängender optionaler Job
+  blockiert nicht mehr, ein fehlgeschlagener schon.
+- **Belegt:** `gh pr checks 17 --required` listet nur die zehn erforderlichen
+  Einträge (zwei Läufe), `--watch --required` endet sofort mit Exit 0, die
+  Fehlschlag-Suche liefert `[]`.
+- **Kein Neustart des Jobs nötig:** Nach dem Merge ist der Eintrag mit dem
+  Branch verschwunden; `gh pr checks 17 --json state` zeigte ihn zuletzt noch
+  als `IN_PROGRESS`.
+
+## Work State
+- Geändert: `scripts/ship.ps1` (Kommentar plus die zwei Prüfungen),
+  `CHANGELOG.md`, `PLANUNG.md`, `COMPACTIONS.md`.
+- `staging/` nachgezogen: 23 Messhilfen importieren `../src/`,
+  `gegenprobe.ps1` und Geschwister rufen `scripts/start-reviewer.ps1` sowie
+  `test/bench-*.mjs`. Live geprüft mit `node staging/probe-one.mjs`.
+- Neu in `staging/`: `check-scripts-syntax.ps1` (Parser-Prüfung aller
+  `scripts/*.ps1`, alle sieben grün); `check-deploy-syntax.ps1` gelöscht.
+- Nicht gemacht: Commit, Push.
+
+## Next Move
+1. Sechs Prüfungen laufen lassen, committen.
+2. Ausliefern mit `scripts/ship.ps1` — der jetzt nicht mehr an einem hängenden
+   optionalen Job stehen bleibt.
+
+## Important Context
+- `git reset --hard` ist im Guard ein Risikomuster und wird verweigert;
+  `git reset --soft` plus `git restore` ist der Weg.
+- Ein `--amend` auf einem bereits gepushten Commit erzeugt eine Divergenz
+  (ahead 1 / behind 1). Vor dem Amend prüfen, ob der Branch schon gepusht ist.
+- Untracked bleiben: vier Screenshots, ein JPG und `review/`.
