@@ -97,6 +97,13 @@ const DEFAULTS = {
   // alle muessen bestehen). Die Frage laeuft in derselben systemone-Anfrage
   // und kostet damit keine zweite Rundreise. Grenze: secrets <= Schwelle.
   secretsThreshold: 0.35,
+  // Grenz-Markierung fuer MCP-Ergebnisse (G1, 20.11.2026): "off" | "annotate" |
+  // "scan". Standard "off" - Wirkung nur auf Entscheidung des Nutzers.
+  resultShield: "off",
+  // Deny-Limits (20.11.2026): Rueckfragen in Folge und im Fenster.
+  denyLimitConsecutive: 3,
+  denyLimitRecent: 10,
+  denyLimitWindow: 50,
   // Zusaetzliche Risikomuster aus der Projektkonfiguration.
   extraRisky: [],
   // Schattenlauf Variante 3: "off" oder "shadow". Im Schattenmodus werden
@@ -346,11 +353,34 @@ export function sanitizeThresholds(source) {
   return out
 }
 
+// Schalter ausserhalb der Schwellen: Grenz-Markierung und Deny-Limits. Sie
+// stehen in derselben Datei, damit der Nutzer sie ohne Neustart aendern kann.
+const SHIELD_MODES = new Set(["off", "annotate", "scan"])
+const SWITCH_BOUNDS = {
+  denyLimitConsecutive: (n) => Number.isInteger(n) && n >= 1 && n <= 10,
+  denyLimitRecent: (n) => Number.isInteger(n) && n >= 1 && n <= 50,
+  denyLimitWindow: (n) => Number.isInteger(n) && n >= 10 && n <= 200,
+}
+
+export function sanitizeSwitches(source) {
+  const out = {}
+  if (!source || typeof source !== "object") return out
+  const shield = String(source.resultShield ?? "").toLowerCase()
+  if (SHIELD_MODES.has(shield)) out.resultShield = shield
+  for (const [key, allowed] of Object.entries(SWITCH_BOUNDS)) {
+    const n = Number(source[key])
+    if (Number.isFinite(n) && allowed(n)) out[key] = n
+  }
+  return out
+}
+
 export function loadConfig(overrides = {}) {
   let fromFile = {}
   try {
-    // Die Datei ist der einzige vom Benutzer editierbare Weg zu einer Schwelle.
-    fromFile = sanitizeThresholds(JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")))
+    // Die Datei ist der einzige vom Benutzer editierbare Weg zu einer Schwelle
+    // oder einem Schalter.
+    const parsed = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8"))
+    fromFile = { ...sanitizeThresholds(parsed), ...sanitizeSwitches(parsed) }
   } catch {
     // Ohne Datei gelten die Defaults; das Plugin bleibt funktionsfaehig.
   }
@@ -380,6 +410,22 @@ export function loadConfig(overrides = {}) {
   }
   if (env.PERMISSION_GUARD_GIT_SHADOW === "0" || env.PERMISSION_GUARD_GIT_SHADOW === "off") {
     config.gitShadow = "off"
+  }
+  // Grenz-Markierung und Deny-Limits: Datei ist der Normalfall, die
+  // Umgebungsvariable bleibt als Uebersteuerung.
+  if (env.PERMISSION_GUARD_RESULT_SHIELD) {
+    const mode = String(env.PERMISSION_GUARD_RESULT_SHIELD).toLowerCase()
+    if (SHIELD_MODES.has(mode)) config.resultShield = mode
+  }
+  const switchEnv = {
+    denyLimitConsecutive: "PERMISSION_GUARD_DENY_CONSECUTIVE",
+    denyLimitRecent: "PERMISSION_GUARD_DENY_RECENT",
+    denyLimitWindow: "PERMISSION_GUARD_DENY_WINDOW",
+  }
+  for (const [key, name] of Object.entries(switchEnv)) {
+    if (!env[name]) continue
+    const n = Number(env[name])
+    if (Number.isFinite(n) && SWITCH_BOUNDS[key](n)) config[key] = n
   }
   return config
 }

@@ -2778,8 +2778,192 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
   `start-reviewer.ps1` im Timeout haengen blieb); der Watchdog wurde fuer die
   Tests beendet und ist nicht neu gestartet.
 
+
+=============== Compaction 20.11.2026 / 18:04 ================
+## Objective
+- **Current:** Deny-Limits umgesetzt und getestet; Commit steht aus.
+- **Next:** Commit, dann G0/G1 (Grenz-Markierung fuer MCP-Ergebnisse).
+
+## Important Details
+- **Vorfrage geklaert (Nutzerauftrag):** Der Hook erkennt einen Turn-Wechsel.
+  `ctx.event.subscribe()` liefert `session.execution.started` mit
+  `{ sessionID }`; `succeeded/failed/interrupted` beenden den Turn.
+  `session.step.started` traegt zusaetzlich `assistantMessageID`. Belege:
+  `@opencode/plugin/dist/promise/plugin.d.ts` (Context.event),
+  `dist/promise/event.d.ts`, `@opencode/schema/dist/event-manifest.d.ts`.
+- **Umgesetzt:** Zaehler je Sitzung in `index.js`, im `finally` des
+  `evaluate`-Hooks. Drei Rueckfragen in Folge oder zehn in den letzten
+  fuenfzig ergeben `deny`. `allow`/`deny` setzen zurueck; Reset bei
+  `session.execution.started`. Schwellen per Env:
+  `PERMISSION_GUARD_DENY_CONSECUTIVE` (3), `PERMISSION_GUARD_DENY_RECENT` (10),
+  `PERMISSION_GUARD_DENY_WINDOW` (50).
+- **Abweichung vom Codex-Vorbild:** Gezaehlt wird jede `ask`, nicht nur die des
+  Modells - bei uns ist jede davon eine wegklickbare Rueckfrage.
+- **Nicht umgesetzt:** aktiver Turn-Abbruch (`interrupt`); der Hook verweigert
+  nur den Aufruf.
+- **Messung:** `test-index.mjs` 29/29, sechs neue Faelle.
+
+## Work State
+- **Completed:** `index.js`, `test-index.mjs`, `README.md`, `README_de.md`,
+  ADR-0002 (Nachtrag), `PLANUNG.md`, `CHANGELOG.md`.
+- **Active:** Commit.
+- **Blocked:** keiner.
+
+## Next Move
+1. Commit.
+2. G0/G1: MCP-Ergebnis-Form pruefen, Textinhalte in `[ud-<id>]...[/ud-<id>]`
+   wrappen.
+3. Danach die Decision-Modelle aus der ggml-Collection messen (Vormerk).
+
+
+=============== Compaction 20.11.2026 / 18:26 ================
+## Objective
+- **Current:** G0/G1 (Grenz-Markierung fuer MCP-Ergebnisse) umgesetzt und im
+  Test belegt; Commit steht aus.
+- **Next:** Commit, dann Live-Spike mit Deploy (offene Frage aus G0).
+
+## Important Details
+- **G0-Form:** `Tool.Result` = `{ output?, content?: string | Content[],
+  metadata? }`; `Content` = `{ type: "text", text }` oder `{ type: "file",
+  uri, mime, name? }`. Der `execute.after`-Hook bekommt `result` veraenderbar,
+  der Callback gibt `void` zurueck - die Aenderung erfolgt per Mutation.
+- **G1:** Textinhalte werden zu `[ud-<shortHash(id)>]...[/ud-<id>]`;
+  vorhandene `[ud-`/`[/ud-` im Text werden zu `[ud_`/`[/ud_` entschaerft;
+  `session.hook("context")` ergaenzt eine Systemanweisung. Dateien bleiben
+  unberuehrt. Schalter `PERMISSION_GUARD_RESULT_SHIELD` = off (Standard) |
+  annotate | scan.
+- **Testfalle:** Zwei `plugin.setup`-Aufrufe teilen sich die eingesammelten
+  Hook-Variablen. Der Shield-Test muss VOR dem Turn-Reset-Test laufen, sonst
+  zeigt `executeAfterHook` auf das zweite setup mit leerem `seenMcpTools`.
+- **Nicht belegt:** Ob OpenCode das mutierte Ergebnis an das Modell
+  weiterreicht. Der Test zeigt nur die Mutation am Objekt. Dafuer braucht es
+  Deploy mit `annotate` und einen echten MCP-Aufruf.
+- **Messung:** `test-index.mjs` 35/35 (vier neue Faelle).
+
+## Work State
+- **Completed:** `index.js` (shieldResult, neutraliseMarkers, SHIELD_NOTICE,
+  session-hook), `test-index.mjs`, beide READMEs, `PLANUNG.md`,
+  `CHANGELOG.md`.
+- **Active:** Commit.
+- **Blocked:** keiner.
+
+## Next Move
+1. Commit.
+2. Live-Spike: deployen mit `PERMISSION_GUARD_RESULT_SHIELD=annotate`, einen
+   harmlosen MCP-Aufruf machen und pruefen, ob der Wrapper im Ergebnis steht.
+3. Danach G2 (statische Injection-Muster) oder die Decision-Modelle messen.
+
+
+=============== Compaction 20.11.2026 / 18:56 ================
+## Objective
+- **Current:** Schalter (Grenz-Markierung, Deny-Limits) liegen jetzt in
+  `shell-reviewer.config.json` statt nur in Umgebungsvariablen; Commit steht
+  aus, Laufzeitdatei noch nicht angepasst.
+- **Next:** Commit, Laufzeitdatei aktualisieren, Live-Spike.
+
+## Important Details
+- **Entscheidung (Nutzer):** 1. `shellThreshold` 0,65 in die Laufzeitdatei,
+  2. `resultShield: "annotate"` als Config-Schalter, 3. Deny-Limits in die
+  Datei. Alles umgesetzt bis auf den Eintrag in der Laufzeitdatei.
+- **Neu in `reviewer.js`:** DEFAULTS um `resultShield`, `denyLimitConsecutive`,
+  `denyLimitRecent`, `denyLimitWindow`; `sanitizeSwitches()` prueft sie
+  (off/annotate/scan; 1-10, 1-50, 10-200). Env-Variablen bleiben Override.
+- **Grenze:** Die Laufzeitdatei liegt unter
+  `~/.config/opencode/plugins/permission-guard/` und damit ausserhalb der
+  Schreibgrenze des Guards (`roots` = Projekt und `%TEMP%\opencode`). Sie kann
+  nicht aus der Sitzung heraus geaendert werden - Absicht, kein Fehler.
+- **Befund aus dem Deploy:** Die Laufzeitdatei enthaelt noch
+  `shellThreshold: 0.7`. Sie ueberschreibt den kalibrierten Default 0,65; der
+  laufende Guard prueft die vier Achsen also mit 0,7.
+- **Messung:** `test.mjs` 965/965 (drei neue Faelle fuer `sanitizeSwitches`).
+
+## Work State
+- **Completed:** `reviewer.js`, `index.js`, `test.mjs`,
+  `shell-reviewer.config.example.json`, `PLANUNG.md`, `CHANGELOG.md`.
+- **Active:** Commit.
+- **Blocked:** Laufzeitdatei braucht einen Weg ins Ziel (Deploy-Erweiterung
+  oder Nutzer ändert sie von Hand).
+
+## Next Move
+1. Commit.
+2. Laufzeitdatei aktualisieren: `shellThreshold` 0,65, `resultShield`
+   "annotate", Deny-Limits.
+3. Deployen, dann Live-Spike: einen harmlosen MCP-Aufruf machen und pruefen,
+   ob die Markierung im Ergebnis steht.
+
 ## Relevant Files
 - `reviewer.js`: `SENSITIVE_QUESTION`, `UNTRUSTED_QUESTION`,
   `OBSCURED_QUESTION`, `SHELL_AXES`, `shellThreshold: 0.65`.
 - `staging/probe-axis-table.mjs`, `staging/probe-spread.mjs`,
   `staging/probe-four-axes.mjs`: Messhilfen, nicht versioniert.
+
+
+=============== Compaction 20.11.2026 / 19:42 ================
+## Objective
+- **Current:** Branch `welle-3-deny-limits` mit Deny-Limits, Grenz-Markierung
+  und Konfigurationsweg; Commit der `deploy.ps1`-Erweiterung steht aus.
+- **Completed:** Deny-Limits (a067b04), G0/G1 (dc1e98b), Kleinschreibung
+  `[ud-` (ced1ce2), Schalter in der Konfiguration (c7326ca).
+
+## Important Details
+- **Deny-Limits:** Drei Rueckfragen in Folge oder zehn in den letzten fuenfzig
+  ergeben `deny`; Zaehler je Sitzung im `finally` des `evaluate`-Hooks, Reset
+  bei `session.execution.started`. Gezaehlt wird jede `ask`, nicht nur die des
+  Modells (Abweichung vom Codex-Vorbild, begruendet). Schwellen in
+  `shell-reviewer.config.json` oder per `PERMISSION_GUARD_DENY_*`.
+- **G0:** `Tool.Result` ist `{ output?, content?: string | Content[], metadata? }`;
+  `execute.after` bekommt `result` veraenderbar, der Callback gibt `void`
+  zurueck - die Aenderung erfolgt per Mutation.
+- **G1:** Textinhalte werden zu `[ud-<id>]...[/ud-<id>]`; vorhandene
+  `[ud-`/`[/ud-` im Text werden zu `[ud_`/`[/ud_` entschaerft;
+  `session.hook("context")` ergaenzt eine Systemanweisung. Dateien bleiben
+  unberuehrt. Schalter `resultShield` in der Konfiguration.
+- **Schreibweise:** `ud` klein, weil es "untrusted data" heisst und nicht mit
+  der Quantisierungsbezeichnung `UD` (Unsloth Dynamic) verwechselt werden soll.
+  `neutraliseMarkers` entschaerft beide Schreibweisen.
+- **deploy.ps1:** `Update-RuntimeConfig` ergaenzt fehlende Schluessel aus der
+  Vorlage; `-ShellThreshold` und `-ResultShield` setzen die kalibrierten Werte
+  ausdruecklich. `-Check` aendert nichts. Nebenwirkung: `ConvertTo-Json`
+  sortiert die Schluessel alphabetisch.
+- **Hindernis:** OpenCode hat das Plugin nach dem Deploy nicht neu geladen
+  (letzter `setup`-Eintrag 17:58, Deploy danach). Der Live-Beleg fuer G1 fehlt
+  deshalb; er braucht einen Neustart von OpenCode.
+- **Grenze:** Die Laufzeitdatei liegt unter
+  `~/.config/opencode/plugins/permission-guard/` und damit ausserhalb der
+  Schreibgrenze des Guards (`roots` = Projekt und `%TEMP%\opencode`). Nur
+  `deploy.ps1` kommt dorthin.
+
+## Work State
+- **Completed:** `index.js` (Deny-Limits, shieldResult, session-hook),
+  `reviewer.js` (sanitizeSwitches, DEFAULTS), `deploy.ps1`,
+  `shell-reviewer.config.example.json`, `test.mjs` 965/965,
+  `test-index.mjs` 35/35, beide READMEs, `PLANUNG.md`, `CHANGELOG.md`,
+  ADR-0002.
+- **Active:** Commit der `deploy.ps1`-Erweiterung und der Doku.
+- **Blocked:** Live-Spike G1 (OpenCode-Neustart noetig).
+
+## Next Move
+1. Commit, Push, PR fuer `welle-3-deny-limits`, Merge.
+2. OpenCode neu starten, dann Live-Spike: `deepwiki_read_wiki_structure`
+   aufrufen und pruefen, ob im Guard-Log `shield annotate ...` steht und das
+   Ergebnis `[ud-...]` traegt.
+3. Danach G2 (statische Injection-Muster) oder die Decision-Modelle aus der
+   ggml-Collection messen (Vormerk in `PLANUNG.md`).
+
+## Relevant Files
+- `index.js`: Deny-Limits (`noteDecision`, `applyDenyLimit`), Grenz-Markierung
+  (`shieldResult`, `neutraliseMarkers`, `SHIELD_NOTICE`), `session.hook`.
+- `reviewer.js`: `sanitizeSwitches`, DEFAULTS mit `resultShield` und den drei
+  Deny-Limit-Schwellen, `shellThreshold: 0.65`.
+- `deploy.ps1`: `Update-RuntimeConfig`, Parameter `-ShellThreshold`,
+  `-ResultShield`.
+- `test-index.mjs`: 35/35, inklusive vier Faelle fuer die Markierung.
+- `docs/adr/0002-reviewer-und-sandbox.md`: Nachtraege zu Stufe 3, Deny-Limits,
+  G0/G1.
+
+## Important Context
+- Der Live-Beleg fuer G1 fehlt; die Markierung ist nur im Trockentest belegt.
+- Der Reviewer laeuft auf Port 8080 (Clef-Flash Q4_K_M); der Watchdog-Task
+  steht auf Ready.
+- `staging/` ist ignoriert und enthaelt die Messhilfen (nicht versioniert).
+- Untracked bleiben: zwei Screenshots unter `docs/` und `review/`.

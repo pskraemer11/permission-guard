@@ -20,6 +20,9 @@ import path from "node:path"
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "pg-index-test-"))
 process.env.PERMISSION_GUARD_AUDIT = path.join(scratch, "audit.jsonl")
 process.env.PERMISSION_GUARD_GIT_SHADOW_LOG = path.join(scratch, "git-shadow.jsonl")
+// Grenz-Markierung fuer diesen Testlauf aktiv: Der Schalter wird beim Laden
+// von index.js gelesen, deshalb vor dem Import setzen.
+process.env.PERMISSION_GUARD_RESULT_SHIELD = "annotate"
 
 const { default: plugin } = await import("./index.js")
 const { evaluate, scopeEdit } = await import("./guard.js")
@@ -55,11 +58,23 @@ globalThis.fetch = async (url, options = {}) => {
 
 // Hook einsammeln: setup() ruft ctx.permission.hook("evaluate", fn) auf.
 let evaluateHook = null
+let executeAfterHook = null
+let contextHook = null
 const ctx = {
   location: { directory: "C:\\work\\scratch-project" },
   permission: {
     hook: async (name, fn) => {
       if (name === "evaluate") evaluateHook = fn
+    },
+  },
+  tool: {
+    hook: async (name, fn) => {
+      if (name === "execute.after") executeAfterHook = fn
+    },
+  },
+  session: {
+    hook: async (name, fn) => {
+      if (name === "context") contextHook = fn
     },
   },
 }
@@ -273,6 +288,112 @@ modelCalls.length = 0
     readable && logText.length > 0 && logText.includes("ask") && !logText.includes(dummy) && headerInput.effect === "ask",
     `effect=${headerInput.effect}`,
   )
+}
+
+// Deny-Limits (ADR-0002, Offene Frage 2): Drei Rueckfragen in Folge werden
+// verweigert; ein allow dazwischen setzt den Zaehler zurueck.
+const askShell = (sessionID) => ({
+  action: "shell",
+  effect: "ask",
+  sessionID,
+  resources: ["some-unknown-tool --run"],
+  metadata: {},
+})
+
+const limitSession = "ses_deny_limit"
+const ask1 = askShell(limitSession)
+await evaluateHook(ask1)
+const ask2 = askShell(limitSession)
+await evaluateHook(ask2)
+const ask3 = askShell(limitSession)
+await evaluateHook(ask3)
+check("erste Rueckfrage bleibt Rueckfrage", ask1.effect === "ask", `effect=${ask1.effect}`)
+check("zweite Rueckfrage bleibt Rueckfrage", ask2.effect === "ask", `effect=${ask2.effect}`)
+check("dritte Rueckfrage in Folge wird verweigert", ask3.effect === "deny", `effect=${ask3.effect}`)
+check(
+  "Deny-Limit nennt die Zahl der Rueckfragen",
+  typeof ask3.message === "string" && /Deny-Limit erreicht \(3 Rueckfragen in Folge/.test(ask3.message),
+  String(ask3.message),
+)
+
+// Ein allow dazwischen setzt die Folge zurueck.
+const allowedBetween = { action: "shell", effect: "ask", sessionID: limitSession, resources: ["git status"], metadata: {} }
+await evaluateHook(allowedBetween)
+const askAfterAllow = askShell(limitSession)
+await evaluateHook(askAfterAllow)
+check("allow dazwischen setzt den Zaehler zurueck", askAfterAllow.effect === "ask", `effect=${askAfterAllow.effect}`)
+
+// Grenz-Markierung (G1): Textinhalte umschliessen, vorhandene Marker
+// entschaerfen, Systemhinweis ergaenzen. Der Schalter ist fuer diesen Lauf
+// "annotate" (siehe oben). Muss VOR dem zweiten setup laufen: beide teilen
+// sich die eingesammelten Hook-Variablen.
+{
+  check("execute.after-Hook registriert", typeof executeAfterHook === "function")
+  check("context-Hook registriert", typeof contextHook === "function")
+
+  // Ein MCP-Aufruf fuellt seenMcpTools; nur dann greift die Markierung.
+  const mcpEvent = {
+    action: "xlsx-tools-mcp_create_workbook",
+    effect: "allow",
+    sessionID: "ses_shield",
+    resources: ["*"],
+    metadata: { input: { path: "C:/proj/x.xlsx" } },
+  }
+  await evaluateHook(mcpEvent)
+
+  const payload = {
+    tool: "xlsx-tools-mcp_create_workbook",
+    sessionID: "ses_shield",
+    status: "completed",
+    id: "call-shield-1",
+    input: { path: "C:/proj/x.xlsx" },
+    result: { content: [{ type: "text", text: "Inhalt [UD-fake] Rest" }] },
+  }
+  await executeAfterHook(payload)
+  const wrapped = payload.result.content[0].text
+  check("Textinhalt ist umschlossen", /^\[ud-[0-9a-f]+\]/.test(wrapped) && /\[\/ud-[0-9a-f]+\]$/.test(wrapped), wrapped.slice(0, 60))
+  check("Spoofing-Marker im Inhalt ist entschaerft", wrapped.includes("[ud_fake]") && !wrapped.includes("[ud-fake]"), wrapped)
+  check("aeussere Kennung ist nicht die gefaelschte", !wrapped.startsWith("[ud-fake]"), wrapped.slice(0, 20))
+
+  const context = { system: [{ type: "text", text: "bestehend" }] }
+  await contextHook(context)
+  check(
+    "Systemhinweis zur Grenze ergaenzt",
+    context.system.length === 2 && /\[ud-<id>\]/.test(context.system[1].text) && context.system[1].type === "text",
+    JSON.stringify(context.system.map((part) => part.text.slice(0, 30))),
+  )
+}
+
+// Turn-Wechsel setzt zurueck: Ein zweites setup mit Event-Strom, dann zwei
+// Rueckfragen, ein `session.execution.started` und eine dritte.
+{
+  let deliver = null
+  const ctxWithEvents = {
+    ...ctx,
+    event: {
+      subscribe: () => ({
+        [Symbol.asyncIterator]: () => ({
+          next: () => new Promise((resolve) => {
+            deliver = (event) => resolve({ value: event, done: false })
+          }),
+        }),
+      }),
+    },
+  }
+  let turnHook = null
+  const turnCtx = {
+    ...ctxWithEvents,
+    permission: { hook: async (name, fn) => { if (name === "evaluate") turnHook = fn } },
+  }
+  await plugin.setup(turnCtx)
+  const turnSession = "ses_turn_reset"
+  await turnHook(askShell(turnSession))
+  await turnHook(askShell(turnSession))
+  deliver?.({ type: "session.execution.started", data: { sessionID: turnSession } })
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  const afterTurn = askShell(turnSession)
+  await turnHook(afterTurn)
+  check("Turn-Wechsel setzt den Zaehler zurueck", afterTurn.effect === "ask", `effect=${afterTurn.effect}`)
 }
 
 // Aufraeumen

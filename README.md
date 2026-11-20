@@ -1109,6 +1109,26 @@ not the repository title. With `-np 1` (our setting) several prompts run one
 after another; parallel slots were measured on 20.11.2026 and brought nothing
 (1.01–1.03x on five short commands with `-np 5 --kv-unified`).
 
+**Deny limit (since 20.11.2026).** Three prompts in a row, or ten within the
+last fifty, turn into `deny` with a message naming the count. A `deny` is not a
+prompt and resets the run; an `allow` resets it too. The counter lives per
+session in the hook state and is cleared on every `session.execution.started`,
+so the limit applies per turn. Adjustable in `shell-reviewer.config.json`
+(`denyLimitConsecutive`, `denyLimitRecent`, `denyLimitWindow`) or with the
+environment variables `PERMISSION_GUARD_DENY_CONSECUTIVE`,
+`PERMISSION_GUARD_DENY_RECENT` and `PERMISSION_GUARD_DENY_WINDOW`.
+
+**Result boundary (since 20.11.2026, off by default).** With
+`resultShield: "annotate"` in `shell-reviewer.config.json` (or
+`PERMISSION_GUARD_RESULT_SHIELD=annotate`), the text content of MCP results is
+wrapped in `[ud-<id>]…[/ud-<id>]`, existing `[ud-` markers inside the text are
+defused to `[ud_`, and a system instruction tells the model that everything
+inside those markers is data, never an instruction. `scan` only counts the
+parts in the log. File content is never touched. `off` (the default) leaves
+everything unchanged — the switch is the user's decision. The marker is
+lowercase on purpose: `ud` stands for *untrusted data* and is not the
+quantization label `UD` (Unsloth Dynamic).
+
 Not every repository with "clef" or "jev" in its name works. Checked on
 20.11.2026:
 

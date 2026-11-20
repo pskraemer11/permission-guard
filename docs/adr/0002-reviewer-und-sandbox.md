@@ -612,6 +612,53 @@ Durchsetzung.
 
 ---
 
+## Nachtrag 20.11.2026: Deny-Limits umgesetzt (Option B)
+
+**Status:** umgesetzt; der zweite Punkt unter „6. Offen" ist damit erledigt.
+
+*Vorfrage, geklärt.* Erkennt der Hook einen Turn-Wechsel? **Ja.** Der
+Plugin-Kontext bietet `event.subscribe()`; `session.execution.started` trägt
+`{ sessionID }` und beginnt einen Durchlauf,
+`session.execution.succeeded/failed/interrupted` beendet ihn. Zusätzlich trägt
+jeder Berechtigungsaufruf `source.messageID` (Step-Ebene). Belege:
+`@opencode/plugin/dist/promise/plugin.d.ts` (Context.event),
+`dist/promise/event.d.ts`, `@opencode/schema/dist/event-manifest.d.ts`.
+
+*Entscheidung.* Option B: drei Rückfragen in Folge oder zehn in den letzten
+fünfzig ergeben `deny`. Abweichung vom Codex-Vorbild, begründet: Codex zählt
+nur Auto-Review-Denials, weil statische Denies endgültig sind. Bei uns ist jede
+`ask` eine Rückfrage, die der Nutzer wegklicken muss — statische wie die des
+Modells. Gezählt wird deshalb **jede** Entscheidung, die am Ende `ask` ist;
+`allow` und `deny` setzen die Folge zurück.
+
+*Umgesetzt.* `index.js`: `noteDecision()` und `applyDenyLimit()` im
+Hook-State, aufgerufen im `finally` des `evaluate`-Hooks, damit auch die frühen
+`return`s erfasst werden. Der Zähler wird je `sessionID` geführt und bei jedem
+`session.execution.started` geleert. Schwellen über
+`PERMISSION_GUARD_DENY_CONSECUTIVE` (3), `PERMISSION_GUARD_DENY_RECENT` (10)
+und `PERMISSION_GUARD_DENY_WINDOW` (50) verstellbar.
+
+*Messung.* `test-index.mjs` 29/29 (sechs neue Fälle: dritte Rückfrage wird
+verweigert, Meldung nennt die Zahl, `allow` setzt zurück, Turn-Event setzt
+zurück).
+
+*Nicht umgesetzt:* ein aktiver Turn-Abbruch (`interrupt`). Der Hook verweigert
+den Aufruf; ob der Agent danach abbricht, entscheidet er selbst. Ein Abbruch
+wäre ein eigener API-Weg und ist nicht gemessen.
+
+*Nachtrag 20.11.2026 (Konfiguration).* Der Schalter liegt jetzt in
+`shell-reviewer.config.json` (`resultShield`), nicht nur in einer
+Umgebungsvariable; `deploy.ps1 -ResultShield annotate` setzt ihn. Die
+Laufzeitdatei liegt außerhalb der Schreibgrenze des Guards und wird nur über
+`deploy.ps1` geändert.
+
+*Offen.* Der Live-Beleg fehlt: Ob OpenCode das mutierte Ergebnis an das Modell
+weiterreicht, ist nicht geprüft. Nach dem Deploy hatte OpenCode das Plugin
+nicht neu geladen (letzter `setup`-Eintrag 17:58, Deploy danach); ein Neustart
+und ein echter MCP-Aufruf stehen aus.
+
+---
+
 ## Nachtrag 20.11.2026: Stufe 3 umgesetzt (vier Achsen)
 
 **Status:** umgesetzt; der erste Punkt unter „6. Offen" ist damit erledigt.

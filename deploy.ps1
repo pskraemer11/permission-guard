@@ -24,6 +24,14 @@
 .PARAMETER Target
     Abweichendes Zielverzeichnis fuer das OpenCode-Plugin (zum Testen).
 
+.PARAMETER ShellThreshold
+    Setzt shellThreshold in der Laufzeitkonfiguration. Ohne Angabe bleibt der
+    vorhandene Wert. Fehlende Schluessel werden immer aus der Vorlage ergaenzt.
+
+.PARAMETER ResultShield
+    Setzt resultShield (off | annotate | scan). Ohne Angabe bleibt der
+    vorhandene Wert.
+
 .PARAMETER CodexTarget
     Abweichendes Zielverzeichnis fuer den Codex-Guard (zum Testen).
 
@@ -32,11 +40,17 @@
 
 .EXAMPLE
     pwsh -File .\tools\permission-guard\deploy.ps1 -Check
+
+.EXAMPLE
+    pwsh -File .\tools\permission-guard\deploy.ps1 -ShellThreshold 0.65
 #>
 [CmdletBinding()]
 param(
     [switch]$Check,
     [switch]$SkipTests,
+    [double]$ShellThreshold = 0,
+    [ValidateSet("", "off", "annotate", "scan")]
+    [string]$ResultShield = "",
     [string]$Target = (Join-Path $HOME ".config\opencode\plugins\permission-guard"),
     [string]$CodexTarget = (Join-Path $HOME ".codex\hooks")
 )
@@ -73,8 +87,9 @@ $codexFiles = @(
 )
 
 # Die Laufzeitkonfiguration ist ortsabhaengig (Backend, Modell, Port). Sie wird
-# deshalb nur beim ersten Deploy aus der Vorlage erzeugt und spaeter nie
-# ueberschrieben.
+# beim ersten Deploy aus der Vorlage erzeugt. Spaeter werden nur FEHLENDE
+# Schluessel ergaenzt; vorhandene Werte bleiben unangetastet. So bleibt die
+# Datei vollstaendig, ohne die Einstellungen des Nutzers zu ueberschreiben.
 $configName = "shell-reviewer.config.json"
 $configExample = "shell-reviewer.config.example.json"
 
@@ -115,6 +130,53 @@ function Compare-DeployFiles {
     return $mismatch
 }
 
+# Fehlende Schluessel aus der Vorlage ergaenzen; vorhandene Werte bleiben.
+# -ShellThreshold setzt die Schwelle ausdruecklich, weil sie eine bewusste
+# Kalibrierung ist und nicht still geaendert werden soll.
+function Update-RuntimeConfig {
+    param([string]$Directory, [double]$Threshold, [string]$Shield)
+    $configPath = Join-Path $Directory $configName
+    $examplePath = Join-Path $source $configExample
+    if (-not (Test-Path -LiteralPath $configPath)) {
+        Copy-Item -LiteralPath $examplePath -Destination $configPath -Force
+        Write-Host "  $configName (aus Vorlage erzeugt)"
+        return
+    }
+    $current = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json -AsHashtable
+    $example = Get-Content -LiteralPath $examplePath -Raw | ConvertFrom-Json -AsHashtable
+    $added = @()
+    foreach ($key in $example.Keys) {
+        if ($key.StartsWith("_")) { continue }
+        if (-not $current.ContainsKey($key)) {
+            $current[$key] = $example[$key]
+            $added += $key
+        }
+    }
+    $changed = $false
+    if ($Threshold -gt 0 -and $current.ContainsKey("shellThreshold")) {
+        if ([double]$current["shellThreshold"] -ne $Threshold) {
+            $current["shellThreshold"] = $Threshold
+            Write-Host "  shellThreshold -> $Threshold"
+            $changed = $true
+        }
+    }
+    if ($Shield -and $current.ContainsKey("resultShield")) {
+        if ([string]$current["resultShield"] -ne $Shield) {
+            $current["resultShield"] = $Shield
+            Write-Host "  resultShield -> $Shield"
+            $changed = $true
+        }
+    }
+    if ($added.Count -eq 0 -and -not $changed) {
+        Write-Host "  $configName vollstaendig (ortsspezifisch)"
+        return
+    }
+    if ($added.Count -gt 0) {
+        Write-Host "  $configName ergaenzt: $($added -join ', ')"
+    }
+    $current | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $configPath -Encoding utf8
+}
+
 # 1. Tests: nur deployen, was gruen ist.
 if (-not $Check -and -not $SkipTests) {
     Write-Host "== Tests =="
@@ -139,7 +201,7 @@ if (-not $Check) {
         Write-Host "  $configName (aus Vorlage erzeugt)"
     }
     else {
-        Write-Host "  $configName bleibt erhalten (ortsspezifisch)"
+        Update-RuntimeConfig -Directory $Target -Threshold $ShellThreshold -Shield $ResultShield
     }
 
     Write-Host "`n== Kopieren nach $CodexTarget =="

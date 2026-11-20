@@ -356,10 +356,12 @@ Vorbedingung. Rollback: `MCP_GATING_MODE = "shadow"`, Tests, Deploy.
 - **G0:** Spike mit einem harmlosen MCP-Ergebnis: Form von `result.content`
   prüfen, verändern, zurückgeben; sicherstellen, dass die Änderung erhalten
   bleibt.
-- **G1:** Grenz-Markierung: Textinhalte in `[UD-<id>]…[/UD-<id>]` wrappen, per
+- **G1:** Grenz-Markierung: Textinhalte in `[ud-<id>]…[/ud-<id>]` wrappen, per
   `ctx.session.hook("context")` eine Systemanweisung ergänzen, vorhandene
-  `[UD-`-Marker im Inhalt neutralisieren (Spoofing-Schutz). Nur Text, keine
+  `[ud-`-Marker im Inhalt neutralisieren (Spoofing-Schutz). Nur Text, keine
   Dateien. Schalter `MCP_RESULT_SHIELD_MODE = "off" | "annotate" | "scan"`.
+  `ud` steht für *untrusted data*; die Kleinschreibung trennt es von der
+  Quantisierungsbezeichnung `UD` (Unsloth Dynamic).
 - **G2:** statische Injection-Muster („ignore previous instructions“,
   Rollenmarker, Tool-Aufruf-Spoofing) satzweise prüfen; Treffer **markieren,
   nicht blockieren**; Größenlimit; Fehlalarm-Fixtures.
@@ -1302,3 +1304,113 @@ für die Shell ungeprüft.
 Für jeden Lauf gilt: nur ein Modell im VRAM, sonst sind die Latenzzahlen nicht
 belastbar (Befund 20.11.2026 — Clef und Kev gleichzeitig geladen verfälschten
 den Parallelitätstest).
+
+## Nachtrag 20.11.2026: Deny-Limits umgesetzt
+
+**Vorfrage zuerst geklärt: Erkennt der Hook einen Turn-Wechsel?** Ja. Der
+Plugin-Kontext hat `event.subscribe()`; `session.execution.started` trägt
+`{ sessionID }` und beginnt einen Durchlauf, `session.execution.succeeded`,
+`failed` und `interrupted` beenden ihn. `session.step.started` trägt zusätzlich
+`assistantMessageID`. Belege: `@opencode/plugin/dist/promise/plugin.d.ts`,
+`dist/promise/event.d.ts`, `@opencode/schema/dist/event-manifest.d.ts`.
+
+**Umgesetzt.** `index.js` zählt je Sitzung die Rückfragen: drei in Folge oder
+zehn in den letzten fünfzig ergeben `deny` mit einer Meldung, die die Zahl
+nennt. `allow` und `deny` setzen die Folge zurück; der Zähler wird bei jedem
+`session.execution.started` geleert. Die Zählung läuft im `finally` des
+`evaluate`-Hooks, damit auch die frühen `return`s erfasst werden. Schwellen:
+`PERMISSION_GUARD_DENY_CONSECUTIVE` (3), `PERMISSION_GUARD_DENY_RECENT` (10),
+`PERMISSION_GUARD_DENY_WINDOW` (50).
+
+**Abweichung vom Codex-Vorbild.** Codex zählt nur Auto-Review-Denials, weil
+statische Denies endgültig sind. Bei uns ist jede `ask` eine Rückfrage, die
+weggeklickt werden muss — die statische wie die des Modells. Deshalb zählt jede
+`ask`.
+
+**Nicht umgesetzt.** Ein aktiver Turn-Abbruch (`interrupt`). Der Hook
+verweigert den Aufruf; ob der Agent abbricht, entscheidet er. Das wäre ein
+eigener API-Weg und ist nicht gemessen.
+
+**Messung.** `test-index.mjs` 29/29, davon sechs neue Fälle: dritte Rückfrage
+in Folge wird verweigert, Meldung nennt die Zahl, `allow` setzt zurück,
+Turn-Event setzt zurück.
+
+## Nachtrag 20.11.2026: G0/G1 umgesetzt (Grenz-Markierung)
+
+**G0 — Form des Ergebnisses.** `Tool.Result` ist
+`{ output?, content?: string | Content[], metadata? }`; `Content` ist
+`{ type: "text", text }` oder `{ type: "file", uri, mime, name? }`. Der
+`execute.after`-Hook bekommt `result` **veränderbar** (nicht `readonly`), der
+Callback gibt `void` zurück — die Änderung erfolgt also durch Mutation des
+übergebenen Objekts. Im Test belegt (`test-index.mjs`): Der Text ist nach dem
+Hook umschlossen, die Mutation bleibt am Objekt.
+
+**G1 — Grenz-Markierung.** `index.js`:
+
+- Textinhalte (`string` oder `{ type: "text" }`) werden zu
+  `[ud-<shortHash(id)>]…[/ud-<id>]`. Dateiinhalte (`type: "file"`) bleiben
+  unberührt.
+- Vorhandene `[ud-` und `[/ud-` im Text werden zu `[ud_` und `[/ud_`
+  entschärft, damit ein Werkzeug keine Grenze vortäuschen kann.
+- Über `session.hook("context")` wird eine Systemanweisung ergänzt: Inhalt
+  innerhalb der Marker ist Daten, keine Anweisung.
+- Schalter `PERMISSION_GUARD_RESULT_SHIELD`: `off` (Standard), `annotate`,
+  `scan` (zählt nur im Log). Wirkung nur auf Entscheidung des Nutzers (G4).
+
+**Belege.** `@opencode/schema/dist/tool.d.ts` (`Result`, `Content`),
+`@opencode/plugin/dist/promise/tool.d.ts` (`execute.after` mit veränderbarem
+`result`), `@opencode/ai/dist/schema/messages.d.ts` (`SystemPart`).
+
+**Messung.** `test-index.mjs` 35/35 (vier neue Fälle: umschlossen,
+Spoofing-Marker entschärft, äußere Kennung nicht die gefälschte,
+Systemhinweis ergänzt).
+
+**Nicht geprüft — der Live-Teil von G0.** Ob OpenCode das mutierte Ergebnis
+tatsächlich an das Modell weiterreicht, ist im Test **nicht** belegt; der Test
+zeigt nur, dass die Mutation am übergebenen Objekt bleibt. Dafür braucht es
+einen Deploy mit `PERMISSION_GUARD_RESULT_SHIELD=annotate` und einen echten
+MCP-Aufruf. Das steht aus.
+
+## Nachtrag 20.11.2026: Schalter in die Konfigurationsdatei
+
+**Anlass.** Grenz-Markierung und Deny-Limits standen nur in
+Umgebungsvariablen. Eine Änderung brauchte damit einen Neustart von OpenCode.
+
+**Umgesetzt.** `reviewer.js` liest vier weitere Schlüssel aus
+`shell-reviewer.config.json` (dieselbe Datei wie die Schwellen):
+`resultShield`, `denyLimitConsecutive`, `denyLimitRecent`, `denyLimitWindow`.
+`sanitizeSwitches()` prüft die Werte; ungültige werden still verworfen, wie bei
+den Schwellen. `index.js` nimmt die Werte aus der Konfiguration; die
+Umgebungsvariablen bleiben als Übersteuerung. `shell-reviewer.config.example.json`
+nennt die neuen Felder und ihre Bänder.
+
+**Grenze.** Die Laufzeitdatei liegt unter
+`~/.config/opencode/plugins/permission-guard/` und damit **außerhalb** der
+Schreibgrenze des Guards (Projekt und Temp). Sie kann nicht aus einer
+Sitzung heraus geändert werden; das ist Absicht.
+
+## Nachtrag 20.11.2026: Deploy zieht die Laufzeitdatei nach
+
+**Anlass.** Die Laufzeitdatei wird vom Deploy nicht überschrieben. Jeder neue
+Schalter musste deshalb von Hand nachgetragen werden; beim ersten Deploy fehlten
+`resultShield` und die drei Deny-Limit-Schlüssel.
+
+**Umgesetzt.** `deploy.ps1` hat `Update-RuntimeConfig`: fehlende Schlüssel
+werden aus `shell-reviewer.config.example.json` ergänzt, vorhandene Werte
+bleiben. Zwei Parameter setzen die bewusst kalibrierten Werte ausdrücklich:
+`-ShellThreshold` und `-ResultShield`; ohne Angabe bleibt der vorhandene Wert.
+`-Check` ändert weiterhin nichts.
+
+**Belegt.** Deploy mit `-ShellThreshold 0.65 -ResultShield annotate`: Die
+Laufzeitdatei hat danach `shellThreshold: 0.65`, `resultShield: "annotate"` und
+die drei Deny-Limit-Schlüssel; `gitShadow: "shadow"` und `mcpThreshold: 0.7`
+blieben unverändert. Alle kopierten Dateien „identisch".
+
+**Nebenwirkung.** `ConvertTo-Json` schreibt die Datei neu; die Reihenfolge der
+Schlüssel ist danach alphabetisch statt thematisch. Inhaltlich gleich.
+
+**Offen.** Der Live-Versuch zu G1 steht aus: OpenCode hat das Plugin nach dem
+Deploy nicht neu geladen (letzter `setup`-Eintrag 17:58, Deploy danach). Nach
+einem Neustart von OpenCode ist zu prüfen, ob im Guard-Log
+`shield annotate tool=… parts=…` erscheint und ob das Ergebnis die Markierung
+`[ud-…]` trägt.

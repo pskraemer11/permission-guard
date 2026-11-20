@@ -8,6 +8,24 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **Grenz-Markierung für MCP-Ergebnisse (20.11.2026, G1):** `index.js` umschließt
+  im `execute.after`-Hook die Textinhalte von MCP-Ergebnissen mit
+  `[ud-<id>]…[/ud-<id>]`, entschärft vorhandene `[ud-`-Marker im Text zu
+  `[ud_` (Spoofing-Schutz) und ergänzt über `session.hook("context")` eine
+  Systemanweisung, dass der Inhalt Daten und keine Anweisung ist.
+  Dateiinhalte bleiben unberührt. Schalter
+  `PERMISSION_GUARD_RESULT_SHIELD` mit `off` (Standard), `annotate` und `scan`.
+  `test-index.mjs` 35/35 (vier neue Fälle).
+- **Deny-Limits (20.11.2026):** `index.js` zählt je Sitzung die Rückfragen.
+  Drei in Folge oder zehn in den letzten fünfzig werden zu `deny` mit einer
+  Meldung, die die Zahl nennt; `allow` und `deny` setzen die Folge zurück. Der
+  Zähler wird bei jedem `session.execution.started` geleert, das Limit gilt
+  also je Turn. Schwellen über `PERMISSION_GUARD_DENY_CONSECUTIVE`,
+  `PERMISSION_GUARD_DENY_RECENT` und `PERMISSION_GUARD_DENY_WINDOW`
+  verstellbar. Gezählt wird jede `ask`, nicht nur die des Modells — bei uns ist
+  jede davon eine Rückfrage, die weggeklickt werden muss.
+  `test-index.mjs` 29/29 (sechs neue Fälle). Ein aktiver Turn-Abbruch ist nicht
+  umgesetzt.
 - **Vier Achsen in der Shell-Prüfung (20.11.2026):** `reviewer.js` stellt im
   selben `/v1/systemone`-Request drei weitere `noul`-Fragen — `sensitive`
   (private Daten allgemein, breiter als `secrets`), `untrusted` (Code oder
@@ -122,6 +140,26 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 - **Skill-Baseline ergänzt (17.11.2026):** `hook-regeln.yml` prüft den Push-/PR-Bereich mit demselben `pre-push`-Hook lokal (gitleaks 8.30.1, `GITHOOKS_TEST_GATE=0`, fail closed bei unlesbaren Revisionen); der Verhaltensproben-Schritt des Eltern-Repositories entfällt, weil `tools/githooks-test/` hier nicht existiert. `scripts/enable-hooks.ps1` setzt `core.hooksPath .githooks` pro Klon. `requirements-dev.txt` pinnt `pip-audit==2.10.1`; `ci.yml` führt `pip_audit --strict` im Python-Job aus. Ruff prüft jetzt die Bandit-`S`-Regeln; `assert` (`S101`) und `subprocess` (`S603`) sind in `tests/*` ignoriert, der Produktivcode war schon sauber.
 
 ### Geändert
+
+- **`deploy.ps1` ergänzt fehlende Schlüssel (20.11.2026):** `Update-RuntimeConfig`
+  gleicht die Laufzeitkonfiguration mit `shell-reviewer.config.example.json` ab:
+  fehlende Schlüssel werden ergänzt, vorhandene Werte bleiben unangetastet. Neue
+  Parameter `-ShellThreshold` und `-ResultShield` setzen die beiden bewusst
+  kalibrierten Werte ausdrücklich; ohne Angabe bleibt der vorhandene Wert.
+  `-Check` ändert weiterhin nichts. `ConvertTo-Json` schreibt die Datei neu,
+  deshalb ist die Schlüsselreihenfolge danach alphabetisch statt thematisch.
+- **Compaction (20.11.2026 / 19:42):** `COMPACTIONS.md` hält Deny-Limits,
+  G0/G1, die Kleinschreibung `[ud-`, den Deploy-Weg für die Laufzeitdatei und
+  das offene Hindernis fest (OpenCode hat das Plugin nach dem Deploy nicht neu
+  geladen, Live-Beleg für G1 fehlt).
+- **Schalter in der Konfigurationsdatei (20.11.2026):** `reviewer.js` liest
+  `resultShield`, `denyLimitConsecutive`, `denyLimitRecent` und
+  `denyLimitWindow` aus `shell-reviewer.config.json`; `sanitizeSwitches()`
+  prüft die Werte (Shield-Modus nur `off`/`annotate`/`scan`, Limits in ihren
+  Bändern 1–10, 1–50, 10–200). `index.js` nutzt die Werte aus der
+  Konfiguration statt aus Umgebungsvariablen; die Umgebungsvariablen bleiben
+  als Übersteuerung. `shell-reviewer.config.example.json` nachgezogen,
+  `test.mjs` 965/965 (drei neue Fälle).
 
 - **`shellThreshold` 0,7 → 0,65 (20.11.2026):** Mit fünf Fragen im Prompt lag
   der höchste `ask`-Wert bei `effect` bei 0,616 (kube-config 0,688, dort greift
