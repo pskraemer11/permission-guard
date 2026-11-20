@@ -275,6 +275,71 @@ modelCalls.length = 0
   )
 }
 
+// Deny-Limits (ADR-0002, Offene Frage 2): Drei Rueckfragen in Folge werden
+// verweigert; ein allow dazwischen setzt den Zaehler zurueck.
+const askShell = (sessionID) => ({
+  action: "shell",
+  effect: "ask",
+  sessionID,
+  resources: ["some-unknown-tool --run"],
+  metadata: {},
+})
+
+const limitSession = "ses_deny_limit"
+const ask1 = askShell(limitSession)
+await evaluateHook(ask1)
+const ask2 = askShell(limitSession)
+await evaluateHook(ask2)
+const ask3 = askShell(limitSession)
+await evaluateHook(ask3)
+check("erste Rueckfrage bleibt Rueckfrage", ask1.effect === "ask", `effect=${ask1.effect}`)
+check("zweite Rueckfrage bleibt Rueckfrage", ask2.effect === "ask", `effect=${ask2.effect}`)
+check("dritte Rueckfrage in Folge wird verweigert", ask3.effect === "deny", `effect=${ask3.effect}`)
+check(
+  "Deny-Limit nennt die Zahl der Rueckfragen",
+  typeof ask3.message === "string" && /Deny-Limit erreicht \(3 Rueckfragen in Folge/.test(ask3.message),
+  String(ask3.message),
+)
+
+// Ein allow dazwischen setzt die Folge zurueck.
+const allowedBetween = { action: "shell", effect: "ask", sessionID: limitSession, resources: ["git status"], metadata: {} }
+await evaluateHook(allowedBetween)
+const askAfterAllow = askShell(limitSession)
+await evaluateHook(askAfterAllow)
+check("allow dazwischen setzt den Zaehler zurueck", askAfterAllow.effect === "ask", `effect=${askAfterAllow.effect}`)
+
+// Turn-Wechsel setzt zurueck: Ein zweites setup mit Event-Strom, dann zwei
+// Rueckfragen, ein `session.execution.started` und eine dritte.
+{
+  let deliver = null
+  const ctxWithEvents = {
+    ...ctx,
+    event: {
+      subscribe: () => ({
+        [Symbol.asyncIterator]: () => ({
+          next: () => new Promise((resolve) => {
+            deliver = (event) => resolve({ value: event, done: false })
+          }),
+        }),
+      }),
+    },
+  }
+  let turnHook = null
+  const turnCtx = {
+    ...ctxWithEvents,
+    permission: { hook: async (name, fn) => { if (name === "evaluate") turnHook = fn } },
+  }
+  await plugin.setup(turnCtx)
+  const turnSession = "ses_turn_reset"
+  await turnHook(askShell(turnSession))
+  await turnHook(askShell(turnSession))
+  deliver?.({ type: "session.execution.started", data: { sessionID: turnSession } })
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  const afterTurn = askShell(turnSession)
+  await turnHook(afterTurn)
+  check("Turn-Wechsel setzt den Zaehler zurueck", afterTurn.effect === "ask", `effect=${afterTurn.effect}`)
+}
+
 // Aufraeumen
 globalThis.fetch = originalFetch
 fs.rmSync(scratch, { recursive: true, force: true })

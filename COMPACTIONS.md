@@ -2778,6 +2778,43 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
   `start-reviewer.ps1` im Timeout haengen blieb); der Watchdog wurde fuer die
   Tests beendet und ist nicht neu gestartet.
 
+
+=============== Compaction 20.11.2026 / 18:04 ================
+## Objective
+- **Current:** Deny-Limits umgesetzt und getestet; Commit steht aus.
+- **Next:** Commit, dann G0/G1 (Grenz-Markierung fuer MCP-Ergebnisse).
+
+## Important Details
+- **Vorfrage geklaert (Nutzerauftrag):** Der Hook erkennt einen Turn-Wechsel.
+  `ctx.event.subscribe()` liefert `session.execution.started` mit
+  `{ sessionID }`; `succeeded/failed/interrupted` beenden den Turn.
+  `session.step.started` traegt zusaetzlich `assistantMessageID`. Belege:
+  `@opencode/plugin/dist/promise/plugin.d.ts` (Context.event),
+  `dist/promise/event.d.ts`, `@opencode/schema/dist/event-manifest.d.ts`.
+- **Umgesetzt:** Zaehler je Sitzung in `index.js`, im `finally` des
+  `evaluate`-Hooks. Drei Rueckfragen in Folge oder zehn in den letzten
+  fuenfzig ergeben `deny`. `allow`/`deny` setzen zurueck; Reset bei
+  `session.execution.started`. Schwellen per Env:
+  `PERMISSION_GUARD_DENY_CONSECUTIVE` (3), `PERMISSION_GUARD_DENY_RECENT` (10),
+  `PERMISSION_GUARD_DENY_WINDOW` (50).
+- **Abweichung vom Codex-Vorbild:** Gezaehlt wird jede `ask`, nicht nur die des
+  Modells - bei uns ist jede davon eine wegklickbare Rueckfrage.
+- **Nicht umgesetzt:** aktiver Turn-Abbruch (`interrupt`); der Hook verweigert
+  nur den Aufruf.
+- **Messung:** `test-index.mjs` 29/29, sechs neue Faelle.
+
+## Work State
+- **Completed:** `index.js`, `test-index.mjs`, `README.md`, `README_de.md`,
+  ADR-0002 (Nachtrag), `PLANUNG.md`, `CHANGELOG.md`.
+- **Active:** Commit.
+- **Blocked:** keiner.
+
+## Next Move
+1. Commit.
+2. G0/G1: MCP-Ergebnis-Form pruefen, Textinhalte in `[UD-<id>]...[/UD-<id>]`
+   wrappen.
+3. Danach die Decision-Modelle aus der ggml-Collection messen (Vormerk).
+
 ## Relevant Files
 - `reviewer.js`: `SENSITIVE_QUESTION`, `UNTRUSTED_QUESTION`,
   `OBSCURED_QUESTION`, `SHELL_AXES`, `shellThreshold: 0.65`.

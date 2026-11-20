@@ -1302,3 +1302,33 @@ für die Shell ungeprüft.
 Für jeden Lauf gilt: nur ein Modell im VRAM, sonst sind die Latenzzahlen nicht
 belastbar (Befund 20.11.2026 — Clef und Kev gleichzeitig geladen verfälschten
 den Parallelitätstest).
+
+## Nachtrag 20.11.2026: Deny-Limits umgesetzt
+
+**Vorfrage zuerst geklärt: Erkennt der Hook einen Turn-Wechsel?** Ja. Der
+Plugin-Kontext hat `event.subscribe()`; `session.execution.started` trägt
+`{ sessionID }` und beginnt einen Durchlauf, `session.execution.succeeded`,
+`failed` und `interrupted` beenden ihn. `session.step.started` trägt zusätzlich
+`assistantMessageID`. Belege: `@opencode/plugin/dist/promise/plugin.d.ts`,
+`dist/promise/event.d.ts`, `@opencode/schema/dist/event-manifest.d.ts`.
+
+**Umgesetzt.** `index.js` zählt je Sitzung die Rückfragen: drei in Folge oder
+zehn in den letzten fünfzig ergeben `deny` mit einer Meldung, die die Zahl
+nennt. `allow` und `deny` setzen die Folge zurück; der Zähler wird bei jedem
+`session.execution.started` geleert. Die Zählung läuft im `finally` des
+`evaluate`-Hooks, damit auch die frühen `return`s erfasst werden. Schwellen:
+`PERMISSION_GUARD_DENY_CONSECUTIVE` (3), `PERMISSION_GUARD_DENY_RECENT` (10),
+`PERMISSION_GUARD_DENY_WINDOW` (50).
+
+**Abweichung vom Codex-Vorbild.** Codex zählt nur Auto-Review-Denials, weil
+statische Denies endgültig sind. Bei uns ist jede `ask` eine Rückfrage, die
+weggeklickt werden muss — die statische wie die des Modells. Deshalb zählt jede
+`ask`.
+
+**Nicht umgesetzt.** Ein aktiver Turn-Abbruch (`interrupt`). Der Hook
+verweigert den Aufruf; ob der Agent abbricht, entscheidet er. Das wäre ein
+eigener API-Weg und ist nicht gemessen.
+
+**Messung.** `test-index.mjs` 29/29, davon sechs neue Fälle: dritte Rückfrage
+in Folge wird verweigert, Meldung nennt die Zahl, `allow` setzt zurück,
+Turn-Event setzt zurück.

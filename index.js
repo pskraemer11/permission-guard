@@ -35,6 +35,16 @@ const LOG_FILE = path.join(BASE_DIR, "guard.log")
 // wenigen Tagen weg (stats.mjs liest beide Generationen).
 const LOG_MAX_BYTES = 1024 * 1024
 
+// Deny-Limits (ADR-0002, Offene Frage 2; Vorbild ist Codex'
+// `GuardedRejectionCircuitBreaker`). Gezaehlt werden Rueckfragen, nicht
+// Verweigerungen: Eine Verweigerung erzeugt keine Ermuedung, eine weggeklickte
+// Rueckfrage schon. Der Zaehler lebt je Session im Hook-State und wird bei
+// jedem Turn-Start zurueckgesetzt (`session.execution.started`, Beleg:
+// event-manifest.d.ts, data.sessionID). Verstellbar per Umgebungsvariable.
+const DENY_LIMIT_CONSECUTIVE = Number(process.env.PERMISSION_GUARD_DENY_CONSECUTIVE ?? 3)
+const DENY_LIMIT_RECENT = Number(process.env.PERMISSION_GUARD_DENY_RECENT ?? 10)
+const DENY_LIMIT_WINDOW = Number(process.env.PERMISSION_GUARD_DENY_WINDOW ?? 50)
+
 // Diagnose: Entscheidung und Grund. Befehlstexte werden nie roh gespeichert;
 // stattdessen nur Name und Hash. Das gilt auch fuer "allow", weil der
 // Secret-Filter opake Bearer-Werte nicht zuverlaessig erkennt.
@@ -108,6 +118,65 @@ export default Plugin.define({
     const auditOn = Boolean(auditFile)
     const shadowFile = shadowPath()
     const seenMcpTools = new Set()
+
+    // Deny-Limits: je Session die Folge und ein gleitendes Fenster. Reine
+    // Zaehler - keine Befehle, keine Argumente, keine Pfade.
+    const denyConsecutive = new Map()
+    const denyRecent = new Map()
+
+    const noteDecision = (sessionID, asked) => {
+      const key = String(sessionID ?? "")
+      if (!key) return { consecutive: 0, recent: 0, limited: false }
+      const recent = denyRecent.get(key) ?? []
+      recent.push(asked)
+      while (recent.length > DENY_LIMIT_WINDOW) recent.shift()
+      denyRecent.set(key, recent)
+      if (!asked) {
+        denyConsecutive.set(key, 0)
+        return { consecutive: 0, recent: recent.filter(Boolean).length, limited: false }
+      }
+      const consecutive = (denyConsecutive.get(key) ?? 0) + 1
+      denyConsecutive.set(key, consecutive)
+      const recentCount = recent.filter(Boolean).length
+      return {
+        consecutive,
+        recent: recentCount,
+        limited: consecutive >= DENY_LIMIT_CONSECUTIVE || recentCount >= DENY_LIMIT_RECENT,
+      }
+    }
+
+    // Laeuft im finally des Hooks und sieht damit jeden Pfad, auch die fruehen
+    // returns. Ein allow oder deny setzt die Folge zurueck.
+    const applyDenyLimit = (input) => {
+      const effect = String(input?.effect ?? "").toLowerCase()
+      const state = noteDecision(input?.sessionID, effect === "ask")
+      if (!state.limited) return
+      input.effect = "deny"
+      input.message =
+        `permission-guard: Deny-Limit erreicht (${state.consecutive} Rueckfragen in Folge, ` +
+        `${state.recent} in den letzten ${DENY_LIMIT_WINDOW})`
+      debug(`deny-limit ${state.consecutive}/${state.recent} session=${shortHash(input?.sessionID)}`)
+    }
+
+    // Turn-Wechsel: `session.execution.started` beginnt einen neuen Durchlauf.
+    // Dort faellt der Zaehler zurueck, damit das Limit je Turn gilt und nicht
+    // ueber die ganze Sitzung auflaeuft.
+    const subscribe = ctx?.event?.subscribe
+    if (typeof subscribe === "function") {
+      void (async () => {
+        try {
+          for await (const event of subscribe({ types: ["session.execution.started"] })) {
+            const key = String(event?.data?.sessionID ?? "")
+            if (!key) continue
+            denyConsecutive.delete(key)
+            denyRecent.delete(key)
+          }
+        } catch (error) {
+          debug(`events: ${error?.message ?? String(error)}`)
+        }
+      })()
+    }
+
     // Vor jedem Anhaengen aus der Datei lesen. Zwei Plugin-Instanzen teilen die
     // Datei; mit einem gemerkten Zustand wuerde die zweite die Kette brechen.
     const audit = (fields) => {
@@ -326,6 +395,10 @@ export default Plugin.define({
           }
         } catch (error) {
           debug(`error ${error?.message ?? String(error)}`)
+        } finally {
+          // Deny-Limit zuletzt: es sieht den endgueltigen Effekt, egal welcher
+          // Pfad oben gegriffen hat.
+          applyDenyLimit(input)
         }
       })
 

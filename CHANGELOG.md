@@ -8,6 +8,16 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **Deny-Limits (20.11.2026):** `index.js` zählt je Sitzung die Rückfragen.
+  Drei in Folge oder zehn in den letzten fünfzig werden zu `deny` mit einer
+  Meldung, die die Zahl nennt; `allow` und `deny` setzen die Folge zurück. Der
+  Zähler wird bei jedem `session.execution.started` geleert, das Limit gilt
+  also je Turn. Schwellen über `PERMISSION_GUARD_DENY_CONSECUTIVE`,
+  `PERMISSION_GUARD_DENY_RECENT` und `PERMISSION_GUARD_DENY_WINDOW`
+  verstellbar. Gezählt wird jede `ask`, nicht nur die des Modells — bei uns ist
+  jede davon eine Rückfrage, die weggeklickt werden muss.
+  `test-index.mjs` 29/29 (sechs neue Fälle). Ein aktiver Turn-Abbruch ist nicht
+  umgesetzt.
 - **Vier Achsen in der Shell-Prüfung (20.11.2026):** `reviewer.js` stellt im
   selben `/v1/systemone`-Request drei weitere `noul`-Fragen — `sensitive`
   (private Daten allgemein, breiter als `secrets`), `untrusted` (Code oder

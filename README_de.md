@@ -1121,6 +1121,14 @@ Repositoriumstitel. Mit `-np 1` (unsere Einstellung) laufen mehrere Prompts
 nacheinander; parallele Slots wurden am 20.11.2026 gemessen und brachten nichts
 (1,01–1,03x bei fünf kurzen Befehlen mit `-np 5 --kv-unified`).
 
+**Deny-Limit (seit 20.11.2026).** Drei Rückfragen in Folge oder zehn in den
+letzten fünfzig werden zu `deny` mit einer Meldung, die die Zahl nennt. Ein
+`deny` ist keine Rückfrage und setzt die Folge zurück, ein `allow` ebenso. Der
+Zähler lebt je Sitzung im Hook-State und wird bei jedem
+`session.execution.started` geleert, das Limit gilt also je Turn. Verstellbar
+über `PERMISSION_GUARD_DENY_CONSECUTIVE`, `PERMISSION_GUARD_DENY_RECENT` und
+`PERMISSION_GUARD_DENY_WINDOW`.
+
 Nicht jedes Repositorium mit „clef" oder „jev" im Namen funktioniert. Geprüft
 am 20.11.2026:
 
