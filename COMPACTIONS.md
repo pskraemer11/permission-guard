@@ -2731,6 +2731,14 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
   clef`). `Jev-Omni-Q3_K_M` (`gemma4`), `Jeff-1.1-Qwen-4B` (`qwen35`) und
   `clef-flash-IQ3_XS` von NANI-Nithin (`qwen35`) haben keines; llama.cpp
   wuerde sie abweisen. Dateiname und Katalogspalte sind kein Beleg.
+- **Vorbehalt des Nutzers (20.11.2026):** Mradermacher, NANI-Nithin und
+  ngquocvinh sind Quantisierer, nicht Original-Hersteller; GGUF-Header koennen
+  beim Quantisieren beschaedigt werden, und die Originale liegen teils nur als
+  FP16 oder in einem anderen Format vor. Ein fehlendes `decision.type` ist
+  also kein Beweis, dass das Modell keines ist. Fuer Jev-Omni und Jeff belegt
+  die Original-Karte, dass der Decision-Head eine eigene Datei ist
+  (`head.safetensors`, eigener Serving-Code); NANI schreibt selbst, dass der
+  Joint-Schema-Head fehlt. Ein GGUF des Backbones kann ihn nicht enthalten.
 - **Parallelitaet:** Unser Server laeuft mit `-np 1`; mehrere Prompts laufen
   nacheinander. `-np N` waere parallel moeglich, kostet KV-Cache je Slot.
   Nicht gemessen.

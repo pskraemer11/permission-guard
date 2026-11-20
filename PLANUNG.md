@@ -1246,14 +1246,31 @@ anderer Typ wäre eine eigene Messung — Achsenzahl, Latenz und Schwellen.
 **Nicht gemessen:** Der Chat-Fallback hat keine Achsen (er kennt nur Ja/Nein)
 und bleibt mit diesem Server unbrauchbar (siehe oben).
 
-**Geprüft am 20.11.2026 (GGUF-Metadaten, `staging/gguf-keys.mjs`):** Von den
-vier Decision-Modellen im lokalen Bestand trägt nur
-`ggml-org/Clef-Flash-GGUF/Clef-Flash-Q4_K_M.gguf` ein `decision`-Metadatum
-(`general.architecture = clef`, `clef.decision.type = clef`). `Jev-Omni-Q3_K_M`
-(`gemma4`), `Jeff-1.1-Qwen-4B` (`qwen35`) und `clef-flash-IQ3_XS` von
-NANI-Nithin (`qwen35`) tragen keines; llama.cpp würde sie mit „This model is
-not a decision model" abweisen. Ein Dateiname oder eine Katalogspalte ist also
-kein Beleg — die Metadaten sind es.
+**Geprüft am 20.11.2026 (GGUF-Metadaten, `staging/gguf-keys.mjs`, dazu die
+Modellkarten):** Nicht jedes Repositorium mit „clef" oder „jev" im Namen ist
+ein Decision-Modell für llama.cpp.
+
+| Repositorium | GGUF-Metadaten | `/v1/systemone` |
+| --- | --- | --- |
+| `ggml-org/Clef-Flash-GGUF` | `architecture = clef`, `clef.decision.type = clef` | ja, gemessen 23/23 |
+| `ggml-org/Kev-4B-GGUF` | `architecture = qwen35`, Decision-Typ `kev` laut Karte | ja, laut Karte („to be used via /v1/systemone") |
+| `NANI-Nithin/clef-flash-GGUF` | `architecture = qwen35`, kein Decision-Metadatum | nein — Karte: „language tower only", der Joint-Schema-Head fehlt |
+| `ngquocvinh/Jev-Omni-GGUF` | `architecture = gemma4`, kein Decision-Metadatum | nein — braucht den Python-Adapter `jev_omni_gguf_decide.py` |
+| `mradermacher/Jeff-1.1-Qwen-4B-GGUF` | `architecture = qwen35`, kein Decision-Metadatum | nein — Jev-Format, statische Quants, kein SystemOne-Hinweis |
+
+Die Architektur allein sagt nichts: Kev-4B ist ein `qwen35`-Modell und trotzdem
+ein Decision-Modell. Entscheidend ist `<arch>.decision.type`.
+
+**Vorbehalt (Nutzer, 20.11.2026):** Ein fehlendes `decision.type` kann auch
+bedeuten, dass der Quantisierer das Metadatum nicht mitgenommen hat — die
+GGUF-Header können beim Quantisieren beschädigt werden. Mradermacher,
+NANI-Nithin und ngquocvinh sind Quantisierer, nicht die Original-Hersteller;
+die Originale liegen teils nur als FP16 oder in einem anderen Format vor. Bei
+den drei Fällen oben ist die Ursache durch die Modellkarten belegt: Bei
+Jev-Omni und Jeff liegt der Decision-Head im Original als eigene Datei
+(`head.safetensors`, angewendet vom jeweiligen Serving-Code), bei NANI fehlt er
+ganz. Ein GGUF des Backbones kann ihn also nicht enthalten. Für andere Dateien
+gilt: die Karte des Originals lesen, nicht nur den Quant beurteilen.
 
 **Parallele Verarbeitung:** Unser Server läuft mit `-np 1`, also einem Slot;
 mehrere Prompts werden nacheinander abgearbeitet. Mit `-np N` wären sie

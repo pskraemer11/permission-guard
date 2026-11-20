@@ -1108,6 +1108,27 @@ name is no proof: only a model whose GGUF metadata carries
 not the repository title. With `-np 1` (our setting) several prompts run one
 after another; parallel slots would be possible, but are not measured.
 
+Not every repository with "clef" or "jev" in its name works. Checked on
+20.11.2026:
+
+| Repository | GGUF metadata | `/v1/systemone` |
+| --- | --- | --- |
+| `ggml-org/Clef-Flash-GGUF` | `architecture = clef`, `clef.decision.type = clef` | yes, measured |
+| `ggml-org/Kev-4B-GGUF` | `architecture = qwen35`, decision type `kev` per model card | yes, per model card |
+| `NANI-Nithin/clef-flash-GGUF` | `architecture = qwen35`, no decision metadata | **no** — language tower only, the joint schema head is not in the file |
+| `ngquocvinh/Jev-Omni-GGUF` | `architecture = gemma4`, no decision metadata | **no** — needs a Python adapter that applies the decision head |
+| `mradermacher/Jeff-1.1-Qwen-4B-GGUF` | `architecture = qwen35`, no decision metadata | **no** — Jev-format, not the llama.cpp API |
+
+The architecture alone says nothing: Kev-4B is a `qwen35` model and still a
+decision model. The `decision.type` metadata is what counts.
+
+A missing metadata entry has two possible causes, and the model card tells them
+apart: the model has no decision head, or the conversion did not carry it over.
+For Jev-Omni and Jeff the head is a **separate file** in the original
+(`head.safetensors`, applied by their own serving code), so a GGUF of the
+backbone cannot contain it. Quantizers (mradermacher, NANI-Nithin, ngquocvinh)
+are not the original authors; read the original's card before judging a file.
+
 Valid values are `mcpThreshold` and `shellThreshold` from 0.5 up to but not
 including 1, and `secretsThreshold`, `sensitiveThreshold`,
 `untrustedThreshold`, `obscuredThreshold` above 0 up to 0.5. `loadConfig`

@@ -1120,6 +1120,28 @@ den GGUF-Metadaten `<arch>.decision.type` trägt; prüfe die Metadaten, nicht de
 Repositoriumstitel. Mit `-np 1` (unsere Einstellung) laufen mehrere Prompts
 nacheinander; parallele Slots wären möglich, sind aber nicht gemessen.
 
+Nicht jedes Repositorium mit „clef" oder „jev" im Namen funktioniert. Geprüft
+am 20.11.2026:
+
+| Repositorium | GGUF-Metadaten | `/v1/systemone` |
+| --- | --- | --- |
+| `ggml-org/Clef-Flash-GGUF` | `architecture = clef`, `clef.decision.type = clef` | ja, gemessen |
+| `ggml-org/Kev-4B-GGUF` | `architecture = qwen35`, Decision-Typ `kev` laut Modellkarte | ja, laut Modellkarte |
+| `NANI-Nithin/clef-flash-GGUF` | `architecture = qwen35`, kein Decision-Metadatum | **nein** — nur der Language Tower, der Joint-Schema-Head fehlt in der Datei |
+| `ngquocvinh/Jev-Omni-GGUF` | `architecture = gemma4`, kein Decision-Metadatum | **nein** — braucht einen Python-Adapter für den Decision-Head |
+| `mradermacher/Jeff-1.1-Qwen-4B-GGUF` | `architecture = qwen35`, kein Decision-Metadatum | **nein** — Jev-Format, nicht die llama.cpp-API |
+
+Die Architektur allein sagt nichts: Kev-4B ist ein `qwen35`-Modell und trotzdem
+ein Entscheidungsmodell. Entscheidend ist das `decision.type`-Metadatum.
+
+Ein fehlender Eintrag hat zwei mögliche Ursachen, und die Modellkarte
+unterscheidet sie: Das Modell hat keinen Decision-Head, oder die Konvertierung
+hat ihn nicht mitgenommen. Bei Jev-Omni und Jeff liegt der Head im Original als
+**eigene Datei** (`head.safetensors`, angewendet vom jeweiligen Serving-Code);
+ein GGUF des Backbones kann ihn also nicht enthalten. Quantisierer
+(mradermacher, NANI-Nithin, ngquocvinh) sind nicht die Original-Hersteller;
+lies die Karte des Originals, bevor du eine Datei beurteilst.
+
 Gültig sind `mcpThreshold` und `shellThreshold` ab 0,5 bis unter 1 und
 `secretsThreshold`, `sensitiveThreshold`, `untrustedThreshold`,
 `obscuredThreshold` über 0 bis 0,5. Werte außerhalb dieses Bands verwirft

@@ -23,7 +23,12 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   Prompt; llama.cpp kennt sieben Typen, bei den anderen entsteht ein Prompt je
   Frage. Gemessen ist ausschließlich Clef-Flash. Beide READMEs empfehlen
   deshalb ein Clef-Modell und nennen die Prüfung über die GGUF-Metadaten
-  (`<arch>.decision.type`), weil ein Dateiname kein Beleg ist.
+  (`<arch>.decision.type`), weil ein Dateiname kein Beleg ist. Geprüft am
+  20.11.2026: Nur `ggml-org/Clef-Flash` und `ggml-org/Kev-4B` sind
+  SystemOne-fähig; `NANI-Nithin/clef-flash` (nur Language Tower),
+  `Jev-Omni` (Python-Adapter) und `Jeff-1.1` (Jev-Format) nicht. Ein fehlendes
+  Metadatum kann auch am Quantisierer liegen; bei diesen drei Fällen belegt die
+  Original-Karte, dass der Decision-Head separat liegt oder fehlt.
 - **`pdftotext` und `pandoc` (20.11.2026):** `guard.js` prüft beide mit eigenen
   Funktionen statt über `READ_BINARIES`. `pdftotext` gilt als lesend, solange
   keine Ausgabedatei folgt (oder `-` als Ziel steht); die 14 Optionen mit
