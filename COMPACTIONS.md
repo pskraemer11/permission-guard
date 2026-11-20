@@ -2725,6 +2725,15 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
   demselben Text beginnen (`can_share_prompt()`); unsere tun das nicht.
   `noul` kommt dort von einer Ratingskala. Schlussfolgerung aus dem Code, nicht
   gemessen; gemessen ist nur Clef-Flash.
+- **GGUF-Metadaten geprueft (20.11.2026):** Von vier lokalen Decision-Modellen
+  traegt nur `ggml-org/Clef-Flash-GGUF/Clef-Flash-Q4_K_M.gguf` ein
+  `decision`-Metadatum (`general.architecture = clef`, `clef.decision.type =
+  clef`). `Jev-Omni-Q3_K_M` (`gemma4`), `Jeff-1.1-Qwen-4B` (`qwen35`) und
+  `clef-flash-IQ3_XS` von NANI-Nithin (`qwen35`) haben keines; llama.cpp
+  wuerde sie abweisen. Dateiname und Katalogspalte sind kein Beleg.
+- **Parallelitaet:** Unser Server laeuft mit `-np 1`; mehrere Prompts laufen
+  nacheinander. `-np N` waere parallel moeglich, kostet KV-Cache je Slot.
+  Nicht gemessen.
 - **Eigener Fehler, korrigiert:** Ein `/systemone`-Probeaufruf gegen
   `localhost:8080/systemone` ergab 404; der Pfad ist `/v1/systemone`, weil
   `baseUrl` auf `/v1` endet. Danach HTTP 200.

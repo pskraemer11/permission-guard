@@ -1112,6 +1112,14 @@ Text beginnen (`can_share_prompt()`); bei unseren ist das nicht der Fall.
 `noul` wird dort von einer Ratingskala statt aus einem Embedding-Score gelesen.
 Gemessen ist hier nur Clef.
 
+**Empfehlung: ein Clef-Entscheidungsmodell verwenden.** Nur dieser Typ hält
+alle fünf Fragen in einem Prompt, und davon gehen die vier Achsen aus. Hier
+gemessen: `ggml-org/Clef-Flash-GGUF`, `Q4_K_M` — 23/23 bei den Shell-Fällen.
+Ein Dateiname ist kein Beleg: Entscheidungsmodell für llama.cpp ist nur, was in
+den GGUF-Metadaten `<arch>.decision.type` trägt; prüfe die Metadaten, nicht den
+Repositoriumstitel. Mit `-np 1` (unsere Einstellung) laufen mehrere Prompts
+nacheinander; parallele Slots wären möglich, sind aber nicht gemessen.
+
 Gültig sind `mcpThreshold` und `shellThreshold` ab 0,5 bis unter 1 und
 `secretsThreshold`, `sensitiveThreshold`, `untrustedThreshold`,
 `obscuredThreshold` über 0 bis 0,5. Werte außerhalb dieses Bands verwirft

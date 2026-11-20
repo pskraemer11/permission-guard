@@ -1100,6 +1100,14 @@ build one prompt per question unless the questions share a prefix
 (`can_share_prompt()`); ours do not. `noul` is read from a rating scale there
 instead of an embedding score. Only Clef has been measured here.
 
+**Recommendation: use a Clef decision model.** It is the only type that keeps
+all five questions in one prompt, which is what the four axes assume. Measured
+here: `ggml-org/Clef-Flash-GGUF`, `Q4_K_M` — 23/23 on the shell cases. A file
+name is no proof: only a model whose GGUF metadata carries
+`<arch>.decision.type` is a decision model for llama.cpp; check the metadata,
+not the repository title. With `-np 1` (our setting) several prompts run one
+after another; parallel slots would be possible, but are not measured.
+
 Valid values are `mcpThreshold` and `shellThreshold` from 0.5 up to but not
 including 1, and `secretsThreshold`, `sensitiveThreshold`,
 `untrustedThreshold`, `obscuredThreshold` above 0 up to 0.5. `loadConfig`

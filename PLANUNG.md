@@ -1245,3 +1245,16 @@ anderer Typ wäre eine eigene Messung — Achsenzahl, Latenz und Schwellen.
 
 **Nicht gemessen:** Der Chat-Fallback hat keine Achsen (er kennt nur Ja/Nein)
 und bleibt mit diesem Server unbrauchbar (siehe oben).
+
+**Geprüft am 20.11.2026 (GGUF-Metadaten, `staging/gguf-keys.mjs`):** Von den
+vier Decision-Modellen im lokalen Bestand trägt nur
+`ggml-org/Clef-Flash-GGUF/Clef-Flash-Q4_K_M.gguf` ein `decision`-Metadatum
+(`general.architecture = clef`, `clef.decision.type = clef`). `Jev-Omni-Q3_K_M`
+(`gemma4`), `Jeff-1.1-Qwen-4B` (`qwen35`) und `clef-flash-IQ3_XS` von
+NANI-Nithin (`qwen35`) tragen keines; llama.cpp würde sie mit „This model is
+not a decision model" abweisen. Ein Dateiname oder eine Katalogspalte ist also
+kein Beleg — die Metadaten sind es.
+
+**Parallele Verarbeitung:** Unser Server läuft mit `-np 1`, also einem Slot;
+mehrere Prompts werden nacheinander abgearbeitet. Mit `-np N` wären sie
+parallel möglich, kosten aber KV-Cache je Slot. Nicht gemessen.

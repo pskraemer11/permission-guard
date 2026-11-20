@@ -20,8 +20,10 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   0,973 für einen heruntergeladenen Skript-Aufruf, `obscured` 0,955 für `-enc`,
   `sensitive` 0,443 neben `secrets` 0,955 beim privaten Schlüssel.
   **Grenze:** Nur der Decision-Modell-Typ `clef` legt alle Fragen in einen
-  Prompt; llama.cpp kennt sieben Typen, bei den anderen entstehen bis zu fünf
-  Prompts. Gemessen ist ausschließlich Clef-Flash.
+  Prompt; llama.cpp kennt sieben Typen, bei den anderen entsteht ein Prompt je
+  Frage. Gemessen ist ausschließlich Clef-Flash. Beide READMEs empfehlen
+  deshalb ein Clef-Modell und nennen die Prüfung über die GGUF-Metadaten
+  (`<arch>.decision.type`), weil ein Dateiname kein Beleg ist.
 - **`pdftotext` und `pandoc` (20.11.2026):** `guard.js` prüft beide mit eigenen
   Funktionen statt über `READ_BINARIES`. `pdftotext` gilt als lesend, solange
   keine Ausgabedatei folgt (oder `-` als Ziel steht); die 14 Optionen mit
