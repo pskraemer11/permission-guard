@@ -1,11 +1,11 @@
 # Startet den lokalen Entscheider fuer Ebene 1 und 3 (permission-guard/reviewer.js).
 #
-#   .\start-reviewer.ps1                    # Kev-4B (Entscheidungsmodell) auf Port 8080
-#   .\start-reviewer.ps1 -Port 8081         # anderer Port
-#   .\start-reviewer.ps1 -ModelPath <pfad>  # anderes GGUF
-#   .\start-reviewer.ps1 -Np 1              # ein Slot (kein Prefix-Teilen)
-#   .\start-reviewer.ps1 -Cpu -Server <cpu-llama-server>  # ohne GPU-Offload
-#   .\start-reviewer.ps1 -Stop              # beendet den Prozess auf diesem Port
+#   .\scripts\start-reviewer.ps1                    # Kev-4B (Entscheidungsmodell) auf Port 8080
+#   .\scripts\start-reviewer.ps1 -Port 8081         # anderer Port
+#   .\scripts\start-reviewer.ps1 -ModelPath <pfad>  # anderes GGUF
+#   .\scripts\start-reviewer.ps1 -Np 1              # ein Slot (kein Prefix-Teilen)
+#   .\scripts\start-reviewer.ps1 -Cpu -Server <cpu-llama-server>  # ohne GPU-Offload
+#   .\scripts\start-reviewer.ps1 -Stop              # beendet den Prozess auf diesem Port
 #
 # Der Reviewer ist optional: laeuft er nicht, bleibt jede nicht einordenbare
 # Anfrage bei "ask" (fail closed). Gestartet wird er vom Plugin (ensureRunning

@@ -36,13 +36,13 @@
     Abweichendes Zielverzeichnis fuer den Codex-Guard (zum Testen).
 
 .EXAMPLE
-    pwsh -File .\tools\permission-guard\deploy.ps1
+    pwsh -File .\scripts\deploy.ps1
 
 .EXAMPLE
-    pwsh -File .\tools\permission-guard\deploy.ps1 -Check
+    pwsh -File .\scripts\deploy.ps1 -Check
 
 .EXAMPLE
-    pwsh -File .\tools\permission-guard\deploy.ps1 -ShellThreshold 0.65
+    pwsh -File .\scripts\deploy.ps1 -ShellThreshold 0.65
 #>
 [CmdletBinding()]
 param(
@@ -57,7 +57,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$source = $PSScriptRoot
+$source = Split-Path -Parent $PSScriptRoot
 $files = @(
     "guard.js",
     "index.js",
@@ -74,10 +74,10 @@ $files = @(
     "test.mjs",
     "README.md",
     "README_de.md",
-    "start-reviewer.ps1",
+    "scripts/start-reviewer.ps1",
     "smoke-reviewer.mjs",
-    "bench-reviewer.ps1",
-    "bench-quality.ps1",
+    "scripts/bench-reviewer.ps1",
+    "scripts/bench-quality.ps1",
     "stats.mjs"
 )
 # Der Codex-Guard ist ein einzelnes Programm; sein Hook in ~/.codex/hooks.json
@@ -108,8 +108,11 @@ function Get-FileHashOrNull {
 function Copy-DeployFiles {
     param([string[]]$Names, [string]$To)
     foreach ($file in $Names) {
-        Copy-Item -LiteralPath (Join-Path $source $file) -Destination (Join-Path $To $file) -Force
-        Write-Host "  $file"
+        # Quelle darf in einem Unterordner liegen (scripts/); im Ziel liegt
+        # jede Datei flach, weil der Plugin-Lader index.js dort erwartet.
+        $leaf = Split-Path -Leaf $file
+        Copy-Item -LiteralPath (Join-Path $source $file) -Destination (Join-Path $To $leaf) -Force
+        Write-Host "  $leaf"
     }
 }
 
@@ -117,13 +120,14 @@ function Compare-DeployFiles {
     param([string[]]$Names, [string]$To)
     $mismatch = 0
     foreach ($file in $Names) {
+        $leaf = Split-Path -Leaf $file
         $a = Get-FileHashOrNull (Join-Path $source $file)
-        $b = Get-FileHashOrNull (Join-Path $To $file)
+        $b = Get-FileHashOrNull (Join-Path $To $leaf)
         if ($a -eq $b) {
-            Write-Host ("  {0,-24} identisch" -f $file)
+            Write-Host ("  {0,-24} identisch" -f $leaf)
         }
         else {
-            Write-Host ("  {0,-24} ABWEICHUNG" -f $file) -ForegroundColor Red
+            Write-Host ("  {0,-24} ABWEICHUNG" -f $leaf) -ForegroundColor Red
             $mismatch++
         }
     }
@@ -216,8 +220,9 @@ Write-Host "`n== Vergleich (SHA256): Codex =="
 $mismatch += Compare-DeployFiles -Names $codexFiles -To $CodexTarget
 
 # 4. Zusatzdateien im OpenCode-Ziel, die es in der Quelle nicht gibt.
+$leafNames = $files | ForEach-Object { Split-Path -Leaf $_ }
 $extra = Get-ChildItem -LiteralPath $Target -File |
-    Where-Object { $files -notcontains $_.Name }
+    Where-Object { $leafNames -notcontains $_.Name }
 if ($extra) {
     Write-Host "  Hinweis: Zusatzdateien im Ziel:" (($extra.Name) -join ", ")
 }

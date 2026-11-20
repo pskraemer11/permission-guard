@@ -1507,3 +1507,26 @@ sechsmal zu viel, bei 0,70 lässt es auf MCP zu viel durch (7/14).
 **`confidence`.** Wird seit dieser Messung mitgeführt. Genutzt hat sie nur bei
 vllm-d3-edge (13→14 mit `conf ≥ 0,6`); bei allen anderen lag die beste
 Kombination bei `conf ≥ 0`, also ohne Wirkung.
+
+## Nachtrag 20.11.2026: Skripte nach `scripts/`, Tasks bereinigt
+
+**Anlass.** Wurzelverzeichnis und Skripte lagen gemischt. Dazu kam ein echter
+Fehler: Der Task `permission-guard reviewer` zeigte auf
+`~/.config/opencode/plugin/…` (Einzahl) — ein Ordner, den es nicht gibt. Er
+konnte nie etwas starten; gearbeitet hat nur der Watchdog.
+
+**Stufe 1 umgesetzt.** `deploy.ps1`, `deploy.sh`, `start-reviewer.ps1`,
+`watchdog-reviewer.ps1`, `bench-reviewer.ps1`, `bench-quality.ps1` und
+`ship.ps1` liegen unter `scripts/`. Beide Deploy-Wege bilden den Quellpfad auf
+den Dateinamen im Ziel ab; das ausgelieferte Layout bleibt flach, weil der
+Plugin-Lader `index.js` dort erwartet. `.githooks/test-gate.conf` führt
+`scripts/` als Präfix. Beide Tasks sind neu registriert: der Reviewer-Task auf
+`plugins/…` (Mehrzahl), der Watchdog auf `scripts/watchdog-reviewer.ps1`.
+
+**Neu: `scripts/ship.ps1`.** Branch, Push, PR, `gh pr checks --watch`, Merge
+und `pull` in einem Aufruf; bricht ab, wenn eine Prüfung rot ist, und lässt den
+Branch dann stehen.
+
+**Stufe 2 offen.** `src/` für die Module (`guard.js`, `reviewer.js`,
+`index.js`, `audit.js`, `diagnostics.js`, `shadow.js`) und `test/` für Tests
+und Fixtures; dabei Importe, Deploy-Abbildung, CI und Doku nachziehen.

@@ -16,14 +16,14 @@ entwickelt und getestet, dann **einmal** deployt:
 
 ```powershell
 cd "$HOME\Python-Projekte\AI+IDE-Hints"
-pwsh -File .\tools\permission-guard\deploy.ps1          # Tests + Kopie + Hashvergleich
-pwsh -File .\tools\permission-guard\deploy.ps1 -Check   # nur vergleichen
+pwsh -File .\tools\permission-guard\scripts\deploy.ps1          # Tests + Kopie + Hashvergleich
+pwsh -File .\tools\permission-guard\scripts\deploy.ps1 -Check   # nur vergleichen
 ```
 
 ```sh
 cd tools/permission-guard
-./deploy.sh            # Tests + Kopie + Hashvergleich
-./deploy.sh --check    # nur vergleichen
+./scripts/deploy.sh            # Tests + Kopie + Hashvergleich
+./scripts/deploy.sh --check    # nur vergleichen
 ```
 
 Unter Windows zeigt `$HOME` in Git Bash und WSL auf das Linux-Home, nicht auf
@@ -52,8 +52,8 @@ Repositories funktioniert (`git init` hier, nicht im Monorepo):
 | `LICENSE`              | MIT                                                             |
 | `package.json`         | `"type": "module"`, `npm test`, Node ≥ 20                       |
 | `.gitignore`           | schließt `shell-reviewer.config.json`, Logs, `node_modules` aus |
-| `deploy.sh`            | POSIX-Gegenstück zu `deploy.ps1`                                |
-| `deploy.ps1`           | Windows, mit Testlauf und SHA256-Vergleich, zwei Ziele          |
+| `scripts/deploy.sh`    | POSIX-Gegenstück zu `deploy.ps1`                                |
+| `scripts/deploy.ps1`   | Windows, mit Testlauf und SHA256-Vergleich, zwei Ziele          |
 | `codex_guard.py`       | Codex-Hook (`PreToolUse`), reine Textprüfung                    |
 | `tests/`               | Pytest-Suite für den Codex-Guard, inkl. `shared-cases.jsonl`    |
 | `pyproject.toml`       | Ruff- und Pyright-Konfiguration für den Python-Teil             |
@@ -763,7 +763,7 @@ Ebenen mit `systemone`, fünf Slots und gemeinsamer KV-Pool (`-np 5
 Trefferquote (14/14, 23/23 bei 0,65), Median 193 ms. Bleibt als Rückfall
 installiert; ein Wechsel ist eine Zeile in `start-reviewer.ps1` (`-ModelPath`).
 
-Start: `.\start-reviewer.ps1`.
+Start: `.\scripts\start-reviewer.ps1`.
 
 **Historisch (25.–26.10.2026): Chat-Modelle.** Die folgende Messung entstand vor
 dem Wechsel auf den Entscheidungs-Endpunkt. Sie erklärt, warum der Chat-Weg
@@ -801,8 +801,8 @@ Entscheidend sind gefährliche Befehle, die sie *nicht* kennt, und
 Neues Modell prüfen — erst messen, dann umstellen:
 
 ```powershell
-.\bench-quality.ps1 -Model "D:\…\modell.gguf" -Label "Kandidat"
-.\bench-quality.ps1 -Model "D:\…\modell.gguf" -Mmproj "D:\…\mmproj.gguf" -Label "Kandidat (Vision)"
+.\scripts\bench-quality.ps1 -Model "D:\…\modell.gguf" -Label "Kandidat"
+.\scripts\bench-quality.ps1 -Model "D:\…\modell.gguf" -Mmproj "D:\…\mmproj.gguf" -Label "Kandidat (Vision)"
 # danach: model in shell-reviewer.config.json ändern, dann
 node smoke-reviewer.mjs
 ```
@@ -858,15 +858,15 @@ Der Index dient der Vorauswahl, der eigene 18-Befehl-Satz bleibt maßgeblich.
 ### Betrieb
 
 ```powershell
-.\start-reviewer.ps1                       # llama-server, Kev-4B, Port 8080
-.\start-reviewer.ps1 -ModelPath "D:\…\anderes.gguf" -Port 8081
-.\start-reviewer.ps1 -Cpu -Server "C:\…\llama-server.exe"   # ohne GPU-Offload
-.\start-reviewer.ps1 -Batch 2048 -Ubatch 2048               # kleinerer Stapel
+.\scripts\start-reviewer.ps1                       # llama-server, Kev-4B, Port 8080
+.\scripts\start-reviewer.ps1 -ModelPath "D:\…\anderes.gguf" -Port 8081
+.\scripts\start-reviewer.ps1 -Cpu -Server "C:\…\llama-server.exe"   # ohne GPU-Offload
+.\scripts\start-reviewer.ps1 -Batch 2048 -Ubatch 2048               # kleinerer Stapel
 node smoke-reviewer.mjs                    # 9 Fälle gegen die laufende Konfiguration
 node test.mjs                              # 934 Unit-Tests
 node test-index.mjs                        # 23 Integrationsfälle (Fake-OpenCode)
 node test-wiring.mjs                       # 13 Verdrahtungstests (Fake-git)
-.\start-reviewer.ps1 -Stop
+.\scripts\start-reviewer.ps1 -Stop
 ```
 
 Der Starter übergibt `-b 4096 -ub 4096`. Das gilt nur für Entscheidungsmodelle:

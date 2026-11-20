@@ -141,6 +141,18 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Skripte nach `scripts/` (20.11.2026):** `deploy.ps1`, `deploy.sh`,
+  `start-reviewer.ps1`, `watchdog-reviewer.ps1`, `bench-reviewer.ps1` und
+  `bench-quality.ps1` liegen jetzt unter `scripts/`. `deploy.ps1` und
+  `deploy.sh` bilden den Quellpfad auf den Dateinamen im Ziel ab; das
+  ausgelieferte Layout bleibt flach, weil der Plugin-Lader `index.js` dort
+  erwartet. `reviewer.js` findet `start-reviewer.ps1` weiterhin neben sich.
+  `.githooks/test-gate.conf` führt `scripts/` als Präfix. Tasks neu
+  registriert: `permission-guard reviewer` zeigte auf
+  `~/.config/opencode/plugin/…` (Einzahl — der Ordner existiert nicht) und
+  zeigt jetzt auf `plugins/…`; der Watchdog-Task auf
+  `scripts/watchdog-reviewer.ps1`. Neu: `scripts/ship.ps1` — Branch, Push, PR,
+  Prüfungen, Merge und `pull` in einem Aufruf.
 - **Betriebsmodell Kev-4B (20.11.2026):** `start-reviewer.ps1` startet
   standardmäßig `Kev-4B-Q4_K_M` mit fünf Slots; `--kv-unified` setzt das Skript
   bei mehr als einem Slot selbst, weil llama-server die Vorgabe nur bei

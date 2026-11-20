@@ -16,14 +16,14 @@ therefore happen in the project, followed by **one** deploy:
 
 ```powershell
 cd "$HOME\Python-Projekte\AI+IDE-Hints"
-pwsh -File .\tools\permission-guard\deploy.ps1          # tests + copy + hash comparison
-pwsh -File .\tools\permission-guard\deploy.ps1 -Check   # compare only
+pwsh -File .\tools\permission-guard\scripts\deploy.ps1          # tests + copy + hash comparison
+pwsh -File .\tools\permission-guard\scripts\deploy.ps1 -Check   # compare only
 ```
 
 ```sh
 cd tools/permission-guard
-./deploy.sh            # tests + copy + hash comparison
-./deploy.sh --check    # compare only
+./scripts/deploy.sh            # tests + copy + hash comparison
+./scripts/deploy.sh --check    # compare only
 ```
 
 On Windows, `$HOME` in Git Bash and WSL points to the Linux home, not to the
@@ -53,8 +53,8 @@ This directory is cut so that it works as the root of its own repository
 | `LICENSE`              | MIT                                                              |
 | `package.json`         | `"type": "module"`, `npm test`, Node ≥ 20                        |
 | `.gitignore`           | excludes `shell-reviewer.config.json`, logs, `node_modules`      |
-| `deploy.sh`            | POSIX counterpart to `deploy.ps1`                                |
-| `deploy.ps1`           | Windows, with test run and SHA256 comparison, two targets        |
+| `scripts/deploy.sh`    | POSIX counterpart to `deploy.ps1`                                |
+| `scripts/deploy.ps1`   | Windows, with test run and SHA256 comparison, two targets        |
 | `codex_guard.py`       | Codex hook (`PreToolUse`), pure text checking                    |
 | `tests/`               | Pytest suite for the Codex guard, including `shared-cases.jsonl` |
 | `pyproject.toml`       | Ruff and Pyright configuration for the Python part               |
@@ -756,7 +756,7 @@ levels with `systemone`, five slots and a shared KV pool (`-np 5
 rate (14/14, 23/23 at 0.65), median 193 ms. Stays installed as a fallback; a
 switch is one line in `start-reviewer.ps1` (`-ModelPath`).
 
-Start: `.\start-reviewer.ps1`.
+Start: `.\scripts\start-reviewer.ps1`.
 
 **Historical (25.–26.10.2026): chat models.** The following measurement was
 made before the switch to the decision endpoint. It explains why the chat path
@@ -796,8 +796,8 @@ commands.
 Checking a new model — measure first, then switch:
 
 ```powershell
-.\bench-quality.ps1 -Model "D:\…\modell.gguf" -Label "Kandidat"
-.\bench-quality.ps1 -Model "D:\…\modell.gguf" -Mmproj "D:\…\mmproj.gguf" -Label "Kandidat (Vision)"
+.\scripts\bench-quality.ps1 -Model "D:\…\modell.gguf" -Label "Kandidat"
+.\scripts\bench-quality.ps1 -Model "D:\…\modell.gguf" -Mmproj "D:\…\mmproj.gguf" -Label "Kandidat (Vision)"
 # then: change model in shell-reviewer.config.json, then
 node smoke-reviewer.mjs
 ```
@@ -852,15 +852,15 @@ The index serves pre-selection; our own 18-command set remains authoritative.
 ### Operation
 
 ```powershell
-.\start-reviewer.ps1                       # llama-server, Kev-4B, port 8080
-.\start-reviewer.ps1 -ModelPath "D:\…\anderes.gguf" -Port 8081
-.\start-reviewer.ps1 -Cpu -Server "C:\…\llama-server.exe"   # no GPU offload
-.\start-reviewer.ps1 -Batch 2048 -Ubatch 2048               # smaller batch
+.\scripts\start-reviewer.ps1                       # llama-server, Kev-4B, port 8080
+.\scripts\start-reviewer.ps1 -ModelPath "D:\…\anderes.gguf" -Port 8081
+.\scripts\start-reviewer.ps1 -Cpu -Server "C:\…\llama-server.exe"   # no GPU offload
+.\scripts\start-reviewer.ps1 -Batch 2048 -Ubatch 2048               # smaller batch
 node smoke-reviewer.mjs                    # 9 cases against the running configuration
 node test.mjs                              # 934 unit tests
 node test-index.mjs                        # 23 integration cases (fake OpenCode)
 node test-wiring.mjs                       # 13 wiring tests (fake git)
-.\start-reviewer.ps1 -Stop
+.\scripts\start-reviewer.ps1 -Stop
 ```
 
 The starter passes `-b 4096 -ub 4096`. That applies to decision models only:

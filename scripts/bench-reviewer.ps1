@@ -1,7 +1,7 @@
 # Misst die Antwortlatenz des Reviewers fuer ein Modell auf llama.cpp.
 #
-#   .\bench-reviewer.ps1 -Model <pfad.gguf> -Label "Gemma 12B"
-#   .\bench-reviewer.ps1 -Model <pfad.gguf> -Mmproj <pfad.gguf> -Label "Jev-Omni"
+#   .\scripts\bench-reviewer.ps1 -Model <pfad.gguf> -Label "Gemma 12B"
+#   .\scripts\bench-reviewer.ps1 -Model <pfad.gguf> -Mmproj <pfad.gguf> -Label "Jev-Omni"
 #
 # Startet einen eigenen Server auf -Port (Standard 8091), wartet auf /health,
 # verwirft einen Aufwaermlauf und misst dann -N Anfragen. Der Server wird
