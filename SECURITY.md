@@ -20,7 +20,10 @@ schützt **nicht** gegen:
 - Datenabfluss durch ein Werkzeug, das der Guard nicht sieht,
 - Prompt-Injection in Werkzeugergebnissen. Die Grenz-Markierung `[ud-…]` um
   MCP-Antworten und `execute`-Ergebnisse ist ein Hinweis an das Modell, keine
-  Grenze.
+  Grenze. Dasselbe gilt für den Zusatz `[verdacht: …]`: Er benennt
+  Formatkollisionen (Chat-Marker, Rollenzeilen, Werkzeug-Rahmen, unsichtbare
+  Steuerzeichen) und erkennt keine Bedeutung. Ein überredender Satz bleibt
+  unmarkiert.
 
 Fehler führen bewusst zur Rückfrage, nicht zur Freigabe (`fail closed`). Ein
 `deny` der statischen Regeln wird nie überschrieben.

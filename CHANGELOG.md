@@ -141,6 +141,14 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Statische Formatkollisionen (20.11.2026, G2):** `guard.js` hat
+  `injectionHits` mit sechs Familien — Chat-Template-Marker (inkl.
+  `[PROMPT_INJECTION]`), `[INST]`/`<<SYS>>`, Rollenzeilen, Werkzeug-Rahmen,
+  die eigene `[ud-`-Grenze, unsichtbare Steuerzeichen (ohne ZWJ, weil der zu
+  Emoji gehört). `index.js` nennt einen Treffer als `[verdacht: …]` vor der
+  Grenze; der Text bleibt unverändert, nichts wird blockiert. Keine
+  Bedeutungsanalyse: überredende Sätze werden nicht erkannt. `test.mjs`
+  975/975 (acht neue Fälle), `test-index.mjs` 45/45 (zwei neue Fälle).
 - **Webabrufe im Guard (20.11.2026):** `guard.js` hat `scopeWebfetch`: Ziele
   außerhalb von localhost (`localhost`, `[IP_ADDRESS]`/8, `::1`) ergeben `ask`,
   lokale Ziele bleiben erlaubt, ein `deny` der statischen Regeln wird nicht

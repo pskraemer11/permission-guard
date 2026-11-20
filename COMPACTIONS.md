@@ -3028,3 +3028,48 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
 - Die Laufzeitdatei liegt außerhalb der Schreibgrenze; nur `deploy.ps1` ändert
   sie.
 - Untracked bleiben: zwei Screenshots unter `docs/` und `review/`.
+
+
+================ Compaction 20.11.2026 / 21:51 ================
+## Objective
+- **Current:** G2 ist umgesetzt (Formatkollisionen), aber noch nicht deployt und
+  nicht committet.
+- **Completed:** `injectionHits` in `guard.js`, Hinweis `[verdacht: …]` in
+  `index.js`, Systemanweisung ergänzt, Tests 975/975 und 45/45, Doku.
+
+## Important Details
+- **G2 ist keine Bedeutungsanalyse.** Geprüft werden sechs Familien von
+  Formatkollisionen: Chat-Template-Marker (inkl. `[PROMPT_INJECTION]`),
+  `[INST]`/`<<SYS>>`, Rollenzeilen (`### System:`), Werkzeug-Rahmen
+  (`"tool_calls":`, `<function_call>`), die eigene `[ud-`-Grenze und
+  unsichtbare Steuerzeichen. U+200D (ZWJ) ist ausgenommen, weil er zu
+  Emoji-Sequenzen gehört.
+- **Wirkung:** Der Hinweis steht vor der Grenze, der Inhalt bleibt unverändert,
+  nichts wird blockiert. Ein überredender Satz wird nie gefunden.
+- **Reihenfolge im Text:** `[verdacht: …] [ud-<id>]Inhalt[/ud-<id>]`.
+
+## Work State
+- Geändert: `guard.js`, `index.js` (SHIELD_NOTICE, `shieldResult`),
+  `test.mjs`, `test-index.mjs`, `README.md`, `README_de.md`, `SECURITY.md`,
+  `CHANGELOG.md`, `PLANUNG.md`.
+- Grün: `test.mjs` 975/975, `test-index.mjs` 45/45.
+- Nicht gemacht: übrige Gates nach den Doku-Änderungen, Deploy, Commit.
+
+## Next Move
+1. `node test-wiring.mjs`, `node bench-mcp.mjs`, `pytest`, `ruff`, `pyright`.
+2. `deploy.ps1`, dann Live-Test: ein `execute`-Ergebnis mit Rollenzeile muss
+   `[verdacht: rollenzeile]` tragen.
+3. Branch, PR, Merge durch den Nutzer (Ruleset verlangt Prüfungen).
+
+## Relevant Files
+- `guard.js`: `injectionHits`, `INJECTION_PATTERNS`.
+- `index.js`: `SHIELD_NOTICE`, `shieldResult` mit Hinweis.
+- `test.mjs`, `test-index.mjs`: neue Fälle.
+- `docs/adr/0002-reviewer-und-sandbox.md`: Nachtrag zu G2.
+
+## Important Context
+- Die Markierung ist ein Hinweis, keine Grenze; die Berechtigungsprüfung bleibt
+  die harte Grenze.
+- `ask` wirkt nur bei abgeschalteter Automatik; mit „Berechtigungen automatisch
+  akzeptieren" war die webfetch-Regel wirkungslos (live erlebt).
+- Untracked bleiben: zwei Screenshots, ein JPG und `review/`.

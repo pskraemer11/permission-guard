@@ -1143,6 +1143,16 @@ runs without a prompt. Local addresses (localhost, 127.0.0.0/8, ::1) stay
 allowed, a `deny` of the static rules is never touched, and the URL itself is
 never written to the log because it may carry tokens in the query.
 
+**Static format collisions (since 20.11.2026, G2).** Inside a shielded result a
+closed list of format collisions is counted: chat-template markers
+(`[PROMPT_INJECTION]` and relatives), `[INST]`/`<<SYS>>`, role lines such as
+`### System:`, tool-call frames (`"tool_calls":`, `<function_call>`), our own
+`[ud-` boundary, and invisible control characters (bidi overrides,
+zero-width). A hit is named in front of the boundary as `[verdacht: …]`; the
+text stays unchanged and nothing is blocked. This is not semantic detection: a
+sentence like "ignore previous instructions" is never found, and is not meant
+to be. The list is short on purpose — it names formats, not intentions.
+
 Not every repository with "clef" or "jev" in its name works. Checked on
 20.11.2026:
 
