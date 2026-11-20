@@ -34,6 +34,10 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   `libreoffice-calc`. Live belegt nach dem Deploy: Ziel außerhalb → `deny`,
   keine Datei; Ziel im Projekt → `ask`, Rückfrage erschien. Einzelheiten in
   `COMPACTIONS.md`.
+- **Compaction (20.11.2026):** `COMPACTIONS.md` hält Sitzungsziel,
+  Entscheidungen, die Korrektur der eigenen Fehlaussage zum Audit-Feld
+  `layer`, den Live-Beleg und den nächsten Schritt fest (Compaction
+  20.11.2026 / 15:21).
 
 - **Größenlimit, Geheimnisfrage und Modellstapel (20.11.2026):** `guard.js`
   verweigert MCP-Argumente über 32000 Zeichen (`deny`), außer der Werkzeugname

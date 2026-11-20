@@ -2476,3 +2476,66 @@ Rueckfrage — keine stille Freigabe.
 **Nicht belegt:** Ein Schreibziel innerhalb des Projekts, das ein Versand-
 oder Veroeffentlichungswerkzeug ist (etwa `mail_send` mit Anhang im Projekt).
 Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
+
+
+=============== Compaction 20.11.2026 / 15:21 ================
+## Objective
+- **Current:** Sitzung abgeschlossen; PR #10 (`welle-2-mcp-pfad`) ist offen,
+  alle Pruefungen gruen, nicht gemergt.
+- **Completed:** ADR-0002-Entscheidungen in drei Stufen umgesetzt, live belegt
+  und dokumentiert.
+
+## Important Details
+- **Entscheidungen (Nutzer):** Groessenlimit Option C (deny ausser belegtem
+  Lesen); fehlende Geheimnis-Antwort ergibt `ask`; belegter Serverfehler
+  „input … too large" ergibt `deny`; Stapel `-b/-ub 4096` im Starter, nicht in
+  `config.ini` (die bleibt fuer Chatmodelle); MCP-Pfadabgleich fuer
+  `write`/`destructive`; Deny-Limits und Vier-Achsen-Messung zurueckgestellt.
+- **Korrektur einer eigenen Fehlaussage:** `layer: 3` im Audit bedeutet
+  „Urteil haette Ebene 3 gebraucht", nicht „Modell wurde befragt". Von 181
+  Entscheidungen trug genau eine `probability`. Punkt „Ebene 3 nur bei
+  statischem ask" war daher schon erfuellt (`guard.js:1496`, `index.js:201`).
+  Lehre: Audit-Felder am Quelltext pruefen, bevor eine Zahl als Befund gilt.
+- **Sandbox:** `codex sandbox` startet den Windows-Dienst
+  `CodexSandboxService.OpenAI.Codex` nicht (waehrend des Laufs Stopped,
+  Exit 0). Fehler im Vorbild `Inspect-Evals`: `:tmpdir` deckt `%TEMP%`/`%TMP%`
+  nicht ab; erst explizite Deny-Eintraege blockieren das Schreiben dorthin.
+- **Stapelgrenze:** 1024 deckt ~5000 Zeichen, 2048 ~12000, 4096 ~24000;
+  GPU bei 4096: 7054 von 16283 MiB.
+- **Gate:** `test.mjs` 938/938, `test-wiring` 13/13, `bench-mcp` 40/40
+  (15 Verbote), `test-index` 23/23, `pytest` 149/1, Ruff/Format/Pyright gruen.
+- **Live-Beleg nach Deploy:** `xlsx-tools-mcp.create_workbook` mit Ziel
+  ausserhalb → `deny`, keine Datei; Ziel im Projekt → `ask`, nach Freigabe
+  geschrieben.
+
+## Work State
+### Completed / Active / Blocked
+- **Completed:** Commits `315d6d7`, `9587e99`, `1e1046a` auf dem Branch;
+  Deploy ueber `deploy.ps1` (SHA256 gleich); PR #10 offen, Checks gruen.
+- **Active:** Compaction (diese Datei), noch nicht committet.
+- **Blocked:** keiner.
+
+## Next Move
+1. Compaction committen und auf `welle-2-mcp-pfad` pushen, damit sie in PR #10
+   landet.
+2. PR #10 mergen; danach lokal `git switch main`, `git fetch origin`,
+   `git reset --hard origin/main`.
+3. Offen aus PLANUNG: Stufe 3 (vier Achsen) mit eigenen Graubereich-Faellen,
+   `pdftotext`/`pandoc`, Deny-Limits.
+
+## Relevant Files
+- `guard.js`: `mcpOutsidePaths`, `MCP_READ_ONLY_TOOLS`, Groessenlimit-Regel.
+- `reviewer.js`: Geheimnisfrage fail-closed, `unanalysable`, Aufwaermlauf-Wiederholung.
+- `index.js`: `scope` fuer `mcpVerdict`.
+- `start-reviewer.ps1`: `-Batch`/`-Ubatch`, Standard 4096.
+- `mcp-cases.jsonl`, `bench-mcp.mjs`: 40 Faelle, 15 Verbote.
+- `PLANUNG.md`: P2-Auswertung samt Korrektur; `SECURITY.md`: drei Ausnahmen.
+- `docs/adr/0002-reviewer-und-sandbox.md`: Nachtrag mit Messreihen.
+
+## Important Context
+- Branch `welle-2-mcp-pfad` = Arbeitsstand; `main` lokal auf `925b562`
+  (Stand vor dieser Sitzung), deshalb zeigt `AGENTS.md` dort wieder 33/9.
+- `staging/` ist nur auf dem Branch ignoriert; auf `main` erscheint es als
+  untracked. Vor `git add -A` auf `main` beachten.
+- Deployt ist `9587e99`; `1e1046a` ist reine Doku.
+- Push und Merge bleiben beim Nutzer.
