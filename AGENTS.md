@@ -7,7 +7,7 @@ Arbeitsregeln für Agenten in diesem Repository.
 ```powershell
 node test.mjs             # vollständige Suite, Exitcode 1 bei Abweichung
 node test-wiring.mjs      # Fake-git: deny verhindert Ausführung
-node bench-mcp.mjs        # 33 feste Fälle, 11 Verbote
+node bench-mcp.mjs        # 40 feste Fälle, 15 Verbote
 python -m pytest tests -q # Codex-Guard, inkl. shared-cases.jsonl
 python -m ruff check .    # Python-Lint
 python -m pyright         # Python-Typprüfung

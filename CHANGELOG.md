@@ -8,6 +8,31 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **P2-Beobachtung ausgewertet (20.11.2026):** `PLANUNG.md` hält das Ergebnis
+  des Beobachtungsfensters 13.–19.11.2026 fest (136 Entscheidungen, 17
+  Werkzeuge, vier angewendete `ask` → `allow`, F-Kriterien wegen fehlender
+  schreibender Werkzeuge unentschieden, kein Guard-Fehler).
+- **Lese-Werkzeug ohne Verb (20.11.2026):** `guard.js` führt
+  `MCP_READ_ONLY_TOOLS` mit `open-knowledge_exec`; das Werkzeug gilt damit als
+  `read` und erreicht Ebene 3 nicht mehr. Die Liste ist bewusst nach exaktem
+  Namen sortiert, weil `exec` allein bei anderen Servern Code ausführt.
+- **Aufwärmlauf wiederholt sich (20.11.2026):** `reviewer.js` versucht eine
+  geschlossene Verbindung (`ECONNREFUSED`) bis zu fünfmal im Abstand von
+  500 ms und nennt den Code im Log; andere Netzfehler bleiben einmalig.
+- **Schreibende MCP-Werkzeuge (20.11.2026):** `mcp-cases.jsonl` prüft drei
+  Fälle (`open-knowledge.write` im Projekt, mit `../` daraus ausbrechend, und
+  `open-knowledge.delete`). Ergebnis: der Guard fragt in allen drei Fällen und
+  unterscheidet das Ziel nicht — anders als die Shell-Prüfung, die außerhalb
+  des Projekts verweigert. `bench-mcp.mjs` führt jetzt 36 Fälle (11 Verbote).
+- **Pfadabgleich für MCP (20.11.2026):** `guard.js` führt `mcpOutsidePaths()`;
+  `mcpVerdict(criteria, input, scope)` verweigert `write` und `destructive`,
+  deren Zielpfad außerhalb von Projekt, Temp und vertrauten Ordnern liegt.
+  Geprüft werden die Zielfelder (`path`, `file`, `folder`, `output`, `target`,
+  `cwd`, …), nicht `source`. Innerhalb bleibt es `ask`. `index.js` übergibt
+  Projekt, Temp und Wurzeln aus `guardOptions`. `mcp-cases.jsonl` wächst auf 40
+  Fälle (15 Verbote) mit `open-knowledge`, `xlsx-tools-mcp` und
+  `libreoffice-calc`.
+
 - **Größenlimit, Geheimnisfrage und Modellstapel (20.11.2026):** `guard.js`
   verweigert MCP-Argumente über 32000 Zeichen (`deny`), außer der Werkzeugname
   belegt eine Leseabsicht und es gibt keinen Geheimnisverdacht; `reviewer.js`

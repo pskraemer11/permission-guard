@@ -2385,3 +2385,62 @@ Vornachtrag gilt unveraendert (Messung nicht ausgefuehrt).
 1. Stufe 3 (vier Achsen) mit eigenen Graubereich-Faellen messen.
 2. Danach: Commit auf Freigabe, dann Deploy (nur `deploy.ps1`, damit die
    deployte Kopie von `start-reviewer.ps1` die Stapelwerte mitbringt).
+
+## Nachtrag 20.11.2026 (Fortsetzung): Korrektur und drei Umsetzungen
+
+**Korrektur einer eigenen Fehlaussage.** Der erste P2-Bericht las `layer: 3`
+im Audit als "Modell wurde befragt" und zaehlte 77 wirkungslose Modellaufrufe.
+Falsch: `layer`/`decision: "model"` beschreiben das **Urteil**, nicht den
+Aufruf. `mcpAction` gibt bei statischem `allow` `keep` (`guard.js:1496`), und
+`index.js:201` beendet den Zweig ohne Modellaufruf. Beleg: Von 181
+Entscheidungen traegt genau eine das Feld `probability`. Punkt 1 der
+Nutzerfreigabe war damit bereits erfuellt; nichts geaendert, nur belegt.
+
+**Umgesetzt:**
+- `MCP_READ_ONLY_TOOLS` mit `open-knowledge_exec` (Beleg: Werkzeugbeschreibung
+  nennt es read-only, Allowlist cat/ls/grep/find/head/tail/wc/sort/uniq/cut).
+  Bewusst exakter Name statt Verb `exec`, weil das bei anderen Servern
+  "fuehre Code aus" heisst; `fremdserver_exec` bleibt `model`.
+- Aufwaermlauf wiederholt `ECONNREFUSED` bis 5x im Abstand von 500 ms, nennt
+  den Code im Log; andere Netzfehler bleiben einmalig.
+- `mcp-cases.jsonl` um drei schreibende Faelle ergaenzt; `bench-mcp` 36/36.
+
+**Befund zu schreibenden MCP-Werkzeugen:** Einziger aktiver lokaler Schreiber
+ist `open-knowledge` (write/edit/delete/move). `firecrawl` schreibt nicht
+lokal; `xlsx-tools-mcp`, `libreoffice-calc`, `llm-sandbox`, `mermaid` und
+`hf-mcp-server` sind abgeschaltet. Der Guard fragt bei **jedem** Schreibziel,
+auch bei `../ausserhalb` und `C:/Windows/Temp` — anders als die Shell-Pruefung,
+die dort verweigert. Naechste Stufe waere ein Pfadabgleich fuer MCP
+(Signaturaenderung an `mcpVerdict`).
+
+**Gate (20.11.2026, nach diesen Aenderungen):** `test.mjs` 938/938,
+`test-wiring.mjs` 13/13, `bench-mcp.mjs` 36/36, `test-index.mjs` 23/23,
+`pytest` 149/1, Ruff, Ruff-Format, Pyright gruen.
+
+## Nachtrag 20.11.2026 (zweite Fortsetzung): MCP-Pfadabgleich
+
+**Anlass:** Der Nutzer hat `libreoffice-calc` und `xlsx-tools-mcp` aktiviert und
+den Pfadabgleich fuer MCP freigegeben. Damit gibt es drei lokale
+Schreibwerkzeuge statt nur `open-knowledge`.
+
+**Umgesetzt:** `mcpOutsidePaths(input, scope)` in `guard.js` sammelt die
+Zielfelder (`path`, `file`, `filename`, `filepath`, `file_path`, `directory`,
+`dir`, `folder`, `output`, `cwd`, `workdir`, `target`, `dest`, `destination`),
+loest relative Ziele gegen das Projekt auf (mit `..`), wertet `~` und `%VAR%`
+als ausserhalb und vergleicht gegen Projekt, Temp und die vertrauten Wurzeln.
+`mcpVerdict(criteria, input, scope)` verweigert `write` und `destructive` bei
+einem Ziel ausserhalb; innerhalb bleibt es bei `ask`. `index.js` uebergibt
+`{project, temp, roots}` aus `guardOptions`. Ohne `scope` bleibt das alte
+Verhalten, damit die reine Urteilslogik ohne Projekt testbar bleibt.
+
+**Bewusst nicht:** Schreiben innerhalb des Projekts auf `allow` heben. Ein
+MCP-Schreibwerkzeug kann mehr tun als eine Datei anzulegen (Versand mit
+Anhang im Projekt waere sonst eine stille Freigabe).
+
+**Nicht geprueft:** `source` bei `open-knowledge.write` (Asset-Upload) bleibt
+aussen vor; ein Upload einer privaten Datei aus dem Home ergibt weiterhin
+`ask`, nicht `deny`. Das waere ein eigener Fall.
+
+**Gate (20.11.2026, nach dem Pfadabgleich):** `test.mjs` 938/938,
+`test-wiring.mjs` 13/13, `bench-mcp.mjs` 40/40 (15 Verbote), `test-index.mjs`
+23/23, `pytest` 149/1, Ruff, Ruff-Format, Pyright gruen.

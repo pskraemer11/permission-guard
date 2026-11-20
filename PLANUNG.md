@@ -962,3 +962,123 @@ Zwei getrennte Aufgaben:
 
 Beides ist nicht umgesetzt. Bis dahin bleibt `pandoc` im Agenten bei `ask`,
 und `pdftotext` ist nur in der stdout-Form freigegeben.
+
+## Nachtrag 20.11.2026: P2-Beobachtung ausgewertet
+
+**Anlass.** `PLANUNG.md:41` verlangt nach der Aktivierung von `MCP_GATING_MODE`
+eine Beobachtung über 24 Stunden: `mcp-report` und `guard.log` prüfen.
+
+**Datenlage.** `mcp-report.mjs --days 7` und `audit.jsonl` (362 Zeilen,
+`%LOCALAPPDATA%\opencode\permission-guard\audit.jsonl`). Das Fenster
+13.–19.11.2026 umfasst **136 Entscheidungen** aus 17 Werkzeugen, alle im Modus
+`active`. `guard.log` enthält nur den heutigen Tag (2,1 KB, keine Rotation).
+
+**Ergebnis 1: keine Fehlfreigabe sichtbar.** Ein statisches `allow` oder `deny`
+wurde nie überschrieben; die vier Entscheidungen mit `applied=true` sind
+allesamt `ask` → `allow`:
+
+| Zeitpunkt | Werkzeug | Absicht | Schicht | Grund |
+| --- | --- | --- | --- | --- |
+| 16.11. 22:18 | `deepwiki_ask_wiki_question` | read | 1 | `nur lesend (ask)` |
+| 18.11. 21:40 | `deepwiki_ask_wiki_question` (2×) | read | 1 | `nur lesend (ask)` |
+| 19.11. 20:25 | `firecrawl_firecrawl_parse` | unknown | 3 | Modell `p=0.960` |
+
+`ask` steht bewusst in `MCP_READ_VERBS` (`guard.js:1055`), ein Fragesteller ist
+also ein Leser — konsistent mit `search`/`scrape`. Der einzige Fall, den das
+Modell allein entschieden hat, ist `firecrawl_parse` (lokale Datei nach Markdown);
+das ist lesend, aber es ist der einzige Beleg dieser Art.
+
+**Ergebnis 2: Ebene 3 läuft nur bei statischem `ask` — das war schon so.**
+Ein früherer Entwurf dieses Nachtrags las `layer: 3` im Audit als „Modell wurde
+befragt" und zählte 77 wirkungslose Modellaufrufe. Das war falsch. `layer` und
+`decision: "model"` beschreiben das **Urteil** („diese Absicht müsste Ebene 3
+sehen"), nicht den Aufruf. `mcpAction` gibt bei statischem `allow` `keep` zurück
+(`guard.js:1496`), und `index.js:201` beendet den Zweig dann ohne Modellaufruf.
+Beleg: Von 181 Entscheidungen trägt genau **eine** das Feld `probability`
+(`firecrawl_parse`); die 75 `open-knowledge_exec`-Datensätze tragen es nicht.
+
+`open-knowledge_exec` bleibt trotzdem ein Sonderfall: Der Name enthält kein Verb,
+deshalb lautet das Urteil dort immer „unknown/3". Solange die statische Regel
+`allow` sagt, ist das folgenlos; sobald sie auf `ask` stünde, ginge jeder Aufruf
+ans Modell. Deshalb bekommt das Werkzeug eine belegte Absicht (siehe unten).
+
+**Ergebnis 3: F-Kriterien nicht erfüllt.** Tage 5/7, Aufrufe 136/50,
+Werkzeuge 17/3, **schreibende Werkzeuge 0/1**. Im Fenster wurde kein
+schreibendes MCP-Werkzeug benutzt; die Aktivierungsfrage ist damit nicht
+beantwortbar, nicht negativ beantwortet.
+
+**Ergebnis 4: keine Fehler durch den Guard.** Fünf Aufrufe im Fenster endeten
+mit `status: error` (sechs in der ganzen Datei), alle auf erlaubten Aufrufen:
+`gh_grep` 2×, `firecrawl_search` 1×, `opencode_console_list_models` 1×,
+`deepwiki` 1×. Kein Fehler folgt auf ein `deny` oder eine Rückfrage des Guards.
+
+**Ergebnis 5: `guard.log` — Aufwärmlauf scheitert mit `TypeError`.** Heute
+09:32 zweimal `Aufwaermlauf fehlgeschlagen 7 ms (TypeError)`, um 10:49 dann
+`ok 2811 ms`. Reproduziert: `fetch` gegen einen geschlossenen Port liefert
+`TypeError: fetch failed`, Ursache `ECONNREFUSED`. `ensureRunning` startet den
+Server losgelöst und kehrt sofort zurück; `warmup()` läuft 7 ms später gegen
+einen noch nicht lauschenden Port. Folge: kein Aufwärmlauf, die erste echte
+Entscheidung zahlt den Kaltstart — genau das, was der Aufwärmlauf verhindern
+soll.
+
+**Offene Entscheidungen aus diesem Befund:**
+
+1. ~~Ebene 3 nur befragen, wenn die statische Regel `ask` sagt~~ — bereits so
+   umgesetzt (`guard.js:1496`, `index.js:201`), hier nur belegt.
+2. `open-knowledge_exec` eine Absicht geben (siehe Nachtrag unten).
+3. Aufwärmlauf bei `ECONNREFUSED` kurz wiederholen (etwa 5 × 500 ms) statt
+   aufzugeben.
+4. Beobachtungsfenster nicht verlängern. Stattdessen schreibende MCP-Werkzeuge
+   mit Testfällen prüfen (siehe Nachtrag unten).
+
+## Nachtrag 20.11.2026: Lese-Werkzeug, Aufwärmlauf und schreibende MCP-Werkzeuge
+
+**Umgesetzt.**
+
+- `guard.js` führt `MCP_READ_ONLY_TOOLS` mit `open-knowledge_exec`. Beleg:
+  Die Werkzeugbeschreibung nennt es „read-only" und lässt nur `cat`, `ls`,
+  `grep`, `find`, `head`, `tail`, `wc`, `sort`, `uniq`, `cut` zu, ohne
+  Schreiben oder Umleitung. Die Liste ist bewusst nach exaktem Namen sortiert
+  und keine Verb-Ergänzung: `exec` allein heißt bei anderen Servern „führe
+  Code aus" (`fremdserver_exec` bleibt in `test.mjs` bei `model`).
+- `reviewer.js` wiederholt einen geschlossenen Port (`ECONNREFUSED`) bis zu
+  fünfmal im Abstand von 500 ms und nennt den Code im Log. Andere Netzfehler
+  bleiben einmalig, damit ein echter Ausfall nicht 2,5 s kostet.
+- `test.mjs` 938/938, `bench-mcp.mjs` 36/36 (drei neue Fälle, 11 Verbote).
+
+**Nicht geändert, weil schon so:** Ebene 3 läuft nur bei statischem `ask`
+(`guard.js:1496`, `index.js:201`). Siehe die Korrektur unter Ergebnis 2.
+
+**Schreibende MCP-Werkzeuge — welches wäre das?** In der laufenden
+Konfiguration ist `open-knowledge` der einzige aktive MCP-Server, der lokal
+schreibt (`write`, `edit`, `delete`, `move`, `install`). `xlsx-tools-mcp`,
+`libreoffice-calc`, `llm-sandbox`, `sandbox-python-isolated`, `mcp-mermaid`
+und `hf-mcp-server` sind mit `"disabled": true` abgeschaltet. `firecrawl`
+schreibt nicht lokal: seine Werkzeuge holen Webinhalte oder legen Skills auf
+den Firecrawl-Servern an (`firecrawl_save_skill`), nie eine Datei im
+Arbeitsbereich. Der Vorschlag „firecrawl schreibt in einen Ordner" lässt sich
+mit diesem Server also nicht prüfen.
+
+**Befund aus den neuen Fällen.** Der Guard unterschied bei MCP anfangs **nicht**,
+wohin geschrieben wird; alle vier Fälle ergaben `ask`. Mit dem Pfadabgleich
+(siehe unten) gilt jetzt:
+
+| Fall | Ziel | Urteil |
+| --- | --- | --- |
+| `open-knowledge.write` | `notes/ergebnis` (im Projekt) | `ask`, Ebene 1 |
+| `open-knowledge.write` | `../ausserhalb/ergebnis` | `deny`, Ebene 1 |
+| `open-knowledge.write` | `C:/Windows/Temp/x` | `deny`, Ebene 1 |
+| `open-knowledge.delete` | `notes/ergebnis` | `ask`, Ebene 1 (loeschend) |
+| `open-knowledge.delete` | `C:/Users/x/Documents/ergebnis` | `deny`, Ebene 1 |
+| `xlsx-tools-mcp.create_workbook` | `C:/proj/out/x.xlsx` | `ask`, Ebene 1 |
+| `xlsx-tools-mcp.create_workbook` | `C:/Users/x/Desktop/x.xlsx` | `deny`, Ebene 1 |
+| `libreoffice-calc.add_sheet` | `C:/Users/x/Desktop/x.ods` | `deny`, Ebene 1 |
+
+**Umgesetzt:** `mcpOutsidePaths()` in `guard.js` prüft die Zielfelder (`path`,
+`file`, `folder`, `output`, `target`, `cwd`, …), löst relative Ziele gegen das
+Projekt auf und wertet `~`/`%VAR%` als außerhalb. `mcpVerdict` nimmt dafür ein
+drittes Argument `scope` (`project`, `temp`, `roots`), das `index.js` aus
+`guardOptions` füllt. **Innerhalb bleibt es bei `ask`** — bewusst keine stille
+Freigabe: ein MCP-Schreibwerkzeug kann mehr tun als eine Datei anzulegen
+(Beispiel: ein Versandwerkzeug mit Anhang im Projekt). `source` bleibt
+ausgenommen, weil es einen Lesepfad benennt.

@@ -1127,6 +1127,10 @@ const mcpLayer1 = [
   ["sync_status", { project: "x" }, "ask"],
   ["sync", { project: "x" }, "ask"],
   ["voellig_unbekannt", { ziel: "irgendwas" }, "model"],
+  // Belegte Lese-Werkzeuge ohne Verb im Namen (20.11.2026). Die Liste ist eine
+  // Namensliste: ein fremdes `exec` bleibt unbekannt.
+  ["open-knowledge_exec", { command: "cat notes/a.md" }, "allow"],
+  ["fremdserver_exec", { command: "cat notes/a.md" }, "model"],
 ]
 const mcpLayer1Checks = mcpLayer1.map(([tool, input, want]) => {
   const got = verdictCase(tool, input)
@@ -1628,6 +1632,27 @@ const warmupChecks = []
   warmupChecks.push(["Aufwaermlauf waermt bei gemischtem Backend auch den Chat-Weg", seen.some((u) => u.endsWith("/chat/completions"))])
   await warmup({ enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", warmupTimeoutMs: 1000 })
   warmupChecks.push(["Aufwaermlauf nutzt chat/completions", seen.some((u) => u.endsWith("/chat/completions"))])
+
+  // Der Server startet gerade: ein geschlossener Port wird kurz wiederholt,
+  // andere Fehler nicht (Befund 20.11.2026).
+  const cfgChat = { enabled: true, baseUrl: "http://[IP_ADDRESS]:1/v1", model: "m", mcpBackend: "chat", shellBackend: "chat", warmupTimeoutMs: 1000 }
+  let calls = 0
+  globalThis.fetch = async () => {
+    calls++
+    if (calls === 1) throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } })
+    return { ok: true, arrayBuffer: async () => new ArrayBuffer(0), json: async () => ({}) }
+  }
+  const retried = await warmup(cfgChat)
+  warmupChecks.push(["geschlossener Port wird wiederholt", retried.ok === true && calls === 2])
+
+  calls = 0
+  globalThis.fetch = async () => {
+    calls++
+    throw new TypeError("fetch failed")
+  }
+  const noRetry = await warmup(cfgChat)
+  warmupChecks.push(["anderer Netzfehler wird nicht wiederholt", noRetry.ok === false && calls === 1])
+
   globalThis.fetch = realFetch2
 }
 for (const [name, ok] of warmupChecks) {

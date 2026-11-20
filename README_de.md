@@ -736,6 +736,10 @@ Leben, sondern bindet ihn an OpenCode:
   Zeitabbruch startet `scheduleWarmup()` im Hintergrund erneut; die aktuelle
   Entscheidung bleibt ohne Warten `ask`. Start- und Timeout-Aufwärmlauf teilen
   sich denselben laufenden Aufruf und laufen daher nicht doppelt.
+  Ist der Port noch geschlossen (`ECONNREFUSED`), wird die Anfrage bis zu
+  fünfmal im Abstand von 500 ms wiederholt — `ensureRunning` kehrt zurück,
+  bevor der Server lauscht; ohne das scheitert der Aufwärmlauf genau beim
+  Kaltstart (beobachtet 20.11.2026). Andere Netzfehler werden nicht wiederholt.
 - **Ruhepause:** `sleep-idle-seconds` in `%APPDATA%\llama.cpp\config.ini` gibt
   die Gewichte nach Untätigkeit frei (hier 900 s). Der Standardwert `-1`
   deaktiviert das; `load-mode = auto` bedeutet mmap, `--no-mmap` macht den Start
@@ -944,6 +948,11 @@ Regeln des Katalogs:
   „destruktiv", damit ein Größenlimit nie als Fund missverstanden wird. Eine Rückfrage, die niemand
   lesen kann, ist aber auch kein Schutz: `read`-Werkzeuge bleiben erlaubt, jede andere Absicht wird
   `deny`.
+- Eine kurze Namensliste deckt Werkzeuge ab, deren Name kein Verb trägt und deren Lesen Teil ihrer
+  eigenen Schnittstelle ist: `open-knowledge_exec` (Allowlist `cat`, `ls`, `grep`, `find`, `head`,
+  `tail`, `wc`, `sort`, `uniq`, `cut`, kein Schreiben, keine Umleitung) zählt als `read`. Die Liste
+  ist bewusst nach exaktem Namen sortiert: `exec` allein heißt bei anderen Servern „führe Code aus"
+  und gilt nie als Lesen.
 - Argumentwerte verlassen die Funktion nicht; im Log stehen nur Feldnamen,
   Zielarten und Zählungen.
 
@@ -955,7 +964,7 @@ gilt. Beides ist rein und ohne Backend testbar.
 | Schicht                    | Prüft                                                   | Ergebnis                                            |
 | -------------------------- | ------------------------------------------------------- | --------------------------------------------------- |
 | 2 Notbremse (läuft zuerst) | Werkzeugname und Argumente gegen eine kurze, enge Liste | `deny`                                              |
-| 1 feste Regel              | Absicht aus Schritt B                                   | `allow` bei `read`, `ask` bei `write`/`destructive` |
+| 1 feste Regel              | Absicht aus Schritt B                                   | `allow` bei `read`; `deny` bei `write`/`destructive` außerhalb von Projekt und Temp, sonst `ask` |
 | 3 lokales Modell           | nur bei `unknown`, `chat` mit drei Kanälen oder ↵       | `allow` nur bei klarem „Ja" bzw. p ≥                |
 | ↳                          |                                                         | `mcpThreshold`,                                     |
 | ↳                          | `systemone` mit `{tool, arguments}`                     | sonst `ask`                                         |
@@ -966,6 +975,12 @@ Reihenfolge und Grenzen:
   gewertet; sie ergeben aber keine unlesbare Rückfrage mehr: ein `read`-Werkzeug bleibt `allow`,
   jede andere Absicht wird `deny`. Ein Geheimnisverdacht schlägt die Freigabe.
   Danach Notbremse, dann Geheimnisverdacht, dann leere Argumente.
+- **Schreiben hat eine Grenze.** Ein `write`- oder `destructive`-Aufruf, dessen Zielpfad
+  außerhalb von Projekt und Temp liegt, wird `deny` — dieselbe Grenze wie in der Shell.
+  Innerhalb bleibt es `ask`: ein MCP-Schreibwerkzeug kann mehr tun als eine Datei anzulegen.
+  Geprüft werden die Zielfelder (`path`, `file`, `folder`, `output`, `target`, `cwd`, …),
+  nicht `source` (das ist ein Lesepfad). Relative Ziele gelten gegen das Projekt, `..` wird
+  aufgelöst, `~`/`%VAR%` gelten als außerhalb.
 - **Die Absicht kommt aus dem Werkzeugnamen, die Argumente dürfen sie nur
   verschärfen.** Ein Feldname wie `reset: true` macht aus `read_health` ein
   `destructive` (Quelle `arguments`, im Log `quelle=argumente`); `reset: false`,

@@ -150,7 +150,13 @@ export default Plugin.define({
           )
           if (crit.isMcp) {
             const effect = String(input.effect ?? "unbekannt").toLowerCase()
-            const verdict = mcpVerdict(crit, input.metadata?.input ?? {})
+            // Der Pfadabgleich schreibender Aufrufe braucht Projekt und Temp:
+            // dieselben Grenzen wie die Shell-Pruefung (guardOptions).
+            const verdict = mcpVerdict(crit, input.metadata?.input ?? {}, {
+              project: options.base,
+              temp: options.temp,
+              roots: options.roots,
+            })
             const argsNote = crit.hasArgs ? `args=${crit.argCount} felder=${crit.fields.join(",") || "-"}` : "keine argumente"
             const notes = [
               `absicht=${crit.action.intent}${crit.action.verb ? `/${crit.action.verb}` : ""}`,

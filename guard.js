@@ -1133,6 +1133,16 @@ function mcpIntent(words) {
   return { intent, verb }
 }
 
+// Werkzeuge, deren Name kein Verb traegt und deren Lesen durch ihre eigene
+// Schnittstelle belegt ist. `open-knowledge.exec` ist laut Werkzeugbeschreibung
+// "read-only" und laesst nur cat, ls, grep, find, head, tail, wc, sort, uniq
+// und cut zu, ohne Schreiben oder Umleitung. Ohne Eintrag stuende die Absicht
+// auf "unknown" und das Urteil auf Ebene 3; sobald die statische Regel dort
+// "ask" sagt, ginge jeder Aufruf ans Modell, obwohl nichts zu entscheiden ist.
+// Die Liste ist bewusst eine Namensliste und kein Verb: "exec" allein bedeutet
+// bei anderen Servern "fuehre Code aus" und darf nie als Lesen gelten.
+const MCP_READ_ONLY_TOOLS = new Set(["open-knowledge_exec"])
+
 // Argumentwerte im Sinne von "diese Option ist gesetzt": true, von 0
 // verschiedene Zahlen, nicht-leere Strings/Listen/Objekte. Ausdrueckliche
 // Nein-Werte ("false", "0", "off") zaehlen nicht - sonst machte ein
@@ -1277,7 +1287,9 @@ export function mcpCriteria(action, metadata, agent, sessionID) {
   if (!obs.isMcp) return criteria
 
   const input = metadata.input
-  const nameIntent = mcpIntent(mcpWords(obs.action))
+  const nameIntent = MCP_READ_ONLY_TOOLS.has(String(obs.action ?? ""))
+    ? { intent: "read", verb: "read-only" }
+    : mcpIntent(mcpWords(obs.action))
   const argIntent = mcpArgIntent(input)
   // Ein Argument-Feld darf die Absicht nur verschaerfen, nie entschaerfen.
   const fromArgs = Boolean(argIntent) && MCP_INTENT_RANK[argIntent.intent] > MCP_INTENT_RANK[nameIntent.intent]
@@ -1386,6 +1398,42 @@ function mcpUnresolved(input) {
   return hit
 }
 
+// Zielpfade eines schreibenden MCP-Aufrufs. Bewusst enger als
+// MCP_TARGET_FIELDS: `url`, `to`, `recipient`, `attachment`, `repo` und
+// `source` benennen kein lokales Schreibziel - `source` ist ein Lesepfad.
+const MCP_WRITE_PATH_FIELDS = new Set([
+  "path", "file", "filename", "filepath", "file_path", "directory", "dir",
+  "folder", "output", "cwd", "workdir", "target", "dest", "destination",
+])
+
+// Schreibziele, die ausserhalb von Projekt, Temp und den vertrauten Ordnern
+// liegen. Relative Ziele gelten gegen das Projekt; `..` wird dabei aufgeloest.
+// Ohne Projekt ist kein Vergleich moeglich - dann bleibt es beim bisherigen
+// "ask" (der Aufrufer hat die Grenze nicht mitgegeben).
+export function mcpOutsidePaths(input, scope = {}) {
+  const project = String(scope.project ?? scope.base ?? "")
+  if (!project) return []
+  const roots = [project, scope.temp, ...(scope.roots ?? [])]
+    .filter(Boolean)
+    .map((root) => normPath(root))
+  const outside = []
+  walkMcpValues(input, (key, value) => {
+    if (!MCP_WRITE_PATH_FIELDS.has(String(key).toLowerCase())) return
+    const raw = value.trim()
+    if (!raw || !isPathLike(raw)) return
+    // Variable oder Home-Kurzform: nicht aufloesbar, also nicht "drinnen".
+    if (/^[~%$]/.test(raw)) {
+      outside.push(String(key).toLowerCase())
+      return
+    }
+    const absolute = /^[A-Za-z]:[\\/]/.test(raw) || raw.startsWith("\\\\")
+    const full = absolute ? raw : `${project.replace(/[\\/]+$/, "")}\\${raw}`
+    const norm = normPath(full)
+    if (!roots.some((root) => isUnder(norm, root))) outside.push(String(key).toLowerCase())
+  })
+  return outside
+}
+
 function mcpBrake(criteria, input) {
   const normalized = mcpWords(criteria.action.tool).join("_")
   for (const [rx, reason] of MCP_BRAKE_ACTIONS) {
@@ -1424,7 +1472,9 @@ function mcpBrake(criteria, input) {
 
 // Liefert { decision, layer, reason }. "model" ist keine Endentscheidung:
 // der Aufrufer befragt dann Ebene 3 und uebernimmt deren Ergebnis.
-export function mcpVerdict(criteria, input) {
+// `scope` ({project, temp, roots}) erlaubt den Pfadabgleich schreibender
+// Aufrufe; ohne scope bleibt es beim bisherigen "ask".
+export function mcpVerdict(criteria, input, scope = {}) {
   if (!criteria || !criteria.isMcp) {
     return { decision: "ask", layer: 1, reason: "kein MCP-Aufruf" }
   }
@@ -1459,9 +1509,21 @@ export function mcpVerdict(criteria, input) {
     return { decision: "allow", layer: 1, reason: `nur lesend (${criteria.action?.verb || "read"})` }
   }
   if (intent === "write") {
+    // Schreiben ausserhalb von Projekt und Temp ist in der Shell ein "deny";
+    // fuer MCP gilt dieselbe Grenze (Entscheidung 20.11.2026). Innerhalb
+    // bleibt es bei "ask": ein MCP-Schreibwerkzeug kann mehr tun als eine
+    // Datei anzulegen, deshalb wird daraus keine stille Freigabe.
+    const outside = mcpOutsidePaths(input, scope)
+    if (outside.length) {
+      return { decision: "deny", layer: 1, reason: `schreibend ausserhalb des Projekts (${outside.length})` }
+    }
     return { decision: "ask", layer: 1, reason: `schreibend oder oeffentlich (${criteria.action?.verb || "write"})` }
   }
   if (intent === "destructive") {
+    const outside = mcpOutsidePaths(input, scope)
+    if (outside.length) {
+      return { decision: "deny", layer: 1, reason: `loeschend ausserhalb des Projekts (${outside.length})` }
+    }
     return { decision: "ask", layer: 1, reason: `loeschend (${criteria.action?.verb || "delete"})` }
   }
   return { decision: "model", layer: 3, reason: "Absicht nicht einordenbar" }

@@ -777,7 +777,25 @@ export async function warmup(config) {
   return failed ? { ...failed, ms: Date.now() - started } : { ok: true, ms: Date.now() - started }
 }
 
+// Fuenf Versuche mit 500 ms Abstand: `ensureRunning` startet den Server
+// losgeloest und kehrt sofort zurueck, der Port ist dann oft noch zu
+// (ECONNREFUSED). Ohne Wiederholung entfaellt der Aufwaermlauf genau beim
+// Kaltstart, und die erste echte Entscheidung zahlt ihn (Befund 20.11.2026).
+const WARMUP_ATTEMPTS = 5
+const WARMUP_RETRY_MS = 500
+
 async function warmOne(cfg, endpoint) {
+  const started = Date.now()
+  for (let attempt = 1; ; attempt++) {
+    const result = await warmAttempt(cfg, endpoint)
+    if (result.ok || !result.refused || attempt >= WARMUP_ATTEMPTS) {
+      return { ...result, ms: Date.now() - started }
+    }
+    await new Promise((resolve) => setTimeout(resolve, WARMUP_RETRY_MS))
+  }
+}
+
+async function warmAttempt(cfg, endpoint) {
   const started = Date.now()
   const controller = new AbortController()
   // Grosszuegiger als eine Entscheidung: beim Kaltstart muss das Modell erst
@@ -817,7 +835,11 @@ async function warmOne(cfg, endpoint) {
     await response.arrayBuffer()
     return { ok: true, ms: Date.now() - started }
   } catch (error) {
-    return { ok: false, reason: String(error?.name ?? "Fehler"), ms: Date.now() - started }
+    // Der Grund gehoert in den Log: "TypeError" allein sagt nichts. Ein noch
+    // geschlossener Port (ECONNREFUSED) wird oben erneut versucht.
+    const code = String(error?.cause?.code ?? "")
+    const name = String(error?.name ?? "Fehler")
+    return { ok: false, refused: code === "ECONNREFUSED", reason: code ? `${name} (${code})` : name, ms: Date.now() - started }
   } finally {
     clearTimeout(timer)
   }

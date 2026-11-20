@@ -62,7 +62,10 @@ function loadCases() {
 function judge(item) {
   const metadata = { input: item.input ?? {} }
   const criteria = mcpCriteria(item.tool, metadata, item.agent ?? "build")
-  const verdict = mcpVerdict(criteria, item.input ?? {})
+  // Ein fester Projekt- und Temp-Ordner, damit der Pfadabgleich der
+  // schreibenden Faelle pruefbar ist (dieselbe Form wie guardOptions).
+  const scope = { project: "C:/proj", temp: "C:/tmp", roots: ["C:/proj", "C:/tmp"] }
+  const verdict = mcpVerdict(criteria, item.input ?? {}, scope)
   const plan = mcpAction("ask", verdict, "active")
   return { criteria, verdict, plan }
 }
@@ -75,7 +78,7 @@ if (!cases.length) {
 
 // Der Bestand ist Teil des Regimes: verschwindet ein Fall, muss das auffallen,
 // nicht stillschweigend als "bestanden" durchgehen.
-const EXPECTED = { allow: 8, ask: 12, deny: 11, model: 2 }
+const EXPECTED = { allow: 8, ask: 15, deny: 15, model: 2 }
 const counts = { allow: 0, ask: 0, deny: 0, model: 0 }
 const ids = new Set()
 for (const item of cases) {

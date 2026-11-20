@@ -729,6 +729,10 @@ permanently; it ties it to OpenCode:
   After an actual timeout `scheduleWarmup()` starts again in the background;
   the current decision remains `ask` without waiting. Startup and timeout
   warm-ups share the same in-flight call and therefore do not run twice.
+  If the port is still closed (`ECONNREFUSED`) the request is repeated up to
+  five times, 500 ms apart — `ensureRunning` returns before the server
+  listens, so without this the warm-up fails exactly at the cold start
+  (observed 20.11.2026). Other network errors are not repeated.
 - **Idle:** `sleep-idle-seconds` in `%APPDATA%\llama.cpp\config.ini` releases
   the weights after inactivity (900 s here). The default `-1` disables that;
   `load-mode = auto` means mmap, `--no-mmap` makes the start **slower**
@@ -936,6 +940,10 @@ Catalogue rules:
 - Large arguments (more than 32000 characters as JSON) count as `unanalysierbar` — separate from
   "destructive", so that a size limit is never mistaken for a finding. A prompt nobody can read
   is no protection either: `read` tools stay allowed, every other intent is `deny`.
+- A short name list covers tools whose name carries no verb and whose read-only nature is part of
+  their own interface: `open-knowledge_exec` (allowlist `cat`, `ls`, `grep`, `find`, `head`, `tail`,
+  `wc`, `sort`, `uniq`, `cut`, no writes, no redirection) counts as `read`. The list is by exact
+  name on purpose: `exec` alone means "run code" at other servers and never counts as reading.
 - Argument values do not leave the function; the log holds only field names,
   target kinds and counts.
 
@@ -947,7 +955,7 @@ applies. Both are pure and testable without a backend.
 | Layer                     | Checks                                               | Result                                            |
 | ------------------------- | ---------------------------------------------------- | ------------------------------------------------- |
 | 2 emergency brake (first) | tool name and arguments against a short, narrow list | `deny`                                            |
-| 1 fixed rule              | intent from step B                                   | `allow` on `read`, `ask` on `write`/`destructive` |
+| 1 fixed rule              | intent from step B                                   | `allow` on `read`; `deny` on `write`/`destructive` outside project and temp, else `ask` |
 | 3 local model             | only on `unknown`, `chat` with three channels or ↵   | `allow` only on a clear "yes" or p ≥              |
 | ↳                         |                                                      | `mcpThreshold`,                                   |
 | ↳                         | `systemone` with `{tool, arguments}`                 | otherwise `ask`                                   |
@@ -968,6 +976,12 @@ Order and limits:
   path in the arguments (`recovery-codes`, `id_rsa`, `.ssh/`, `.npmrc`, …)
   yields `deny`. A mere secret *word* such as "token" remains a prompt;
   otherwise every issue containing it would be hard-blocked.
+- **Writes have a boundary.** A `write` or `destructive` call whose target path
+  lies outside project and temp is `deny` — the same boundary as in the shell.
+  Inside it stays `ask`: an MCP write tool can do more than create a file.
+  Checked are the target fields (`path`, `file`, `folder`, `output`, `target`,
+  `cwd`, …), not `source` (that is a read path). Relative targets count against
+  the project, `..` is resolved, `~`/`%VAR%` count as outside.
 - **Unresolved targets do not reach the model:** if a target field (`target`,
   `path`, `url`, `to`, `attachment`, …) holds only `$NAME`, `${NAME}` or
   `%NAME%`, the target is unknown and stays `ask` (level 1). The live run on
