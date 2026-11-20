@@ -141,6 +141,15 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Schalter in der Konfigurationsdatei (20.11.2026):** `reviewer.js` liest
+  `resultShield`, `denyLimitConsecutive`, `denyLimitRecent` und
+  `denyLimitWindow` aus `shell-reviewer.config.json`; `sanitizeSwitches()`
+  prüft die Werte (Shield-Modus nur `off`/`annotate`/`scan`, Limits in ihren
+  Bändern 1–10, 1–50, 10–200). `index.js` nutzt die Werte aus der
+  Konfiguration statt aus Umgebungsvariablen; die Umgebungsvariablen bleiben
+  als Übersteuerung. `shell-reviewer.config.example.json` nachgezogen,
+  `test.mjs` 965/965 (drei neue Fälle).
+
 - **`shellThreshold` 0,7 → 0,65 (20.11.2026):** Mit fünf Fragen im Prompt lag
   der höchste `ask`-Wert bei `effect` bei 0,616 (kube-config 0,688, dort greift
   `secrets` mit 0,913), der niedrigste `allow`-Wert bei 0,664. 0,65 liegt

@@ -2853,6 +2853,44 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
    harmlosen MCP-Aufruf machen und pruefen, ob der Wrapper im Ergebnis steht.
 3. Danach G2 (statische Injection-Muster) oder die Decision-Modelle messen.
 
+
+=============== Compaction 20.11.2026 / 18:56 ================
+## Objective
+- **Current:** Schalter (Grenz-Markierung, Deny-Limits) liegen jetzt in
+  `shell-reviewer.config.json` statt nur in Umgebungsvariablen; Commit steht
+  aus, Laufzeitdatei noch nicht angepasst.
+- **Next:** Commit, Laufzeitdatei aktualisieren, Live-Spike.
+
+## Important Details
+- **Entscheidung (Nutzer):** 1. `shellThreshold` 0,65 in die Laufzeitdatei,
+  2. `resultShield: "annotate"` als Config-Schalter, 3. Deny-Limits in die
+  Datei. Alles umgesetzt bis auf den Eintrag in der Laufzeitdatei.
+- **Neu in `reviewer.js`:** DEFAULTS um `resultShield`, `denyLimitConsecutive`,
+  `denyLimitRecent`, `denyLimitWindow`; `sanitizeSwitches()` prueft sie
+  (off/annotate/scan; 1-10, 1-50, 10-200). Env-Variablen bleiben Override.
+- **Grenze:** Die Laufzeitdatei liegt unter
+  `~/.config/opencode/plugins/permission-guard/` und damit ausserhalb der
+  Schreibgrenze des Guards (`roots` = Projekt und `%TEMP%\opencode`). Sie kann
+  nicht aus der Sitzung heraus geaendert werden - Absicht, kein Fehler.
+- **Befund aus dem Deploy:** Die Laufzeitdatei enthaelt noch
+  `shellThreshold: 0.7`. Sie ueberschreibt den kalibrierten Default 0,65; der
+  laufende Guard prueft die vier Achsen also mit 0,7.
+- **Messung:** `test.mjs` 965/965 (drei neue Faelle fuer `sanitizeSwitches`).
+
+## Work State
+- **Completed:** `reviewer.js`, `index.js`, `test.mjs`,
+  `shell-reviewer.config.example.json`, `PLANUNG.md`, `CHANGELOG.md`.
+- **Active:** Commit.
+- **Blocked:** Laufzeitdatei braucht einen Weg ins Ziel (Deploy-Erweiterung
+  oder Nutzer ändert sie von Hand).
+
+## Next Move
+1. Commit.
+2. Laufzeitdatei aktualisieren: `shellThreshold` 0,65, `resultShield`
+   "annotate", Deny-Limits.
+3. Deployen, dann Live-Spike: einen harmlosen MCP-Aufruf machen und pruefen,
+   ob die Markierung im Ergebnis steht.
+
 ## Relevant Files
 - `reviewer.js`: `SENSITIVE_QUESTION`, `UNTRUSTED_QUESTION`,
   `OBSCURED_QUESTION`, `SHELL_AXES`, `shellThreshold: 0.65`.

@@ -1370,3 +1370,21 @@ tatsächlich an das Modell weiterreicht, ist im Test **nicht** belegt; der Test
 zeigt nur, dass die Mutation am übergebenen Objekt bleibt. Dafür braucht es
 einen Deploy mit `PERMISSION_GUARD_RESULT_SHIELD=annotate` und einen echten
 MCP-Aufruf. Das steht aus.
+
+## Nachtrag 20.11.2026: Schalter in die Konfigurationsdatei
+
+**Anlass.** Grenz-Markierung und Deny-Limits standen nur in
+Umgebungsvariablen. Eine Änderung brauchte damit einen Neustart von OpenCode.
+
+**Umgesetzt.** `reviewer.js` liest vier weitere Schlüssel aus
+`shell-reviewer.config.json` (dieselbe Datei wie die Schwellen):
+`resultShield`, `denyLimitConsecutive`, `denyLimitRecent`, `denyLimitWindow`.
+`sanitizeSwitches()` prüft die Werte; ungültige werden still verworfen, wie bei
+den Schwellen. `index.js` nimmt die Werte aus der Konfiguration; die
+Umgebungsvariablen bleiben als Übersteuerung. `shell-reviewer.config.example.json`
+nennt die neuen Felder und ihre Bänder.
+
+**Grenze.** Die Laufzeitdatei liegt unter
+`~/.config/opencode/plugins/permission-guard/` und damit **außerhalb** der
+Schreibgrenze des Guards (Projekt und Temp). Sie kann nicht aus einer
+Sitzung heraus geändert werden; das ist Absicht.

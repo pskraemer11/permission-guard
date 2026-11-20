@@ -5,7 +5,7 @@ import { summarizeShadow } from "./git-shadow-report.mjs"
 import { shadowPath } from "./shadow.js"
 import { summarizeAudit } from "./mcp-report.mjs"
 import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMcpAnswer, review, reviewMcp, scheduleWarmup, segments, warmup } from "./reviewer.js"
-import { buildShellSystemoneRequest, buildSystemoneRequest, sanitizeArguments, sanitizeThresholds, systemoneVerdict } from "./reviewer.js"
+import { buildShellSystemoneRequest, buildSystemoneRequest, sanitizeArguments, sanitizeSwitches, sanitizeThresholds, systemoneVerdict } from "./reviewer.js"
 import { parseLine, summarize } from "./stats.mjs"
 import { createHash } from "node:crypto"
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
@@ -1647,6 +1647,38 @@ const thresholdChecks = []
   thresholdChecks.push(["Secrets-Schwelle 0 wird verworfen", !("secretsThreshold" in edge)])
 
   thresholdChecks.push(["kein Objekt ergibt leere Konfiguration", Object.keys(sanitizeThresholds(null)).length === 0])
+
+  // Schalter aus derselben Datei (20.11.2026): Grenz-Markierung und Deny-Limits.
+  const switches = sanitizeSwitches({
+    resultShield: "annotate",
+    denyLimitConsecutive: 5,
+    denyLimitRecent: 20,
+    denyLimitWindow: 100,
+  })
+  thresholdChecks.push([
+    "gueltige Schalter bleiben",
+    switches.resultShield === "annotate" &&
+      switches.denyLimitConsecutive === 5 &&
+      switches.denyLimitRecent === 20 &&
+      switches.denyLimitWindow === 100,
+  ])
+  const badSwitches = sanitizeSwitches({
+    resultShield: "boese",
+    denyLimitConsecutive: 0,
+    denyLimitRecent: 99,
+    denyLimitWindow: 5,
+  })
+  thresholdChecks.push([
+    "ungueltige Schalter werden verworfen",
+    !("resultShield" in badSwitches) &&
+      !("denyLimitConsecutive" in badSwitches) &&
+      !("denyLimitRecent" in badSwitches) &&
+      !("denyLimitWindow" in badSwitches),
+  ])
+  thresholdChecks.push([
+    "Schalter ohne Objekt ergibt leer",
+    Object.keys(sanitizeSwitches(null)).length === 0,
+  ])
 }
 for (const [name, ok] of thresholdChecks) {
   if (!ok) failed++
