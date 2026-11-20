@@ -737,11 +737,11 @@ export function buildSystemoneRequest({ criteria, input, model = "" }) {
 
 // Nur eine klare Wahrscheinlichkeit ueber der Schwelle hebt auf allow.
 // Alles andere - NaN, fehlender Wert, unter der Schwelle - bleibt Rueckfrage.
-export function systemoneVerdict(probability, threshold = 0.7) {
+export function systemoneVerdict(probability, threshold = 0.7, confidence = null) {
   const p = Number(probability)
-  if (!Number.isFinite(p) || p < 0 || p > 1) return { decision: "ask", reason: "Modell: keine Wahrscheinlichkeit", probability: null }
-  if (p >= threshold) return { decision: "allow", reason: `Modell: liest nur (p=${p.toFixed(3)})`, probability: p }
-  return { decision: "ask", reason: `Modell: veraendert oder unklar (p=${p.toFixed(3)})`, probability: p }
+  if (!Number.isFinite(p) || p < 0 || p > 1) return { decision: "ask", reason: "Modell: keine Wahrscheinlichkeit", probability: null, confidence: null }
+  if (p >= threshold) return { decision: "allow", reason: `Modell: liest nur (p=${p.toFixed(3)})`, probability: p, confidence }
+  return { decision: "ask", reason: `Modell: veraendert oder unklar (p=${p.toFixed(3)})`, probability: p, confidence }
 }
 
 // Zeitueberschreitung von anderen Fehlern trennen: Nur hier lohnt der
@@ -792,6 +792,10 @@ async function requestSystemone(payload, cfg, timeoutMs = cfg.timeoutMs || 2000)
     const data = await response.json()
     const probability = data?.answers?.effect?.probabilities?.reads
     if (typeof probability !== "number") return { ok: false, reason: "keine Wahrscheinlichkeit" }
+    // confidence gibt es nur fuer choice und score, nicht fuer noul (der Server
+    // antwortet sonst mit "no confidence for this question type"). Unsere
+    // Entscheidungsfrage "effect" ist eine choice-Frage, die Achsen sind noul.
+    const rawConfidence = data?.answers?.effect?.confidence
     // Die uebrigen Achsen antworten mit, wenn der Aufruf sie gestellt hat.
     const axis = (name) => {
       const value = data?.answers?.[name]?.noul
@@ -800,6 +804,7 @@ async function requestSystemone(payload, cfg, timeoutMs = cfg.timeoutMs || 2000)
     return {
       ok: true,
       probability,
+      confidence: typeof rawConfidence === "number" ? rawConfidence : null,
       secrets: axis("secrets"),
       sensitive: axis("sensitive"),
       untrusted: axis("untrusted"),
@@ -1106,6 +1111,9 @@ async function shellBySystemone(commands, where, cfg) {
   if (!segments.length) return { decision: "ask", reason: "leer" }
   const deadline = Date.now() + Math.max(250, cfg.timeoutMs || 2000)
   let lowest = 1
+  // Schwaechste Konfidenz ueber alle Segmente: bei mehreren Befehlen zaehlt
+  // das unsicherste Glied, nicht das letzte.
+  let lowestConfidence = null
   const highest = Object.fromEntries(SHELL_AXES.map((axis) => [axis.key, 0]))
   const missing = new Set()
   for (const command of segments) {
@@ -1120,6 +1128,9 @@ async function shellBySystemone(commands, where, cfg) {
       return askAfterAbort(result, cfg)
     }
     lowest = Math.min(lowest, result.probability)
+    if (typeof result.confidence === "number") {
+      lowestConfidence = lowestConfidence === null ? result.confidence : Math.min(lowestConfidence, result.confidence)
+    }
     // Jede Antwort mit hohem Risiko ist Rueckfrage. Eine fehlende Antwort ist
     // keine Entwarnung: Wer eine Frage nicht beantwortet, bekommt keine
     // Freigabe. Das gilt je Segment, damit eine Antwort nicht fuer eine andere
@@ -1132,7 +1143,7 @@ async function shellBySystemone(commands, where, cfg) {
   }
   for (const axis of SHELL_AXES) {
     if (missing.has(axis.key)) {
-      return { decision: "ask", reason: axis.missing, probability: lowest, ...highest }
+      return { decision: "ask", reason: axis.missing, probability: lowest, confidence: lowestConfidence, ...highest }
     }
     const limit = cfg[axis.threshold] ?? axis.fallback
     if (highest[axis.key] > limit) {
@@ -1140,11 +1151,12 @@ async function shellBySystemone(commands, where, cfg) {
         decision: "ask",
         reason: `${axis.hit} (s=${highest[axis.key].toFixed(3)})`,
         probability: lowest,
+        confidence: lowestConfidence,
         ...highest,
       }
     }
   }
-  const verdict = systemoneVerdict(lowest, cfg.shellThreshold)
+  const verdict = systemoneVerdict(lowest, cfg.shellThreshold, lowestConfidence)
   return { ...verdict, ...highest }
 }
 
@@ -1198,7 +1210,7 @@ export async function reviewMcp({ criteria, input, project, recent, config }) {
       // verweigern statt fragen (Entscheidung 20.11.2026).
       if (result.unanalysable) return { decision: "deny", reason: result.reason }
       if (!result.ok) return askAfterAbort(result, cfg)
-      return systemoneVerdict(result.probability, cfg.mcpThreshold)
+      return systemoneVerdict(result.probability, cfg.mcpThreshold, result.confidence)
     }
     // 404: kein /systemone; unten laeuft der Chat-Weg.
   }

@@ -1473,3 +1473,37 @@ bleibt die Berechtigungsprüfung.
 
 **Messung.** `test.mjs` 975/975 (acht neue Fälle), `test-index.mjs` 45/45
 (zwei neue Fälle).
+
+## Nachtrag 20.11.2026: Entscheidungsmodelle gemessen, Kev-4B im Betrieb
+
+**Aufbau.** Alle Modelle unter `D:\LLM-Modelle\Llama-GGUF` wurden über ihre
+GGUF-Metadaten geprüft, nicht über den Dateinamen: sieben tragen
+`<arch>.decision.type` und ein `systemone`-Template. Jeff-1.1-Qwen-4B trägt
+keines — `/v1/systemone` würde mit 501 antworten. Gemessen wurde je Modell mit
+`-np 1` und `-np 5` über Schwellen von 0,30 bis 0,95, danach eine Gegenprobe
+mit `bench-model` und `bench-shell` (`--repeat 3`, Mehrheitsentscheid).
+
+**Ergebnis der Gegenprobe:**
+
+| Modell | MCP | Shell | Median | Größe |
+| --- | --- | --- | --- | --- |
+| Kev-4B | 14/14 | 23/23 | 159 ms (np5) | 2,9 GB |
+| Clef-Flash | 14/14 | 23/23 | 193 ms (np1) | 6,4 GB |
+| vllm-d3-mini | 14/14 | 22/23 | 205 ms (np1) | 3,5 GB |
+| d1-3B | 13/14 | 21/23 | 85 ms (np5) | 1,6 GB |
+| vllm-d3-edge | 13/14 | 18/23 | 43 ms (np1) | 0,8 GB |
+
+**Entscheidung.** Kev-4B mit `-np 5`, `mcpThreshold` 0,70, `shellThreshold`
+0,50; Clef-Flash bleibt als Rückfall. `-np 5` wirkt nur bei Modellen, die den
+Zustand im gemeinsamen Prefix tragen (Kev 236→159 ms, lev 245→207 ms); bei Clef
+ändert es nichts (194→193 ms), bei vllm-d3 verschlechtert es (208→266 ms).
+
+**Grenzen.** Die Schwellen wurden auf denselben 37 Fällen bestimmt, auf denen
+sie geprüft wurden — die Zahlen beschreiben eine Obergrenze, nicht den Alltag.
+vllm-d3-edge lässt sich innerhalb der zulässigen Grenzen nicht betreiben: sein
+Shell-Optimum 0,30 liegt unter `THRESHOLD_BOUNDS` (0,5), bei 0,50 fragt es
+sechsmal zu viel, bei 0,70 lässt es auf MCP zu viel durch (7/14).
+
+**`confidence`.** Wird seit dieser Messung mitgeführt. Genutzt hat sie nur bei
+vllm-d3-edge (13→14 mit `conf ≥ 0,6`); bei allen anderen lag die beste
+Kombination bei `conf ≥ 0`, also ohne Wirkung.

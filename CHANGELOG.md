@@ -141,6 +141,22 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Betriebsmodell Kev-4B (20.11.2026):** `start-reviewer.ps1` startet
+  standardmäßig `Kev-4B-Q4_K_M` mit fünf Slots; `--kv-unified` setzt das Skript
+  bei mehr als einem Slot selbst, weil llama-server die Vorgabe nur bei
+  „Slots = auto" aktiviert. `shellThreshold` 0,50, `mcpThreshold` bleibt 0,70.
+  Grundlage: sieben Decision-Modelle, je mit `-np 1` und `-np 5`, Schwellen
+  0,30–0,95, danach Gegenprobe mit Mehrheitsentscheid über drei Läufe. Kev-4B
+  14/14 MCP und 23/23 Shell, Median 159 ms; Clef-Flash gleichwertig (14/14,
+  23/23) bei 193 ms und 6,4 GB, bleibt als Rückfall. Ausgeschieden:
+  vllm-d3-edge (18/23, Optimum 0,30 unter der zulässigen Grenze 0,50),
+  Kev-0.8B (15/23, entspricht „immer ask"). `reviewer.js` gibt `confidence`
+  weiter — nur `choice`/`score` liefern den Wert, die vier Achsen sind `noul`.
+  `shell-reviewer.config.example.json` nachgezogen. **Bekannte Folge:** Ein
+  unqualifiziertes `Get-ChildItem | Select-String TODO` fragt jetzt nach
+  (`secrets` 0,403 gegen Grenze 0,35, weil es auch `.env` treffen könnte);
+  Clef-Flash ließ es durch. Der Fall ist im Smoke-Test als modellabhängig
+  markiert, mit dem Messwert im Kommentar.
 - **Statische Formatkollisionen (20.11.2026, G2):** `guard.js` hat
   `injectionHits` mit sechs Familien — Chat-Template-Marker (inkl.
   `[PROMPT_INJECTION]`), `[INST]`/`<<SYS>>`, Rollenzeilen, Werkzeug-Rahmen,

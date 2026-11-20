@@ -745,11 +745,18 @@ permanently; it ties it to OpenCode:
 
 ### Model selection
 
-**In operation since 05.11.2026:** `Clef-Flash-Q4_K_M.gguf` (decision model,
-`ggml-org/Clef-Flash-GGUF`) via `llama-server` on port 8080, both levels with
-`systemone`. Measured: 14/14 decisions, allow cases 0.94–0.97, changes
-0.02–0.06, about 75–100 ms (sections "Two backends for level 3" and
-`shell-reviewer.config.example.json`). Start: `.\start-reviewer.ps1`.
+**In operation since 20.11.2026:** `Kev-4B-Q4_K_M.gguf` (decision model,
+`ggml-org/Kev-4B-GGUF`, 4.2B, 2.9 GB) via `llama-server` on port 8080, both
+levels with `systemone`, five slots and a shared KV pool (`-np 5
+--kv-unified`). Measured on 20.11.2026 with majority voting over three runs:
+14/14 on MCP, 23/23 on the shell, median 159 ms. Thresholds: `mcpThreshold`
+0.70, `shellThreshold` 0.50.
+
+**Before (05.11.–20.11.2026):** `Clef-Flash-Q4_K_M.gguf` (6.3 GB). Same hit
+rate (14/14, 23/23 at 0.65), median 193 ms. Stays installed as a fallback; a
+switch is one line in `start-reviewer.ps1` (`-ModelPath`).
+
+Start: `.\start-reviewer.ps1`.
 
 **Historical (25.–26.10.2026): chat models.** The following measurement was
 made before the switch to the decision endpoint. It explains why the chat path
@@ -845,7 +852,7 @@ The index serves pre-selection; our own 18-command set remains authoritative.
 ### Operation
 
 ```powershell
-.\start-reviewer.ps1                       # llama-server, Clef-Flash, port 8080
+.\start-reviewer.ps1                       # llama-server, Kev-4B, port 8080
 .\start-reviewer.ps1 -ModelPath "D:\…\anderes.gguf" -Port 8081
 .\start-reviewer.ps1 -Cpu -Server "C:\…\llama-server.exe"   # no GPU offload
 .\start-reviewer.ps1 -Batch 2048 -Ubatch 2048               # smaller batch
@@ -884,7 +891,7 @@ afterwards):
 | ------------ | ------------------------------------------------------------------------------------------- |
 | `enabled`    | reviewer on/off                                                                             |
 | `baseUrl`    | OpenAI-compatible endpoint                                                                  |
-| `model`      | model name: `clef` for `systemone`; in the chat path for backends that require it           |
+| `model`      | model name: `kev-4b` for `systemone`; in the chat path for backends that require it        |
 | `apiKeyEnv`  | name of the environment variable with the key, never the key itself                         |
 | `timeoutMs`  | upper bound, then `ask`                                                                     |
 | `grammar`    | GBNF; empty only for backends that reject it                                                |
@@ -1058,7 +1065,7 @@ therefore pinned and protected by tests; changes only with a fresh measurement.
 | Value                 | Path                                                  | Measured (14 grey-area cases)    |
 | --------------------- | ----------------------------------------------------- | -------------------------------- |
 | `chat`                | `chat/completions`, answer word via grammar           | 12/14 at 12B, 13/14 at 26B       |
-| `systemone` (default) | `/v1/systemone`, decision model returns a probability | **14/14** with Clef-Flash, 75 ms |
+| `systemone` (default) | `/v1/systemone`, decision model returns a probability | **14/14** with Kev-4B and Clef-Flash |
 
 In `systemone` mode the prompt disappears: the state is `{tool, arguments}`,
 the question a `choice` between "reads" and "changes", and `mcpThreshold`
@@ -1089,25 +1096,29 @@ release. `sensitive` is broader than `secrets`: private files and messages in
 general, not only credentials. Measured with Clef-Flash on the 23 cases:
 `untrusted` catches a downloaded script (0.973), `obscured` catches `-enc`
 (0.955), `sensitive` reports 0.443 where `secrets` reports 0.955 for a private
-key. `shellThreshold` is 0.65 since then — highest `ask` value at `effect` was
-0.616, lowest `allow` value 0.664, identical across five runs. Result: 23/23,
-unanimous.
+key. `shellThreshold` was 0.65 with Clef-Flash — highest `ask` value at `effect`
+0.616, lowest `allow` value 0.664, identical across five runs, 23/23. Since the
+switch to Kev-4B it is 0.50: its scale sits lower (allow cases from 0.50,
+prompts up to 0.47), also 23/23, unanimous across three runs.
 
-The axes cost no extra round trip only with a **Clef** decision model, which
-puts all questions into one prompt. llama.cpp knows seven decision model types
+The axes cost no extra round trip with a **Clef** decision model, which puts all
+questions into one prompt. llama.cpp knows seven decision model types
 (`openjev`, `lev`, `kev`, `nimble`, `laya`, `clef`, `pplx-decider`). The others
-build one prompt per question unless the questions share a prefix
-(`can_share_prompt()`); ours do not. `noul` is read from a rating scale there
-instead of an embedding score. Only Clef has been measured here.
+build one prompt per question. Kev-4B is one of them; with `-np 5` the server
+shares the common prefix (the state sits first in the template) and evaluates
+the five questions as one group: measured 159 ms against 236 ms with a single
+slot. `noul` is read differently per type (lev uses a rating scale). Measured
+here: Kev-4B, Clef-Flash, vllm-d3-mini, d1-3B and vllm-d3-edge.
 
-**Recommendation: use a Clef decision model.** It is the only type that keeps
-all five questions in one prompt, which is what the four axes assume. Measured
-here: `ggml-org/Clef-Flash-GGUF`, `Q4_K_M` — 23/23 on the shell cases. A file
-name is no proof: only a model whose GGUF metadata carries
-`<arch>.decision.type` is a decision model for llama.cpp; check the metadata,
-not the repository title. With `-np 1` (our setting) several prompts run one
-after another; parallel slots were measured on 20.11.2026 and brought nothing
-(1.01–1.03x on five short commands with `-np 5 --kv-unified`).
+**Recommendation: Kev-4B, with Clef-Flash as a fallback.** Kev-4B has been the
+operational model since 20.11.2026: 14/14 on MCP, 23/23 on the shell at
+0.70/0.50, median 159 ms, 2.9 GB. Clef-Flash reaches the same hit rate (23/23 at
+0.65) but is 18 % slower and twice the size. A file name is no proof: only a
+model whose GGUF metadata carries `<arch>.decision.type` is a decision model for
+llama.cpp; check the metadata, not the repository title. With `-np 1` several
+prompts run one after another; parallel slots were measured on 20.11.2026 with
+Clef-Flash and brought nothing (1.01–1.03x) because that model keeps everything
+in one prompt — with Kev-4B the same setting is worth 33 %.
 
 **Deny limit (since 20.11.2026).** Three prompts in a row, or ten within the
 last fifty, turn into `deny` with a message naming the count. A `deny` is not a

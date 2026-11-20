@@ -752,11 +752,18 @@ Leben, sondern bindet ihn an OpenCode:
 
 ### Modellauswahl
 
-**Betrieb seit 05.11.2026:** `Clef-Flash-Q4_K_M.gguf` (Entscheidungsmodell,
-`ggml-org/Clef-Flash-GGUF`) über `llama-server` auf Port 8080, beide Ebenen mit
-`systemone`. Gemessen: 14/14 Entscheidungen, Freigabe-Fälle 0,94–0,97,
-Änderungen 0,02–0,06, rund 75–100 ms (Abschnitte „Zwei Backends für Ebene 3" und
-`shell-reviewer.config.example.json`). Start: `.\start-reviewer.ps1`.
+**Betrieb seit 20.11.2026:** `Kev-4B-Q4_K_M.gguf` (Entscheidungsmodell,
+`ggml-org/Kev-4B-GGUF`, 4,2B, 2,9 GB) über `llama-server` auf Port 8080, beide
+Ebenen mit `systemone`, fünf Slots und gemeinsamer KV-Pool (`-np 5
+--kv-unified`). Gemessen am 20.11.2026 mit Mehrheitsentscheid über drei Läufe:
+14/14 auf MCP, 23/23 auf der Shell, Median 159 ms. Schwellen:
+`mcpThreshold` 0,70, `shellThreshold` 0,50.
+
+**Vorher (05.11.–20.11.2026):** `Clef-Flash-Q4_K_M.gguf` (6,3 GB). Dieselbe
+Trefferquote (14/14, 23/23 bei 0,65), Median 193 ms. Bleibt als Rückfall
+installiert; ein Wechsel ist eine Zeile in `start-reviewer.ps1` (`-ModelPath`).
+
+Start: `.\start-reviewer.ps1`.
 
 **Historisch (25.–26.10.2026): Chat-Modelle.** Die folgende Messung entstand vor
 dem Wechsel auf den Entscheidungs-Endpunkt. Sie erklärt, warum der Chat-Weg
@@ -851,7 +858,7 @@ Der Index dient der Vorauswahl, der eigene 18-Befehl-Satz bleibt maßgeblich.
 ### Betrieb
 
 ```powershell
-.\start-reviewer.ps1                       # llama-server, Clef-Flash, Port 8080
+.\start-reviewer.ps1                       # llama-server, Kev-4B, Port 8080
 .\start-reviewer.ps1 -ModelPath "D:\…\anderes.gguf" -Port 8081
 .\start-reviewer.ps1 -Cpu -Server "C:\…\llama-server.exe"   # ohne GPU-Offload
 .\start-reviewer.ps1 -Batch 2048 -Ubatch 2048               # kleinerer Stapel
@@ -890,7 +897,7 @@ Timeout stehen in `shell-reviewer.config.json` (beim Deploy aus
 | ------------ | -------------------------------------------------------------------------------------------------------- |
 | `enabled`    | Reviewer ein/aus                                                                                         |
 | `baseUrl`    | OpenAI-kompatibler Endpunkt                                                                              |
-| `model`      | Modellname: `clef` für `systemone`; im Chat-Weg für Backends mit Pflichtangabe                           |
+| `model`      | Modellname: `kev-4b` für `systemone`; im Chat-Weg für Backends mit Pflichtangabe                        |
 | `apiKeyEnv`  | Name der Umgebungsvariable mit dem Key, nie der Key selbst                                               |
 | `timeoutMs`  | Obergrenze, danach `ask`                                                                                 |
 | `grammar`    | GBNF; leer nur für Backends, die sie ablehnen                                                            |
@@ -1068,7 +1075,7 @@ nur mit erneuter Messung.
 | Wert                   | Weg                                                             | Gemessen (14 Graubereich-Fälle) |
 | ---------------------- | --------------------------------------------------------------- | ------------------------------- |
 | `chat`                 | `chat/completions`, Antwortwort mit Grammatik                   | 12/14 bei 12B, 13/14 bei 26B    |
-| `systemone` (Standard) | `/v1/systemone`, Entscheidungsmodell liefert Wahrscheinlichkeit | **14/14** mit Clef-Flash, 75 ms |
+| `systemone` (Standard) | `/v1/systemone`, Entscheidungsmodell liefert Wahrscheinlichkeit | **14/14** mit Kev-4B und Clef-Flash |
 
 Im `systemone`-Modus entfällt der Prompt: Der Zustand ist `{tool, arguments}`,
 die Frage eine `choice` zwischen „reads" und „changes", und `mcpThreshold`
@@ -1100,26 +1107,30 @@ ist breiter als `secrets`: private Dateien und Nachrichten allgemein, nicht nur
 Zugangsdaten. Mit Clef-Flash an den 23 Fällen gemessen: `untrusted` erkennt
 einen heruntergeladenen Skript-Aufruf (0,973), `obscured` erkennt `-enc`
 (0,955), `sensitive` meldet 0,443, während `secrets` bei einem privaten
-Schlüssel 0,955 meldet. `shellThreshold` liegt seither bei 0,65 — höchster
+Schlüssel 0,955 meldet. Mit Clef-Flash lag `shellThreshold` bei 0,65 — höchster
 `ask`-Wert bei `effect` war 0,616, niedrigster `allow`-Wert 0,664, über fünf
-Läufe identisch. Ergebnis: 23/23, einstimmig.
+Läufe identisch, Ergebnis 23/23. Seit dem Wechsel auf Kev-4B gilt 0,50: Dessen
+Skala liegt tiefer (Freigabe-Fälle ab 0,50, Rückfragen bis 0,47), gemessen
+ebenfalls 23/23, einstimmig über drei Läufe.
 
-Die Achsen kosten nur mit einem **Clef**-Entscheidungsmodell keine zusätzliche
+Die Achsen kosten mit einem **Clef**-Entscheidungsmodell keine zusätzliche
 Rundreise, weil es alle Fragen in einen Prompt legt. llama.cpp kennt sieben
 Typen (`openjev`, `lev`, `kev`, `nimble`, `laya`, `clef`, `pplx-decider`). Die
-übrigen bauen einen Prompt je Frage, sofern die Fragen nicht mit demselben
-Text beginnen (`can_share_prompt()`); bei unseren ist das nicht der Fall.
-`noul` wird dort von einer Ratingskala statt aus einem Embedding-Score gelesen.
-Gemessen ist hier nur Clef.
+übrigen bauen einen Prompt je Frage. Kev-4B gehört dazu; mit `-np 5` teilt der
+Server den gemeinsamen Prefix (der Zustand steht im Template vorn) und rechnet
+die fünf Fragen in einer Gruppe: gemessen 159 ms gegen 236 ms mit einem Slot.
+`noul` wird je Typ unterschiedlich gelesen (bei lev über eine Ratingskala).
+Gemessen sind Kev-4B, Clef-Flash, vllm-d3-mini, d1-3B und vllm-d3-edge.
 
-**Empfehlung: ein Clef-Entscheidungsmodell verwenden.** Nur dieser Typ hält
-alle fünf Fragen in einem Prompt, und davon gehen die vier Achsen aus. Hier
-gemessen: `ggml-org/Clef-Flash-GGUF`, `Q4_K_M` — 23/23 bei den Shell-Fällen.
-Ein Dateiname ist kein Beleg: Entscheidungsmodell für llama.cpp ist nur, was in
-den GGUF-Metadaten `<arch>.decision.type` trägt; prüfe die Metadaten, nicht den
-Repositoriumstitel. Mit `-np 1` (unsere Einstellung) laufen mehrere Prompts
-nacheinander; parallele Slots wurden am 20.11.2026 gemessen und brachten nichts
-(1,01–1,03x bei fünf kurzen Befehlen mit `-np 5 --kv-unified`).
+**Empfehlung: Kev-4B, mit Clef-Flash als Rückfall.** Kev-4B ist seit dem
+20.11.2026 das Betriebsmodell: 14/14 auf MCP, 23/23 auf der Shell bei 0,70/0,50,
+Median 159 ms, 2,9 GB. Clef-Flash erreicht dieselbe Trefferquote (23/23 bei
+0,65), ist aber 18 % langsamer und doppelt so groß. Ein Dateiname ist kein
+Beleg: Entscheidungsmodell für llama.cpp ist nur, was in den GGUF-Metadaten
+`<arch>.decision.type` trägt; prüfe die Metadaten, nicht den Repositoriumstitel.
+Mit `-np 1` laufen mehrere Prompts nacheinander; parallele Slots wurden am
+20.11.2026 mit Clef-Flash gemessen und brachten nichts (1,01–1,03x), weil dieses
+Modell alles in einen Prompt legt — mit Kev-4B bringt dieselbe Einstellung 33 %.
 
 **Deny-Limit (seit 20.11.2026).** Drei Rückfragen in Folge oder zehn in den
 letzten fünfzig werden zu `deny` mit einer Meldung, die die Zahl nennt. Ein

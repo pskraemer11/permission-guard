@@ -1,8 +1,9 @@
 # Startet den lokalen Entscheider fuer Ebene 1 und 3 (permission-guard/reviewer.js).
 #
-#   .\start-reviewer.ps1                    # Clef-Flash (Entscheidungsmodell) auf Port 8080
+#   .\start-reviewer.ps1                    # Kev-4B (Entscheidungsmodell) auf Port 8080
 #   .\start-reviewer.ps1 -Port 8081         # anderer Port
 #   .\start-reviewer.ps1 -ModelPath <pfad>  # anderes GGUF
+#   .\start-reviewer.ps1 -Np 1              # ein Slot (kein Prefix-Teilen)
 #   .\start-reviewer.ps1 -Cpu -Server <cpu-llama-server>  # ohne GPU-Offload
 #   .\start-reviewer.ps1 -Stop              # beendet den Prozess auf diesem Port
 #
@@ -14,7 +15,7 @@
 
 param(
   [int]$Port = 8080,
-  [string]$ModelPath = "D:\LLM-Modelle\Llama-GGUF\ggml-org\Clef-Flash-GGUF\Clef-Flash-Q4_K_M.gguf",
+  [string]$ModelPath = "D:\LLM-Modelle\Llama-GGUF\ggml-org\Kev-4B-GGUF\Kev-4B-Q4_K_M.gguf",
   [string]$Server = "C:\Program Files\llama.cpp\llama-server.exe",
   [string]$DraftPath = "",
   # Stapelgroesse fuer den Prompt. Entscheidungsmodelle laufen im
@@ -24,6 +25,17 @@ param(
   # chat-taugliche Einstellung in %APPDATA%\llama.cpp\config.ini.
   [int]$Batch = 4096,
   [int]$Ubatch = 4096,
+  # Slots. Ein Decision-Request mit mehreren Fragen erzeugt einen Task je Frage;
+  # der gemeinsame Prefix wird nur zwischen Slots wiederverwendet. Vorgabe 5,
+  # weil der Reviewer fuenf Fragen stellt: gemessen 20.11.2026 Kev-4B 236 ms
+  # mit einem Slot gegen 159 ms mit fuenf. Bei -np 1 teilt sich nichts.
+  [int]$Np = 5,
+  # Unified KV: ein gemeinsamer KV-Puffer fuer alle Slots, -c bleibt dann ein
+  # Pool statt 32768/Np je Slot. Die Vorgabe von llama-server greift nur, wenn
+  # die Slotzahl "auto" ist; bei ausdruecklichem -np ist Unified aus. Deshalb
+  # setzt das Skript es bei mehr als einem Slot selbst (llama-server --help,
+  # gemessen).
+  [switch]$KvUnified,
   [switch]$Cpu,
   [switch]$Stop
 )
@@ -59,7 +71,7 @@ if ($Stop) {
     $pids = $pids | Select-Object -Unique
   }
   if (-not $pids -or $pids.Count -eq 0) { "kein Prozess auf Port $Port"; exit 0 }
-  $pids | ForEach-Object { Stop-Process -Id $_ -Force }
+  $pids | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
   "gestoppt (Port $Port)"
   exit 0
 }
@@ -79,13 +91,14 @@ $log = Join-Path $env:TEMP "permission-guard-reviewer-$Port.log"
 # gedacht. --no-op-offload gehoert nicht dazu: Er bremst auch den reinen
 # CPU-Build (Smoke 17.11.2026, zwei Aufrufe ueber 6000 ms).
 $gpuLayers = $Cpu ? '0' : 'all'
-$serverArgs = @('-m', $ModelPath, '-c', '32768', '-np', '1', '-b', "$Batch", '-ub', "$Ubatch", '--port', "$Port", '--no-webui', '-ngl', $gpuLayers, '--jinja')
+$serverArgs = @('-m', $ModelPath, '-c', '32768', '-np', "$Np", '-b', "$Batch", '-ub', "$Ubatch", '--port', "$Port", '--no-webui', '-ngl', $gpuLayers, '--jinja')
+if ($KvUnified -or $Np -gt 1) { $serverArgs += @('--kv-unified') }
 if ($DraftPath) { $serverArgs += @('--model-draft', $DraftPath) }
 $proc = Start-Process -FilePath $Server -WindowStyle Hidden -ArgumentList $serverArgs `
   -PassThru -RedirectStandardOutput $log -RedirectStandardError "$log.err"
 $proc.Id | Set-Content -LiteralPath $pidFile
 
-foreach ($i in 1..30) {
+foreach ($i in 1..120) {
   Start-Sleep -Milliseconds 500
   try {
     $h = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/health" -TimeoutSec 2 -ErrorAction Stop
