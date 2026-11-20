@@ -46,7 +46,6 @@ Ablageort.
 | P3   | Dreiweg-Antwort „Unbestimmt" entscheiden                                                  | S       | Messung                       |
 | P3   | Warmup-`TypeError` diagnostizieren                                                        | S       | —                             |
 | P3   | Suchmuster mit Befehlsnamen (`iex`) löst Verweigerung aus                                 | S       | —                             |
-| P3   | `repository`/`bugs`/`homepage` — zurückgestellt: Login darf in keiner Datei stehen        | S       | öffentlicher Umzug            |
 | P3   | Smoke braucht Warmup (Lessons learned 16.11.2026)                                         | S       | —                             |
 
 ## Plan 1: Eigenständiges Repository
@@ -55,6 +54,11 @@ Ablageort.
 
 Ziel: Weder Dateien noch Commit-Metadaten verraten, wem das Repository gehört.
 Der Inhalt bleibt unverändert; geändert werden nur Fixtures und Identitäten.
+
+*(Fassung 20.11.2026: Der GitHub-Handle ist erlaubt, siehe Entscheidung 10.
+E-Mail-Adressen und Klarnamen bleiben ausgeschlossen. Ursprünglich sollte auch
+der Handle nicht vorkommen; er steht für den Workflow-Aufruf aber ohnehin in
+`.github/workflows/guard.yml`.)*
 
 1. `mcp-cases.jsonl`: `owner`, `repo` und `org` durch neutrale Fixtures
    ersetzen (`team`, `lumen`), passend zu den bereits vorhandenen
@@ -82,9 +86,11 @@ Der Inhalt bleibt unverändert; geändert werden nur Fixtures und Identitäten.
 
 **Abnahme:**
 
-- `git grep` findet weder Benutzername noch echte Adresse;
+- `git grep` findet weder E-Mail-Adresse noch Klarname (der Handle ist seit
+  dem 20.11.2026 erlaubt, Entscheidung 10);
 - `git log --format='%an <%ae> | %cn <%ce>' | sort -u` liefert genau eine
-  neutrale Zeile;
+  neutrale Zeile; *(am 20.11.2026 nicht erfüllt: acht Commits vom 09.–18.11.
+  tragen `PSK`. Vom Nutzer bewusst unverändert gelassen.)*
 - `node test.mjs` 518/518 und `node bench-mcp.mjs` 33/33;
 - das Bundle ist geprüft und liegt außerhalb des Repositories.
 
@@ -388,6 +394,7 @@ Festgelegt:
 | 6   | npm            | GitHub-only für v0.1.0, `"private": true` (05.11.2026)           |
 | 7   | Kriterien F    | 7 verschiedene Tage, ≥ 50 Aufrufe, ≥ 3 Werkzeuge, davon ≥ 1 schreibend (05.11.2026) |
 | 9   | Merge-Regel    | Pflicht-Checks bleiben, Zwang „Branch aktuell“ entfällt          |
+| 10  | Handle         | erlaubt (20.11.2026); E-Mail und Klarname bleiben verboten       |
 
 Offen:
 

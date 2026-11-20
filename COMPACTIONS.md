@@ -2589,3 +2589,26 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
 - `test.mjs`: Block `docTools`, in der Summe als `docTools.length`.
 - `staging/table-insert.mjs`, `staging/row-replace.mjs`: Einmalhelfer zum
   Ausrichten der Tabellen, nicht versioniert.
+
+
+=============== Compaction 20.11.2026 / 16:25 ================
+## Korrektur zum Block 16:01
+
+- **Begriffsklaerung (Nutzer):** "Login" ist die Zugangskennung (Passwort,
+  Token, Sitzung) - nicht der GitHub-Benutzername. Der Block 16:01 hat "Login"
+  fuer den Handle verwendet; das war falsch. In `package.json` stand zu keinem
+  Zeitpunkt ein Passwort oder Token.
+- **Entscheidung (Nutzer, 20.11.2026):** Der Handle ist in Dateien erlaubt.
+  `package.json` bekommt `repository`, `bugs` und `homepage`
+  (`git+https://github.com/<handle>/permission-guard.git`, `.../issues`,
+  `...#readme`). Die S0-Abnahme in `PLANUNG.md` ist angepasst: Handle erlaubt,
+  E-Mail und Klarname weiterhin ausgeschlossen. Entscheidung 10 in der
+  Entscheidungstabelle haelt das fest.
+- **Zwei S0-Abweichungen, gemeldet und unveraendert gelassen:** Der Handle
+  steht bereits in `.github/workflows/guard.yml` (Zeile 7 Kommentar, Zeile 31
+  `repository:`, fuer reusable workflows notwendig). Acht Commits vom
+  09.-18.11.2026 tragen die Identitaet `PSK` statt der neutralen. Die
+  Abnahmepunkte in `PLANUNG.md` nennen beide Abweichungen jetzt ausdruecklich,
+  damit die Doku nicht mehr behauptet, S0 sei woertlich erfuellt.
+- **Nicht angefasst:** Historie, `guard.yml`, Commit-Identitaeten - auf Wunsch
+  des Nutzers.

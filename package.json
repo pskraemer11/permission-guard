@@ -5,6 +5,14 @@
   "type": "module",
   "private": true,
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pskraemer11/permission-guard.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pskraemer11/permission-guard/issues"
+  },
+  "homepage": "https://github.com/pskraemer11/permission-guard#readme",
   "engines": {
     "node": ">=20"
   },

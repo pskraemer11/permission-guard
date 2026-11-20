@@ -101,10 +101,12 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   Achsen, Deny-Limits). Inhalt und Historie darunter bleiben unverändert; der
   Nachtrag vom 20.11. belegt die drei umgesetzten Entscheidungen.
 
-- **`package.json` ohne Repository-Angaben (20.11.2026):** `repository`, `bugs`
-  und `homepage` bleiben leer. Alle drei enthalten eine Web-Adresse mit dem
-  GitHub-Login, und der soll nach der S0-Regel in keiner Datei stehen. Der Punkt
-  steht in `PLANUNG.md` jetzt auf „zurückgestellt bis öffentlicher Umzug".
+- **`package.json` mit Repository-Angaben (20.11.2026):** `repository`, `bugs`
+  und `homepage` zeigen auf das GitHub-Repo. Der Handle ist seit der
+  Entscheidung vom 20.11.2026 in Dateien erlaubt — er steht für den
+  Workflow-Aufruf ohnehin in `.github/workflows/guard.yml`; E-Mail-Adressen und
+  Klarnamen bleiben ausgeschlossen. `PLANUNG.md` hält die geänderte S0-Abnahme
+  fest.
 
 - **Ruff 0.17.4 → 0.17.5 (18.11.2026):** `requirements-dev.txt` pinnt
   `ruff==0.17.5`, `pyproject.toml` verlangt im `[tool.ruff]`-Abschnitt
