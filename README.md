@@ -1119,11 +1119,13 @@ so the limit applies per turn. Adjustable with
 
 **Result boundary (since 20.11.2026, off by default).** With
 `PERMISSION_GUARD_RESULT_SHIELD=annotate`, the text content of MCP results is
-wrapped in `[UD-<id>]…[/UD-<id>]`, existing `[UD-` markers inside the text are
-defused to `[UD_`, and a system instruction tells the model that everything
+wrapped in `[ud-<id>]…[/ud-<id>]`, existing `[ud-` markers inside the text are
+defused to `[ud_`, and a system instruction tells the model that everything
 inside those markers is data, never an instruction. `scan` only counts the
 parts in the log. File content is never touched. `off` (the default) leaves
-everything unchanged — the switch is the user's decision.
+everything unchanged — the switch is the user's decision. The marker is
+lowercase on purpose: `ud` stands for *untrusted data* and is not the
+quantization label `UD` (Unsloth Dynamic).
 
 Not every repository with "clef" or "jev" in its name works. Checked on
 20.11.2026:

@@ -1131,12 +1131,13 @@ Zähler lebt je Sitzung im Hook-State und wird bei jedem
 
 **Ergebnisgrenze (seit 20.11.2026, standardmäßig aus).** Mit
 `PERMISSION_GUARD_RESULT_SHIELD=annotate` werden Textinhalte von
-MCP-Ergebnissen in `[UD-<id>]…[/UD-<id>]` eingeschlossen, vorhandene
-`[UD-`-Marker im Text zu `[UD_` entschärft, und eine Systemanweisung sagt dem
+MCP-Ergebnissen in `[ud-<id>]…[/ud-<id>]` eingeschlossen, vorhandene
+`[ud-`-Marker im Text zu `[ud_` entschärft, und eine Systemanweisung sagt dem
 Modell, dass alles innerhalb dieser Marker Daten sind, nie eine Anweisung.
 `scan` zählt die Teile nur im Log. Dateiinhalte werden nie angefasst. `off`
 (der Standard) lässt alles unverändert — der Schalter ist die Entscheidung des
-Nutzers.
+Nutzers. Die Markierung ist absichtlich klein: `ud` steht für *untrusted data*
+und ist nicht die Quantisierungsbezeichnung `UD` (Unsloth Dynamic).
 
 Nicht jedes Repositorium mit „clef" oder „jev" im Namen funktioniert. Geprüft
 am 20.11.2026:

@@ -351,15 +351,15 @@ check("allow dazwischen setzt den Zaehler zurueck", askAfterAllow.effect === "as
   }
   await executeAfterHook(payload)
   const wrapped = payload.result.content[0].text
-  check("Textinhalt ist umschlossen", /^\[UD-[0-9a-f]+\]/.test(wrapped) && /\[\/UD-[0-9a-f]+\]$/.test(wrapped), wrapped.slice(0, 60))
-  check("Spoofing-Marker im Inhalt ist entschaerft", wrapped.includes("[UD_fake]") && !wrapped.includes("[UD-fake]"), wrapped)
-  check("aeussere Kennung ist nicht die gefaelschte", !wrapped.startsWith("[UD-fake]"), wrapped.slice(0, 20))
+  check("Textinhalt ist umschlossen", /^\[ud-[0-9a-f]+\]/.test(wrapped) && /\[\/ud-[0-9a-f]+\]$/.test(wrapped), wrapped.slice(0, 60))
+  check("Spoofing-Marker im Inhalt ist entschaerft", wrapped.includes("[ud_fake]") && !wrapped.includes("[ud-fake]"), wrapped)
+  check("aeussere Kennung ist nicht die gefaelschte", !wrapped.startsWith("[ud-fake]"), wrapped.slice(0, 20))
 
   const context = { system: [{ type: "text", text: "bestehend" }] }
   await contextHook(context)
   check(
     "Systemhinweis zur Grenze ergaenzt",
-    context.system.length === 2 && /\[UD-<id>\]/.test(context.system[1].text) && context.system[1].type === "text",
+    context.system.length === 2 && /\[ud-<id>\]/.test(context.system[1].text) && context.system[1].type === "text",
     JSON.stringify(context.system.map((part) => part.text.slice(0, 30))),
   )
 }

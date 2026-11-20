@@ -10,8 +10,8 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 - **Grenz-Markierung für MCP-Ergebnisse (20.11.2026, G1):** `index.js` umschließt
   im `execute.after`-Hook die Textinhalte von MCP-Ergebnissen mit
-  `[UD-<id>]…[/UD-<id>]`, entschärft vorhandene `[UD-`-Marker im Text zu
-  `[UD_` (Spoofing-Schutz) und ergänzt über `session.hook("context")` eine
+  `[ud-<id>]…[/ud-<id>]`, entschärft vorhandene `[ud-`-Marker im Text zu
+  `[ud_` (Spoofing-Schutz) und ergänzt über `session.hook("context")` eine
   Systemanweisung, dass der Inhalt Daten und keine Anweisung ist.
   Dateiinhalte bleiben unberührt. Schalter
   `PERMISSION_GUARD_RESULT_SHIELD` mit `off` (Standard), `annotate` und `scan`.

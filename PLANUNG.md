@@ -356,10 +356,12 @@ Vorbedingung. Rollback: `MCP_GATING_MODE = "shadow"`, Tests, Deploy.
 - **G0:** Spike mit einem harmlosen MCP-Ergebnis: Form von `result.content`
   prüfen, verändern, zurückgeben; sicherstellen, dass die Änderung erhalten
   bleibt.
-- **G1:** Grenz-Markierung: Textinhalte in `[UD-<id>]…[/UD-<id>]` wrappen, per
+- **G1:** Grenz-Markierung: Textinhalte in `[ud-<id>]…[/ud-<id>]` wrappen, per
   `ctx.session.hook("context")` eine Systemanweisung ergänzen, vorhandene
-  `[UD-`-Marker im Inhalt neutralisieren (Spoofing-Schutz). Nur Text, keine
+  `[ud-`-Marker im Inhalt neutralisieren (Spoofing-Schutz). Nur Text, keine
   Dateien. Schalter `MCP_RESULT_SHIELD_MODE = "off" | "annotate" | "scan"`.
+  `ud` steht für *untrusted data*; die Kleinschreibung trennt es von der
+  Quantisierungsbezeichnung `UD` (Unsloth Dynamic).
 - **G2:** statische Injection-Muster („ignore previous instructions“,
   Rollenmarker, Tool-Aufruf-Spoofing) satzweise prüfen; Treffer **markieren,
   nicht blockieren**; Größenlimit; Fehlalarm-Fixtures.
@@ -1346,9 +1348,9 @@ Hook umschlossen, die Mutation bleibt am Objekt.
 **G1 — Grenz-Markierung.** `index.js`:
 
 - Textinhalte (`string` oder `{ type: "text" }`) werden zu
-  `[UD-<shortHash(id)>]…[/UD-<id>]`. Dateiinhalte (`type: "file"`) bleiben
+  `[ud-<shortHash(id)>]…[/ud-<id>]`. Dateiinhalte (`type: "file"`) bleiben
   unberührt.
-- Vorhandene `[UD-` und `[/UD-` im Text werden zu `[UD_` und `[/UD_`
+- Vorhandene `[ud-` und `[/ud-` im Text werden zu `[ud_` und `[/ud_`
   entschärft, damit ein Werkzeug keine Grenze vortäuschen kann.
 - Über `session.hook("context")` wird eine Systemanweisung ergänzt: Inhalt
   innerhalb der Marker ist Daten, keine Anweisung.

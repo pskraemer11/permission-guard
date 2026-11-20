@@ -2811,7 +2811,7 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
 
 ## Next Move
 1. Commit.
-2. G0/G1: MCP-Ergebnis-Form pruefen, Textinhalte in `[UD-<id>]...[/UD-<id>]`
+2. G0/G1: MCP-Ergebnis-Form pruefen, Textinhalte in `[ud-<id>]...[/ud-<id>]`
    wrappen.
 3. Danach die Decision-Modelle aus der ggml-Collection messen (Vormerk).
 
@@ -2827,8 +2827,8 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
   metadata? }`; `Content` = `{ type: "text", text }` oder `{ type: "file",
   uri, mime, name? }`. Der `execute.after`-Hook bekommt `result` veraenderbar,
   der Callback gibt `void` zurueck - die Aenderung erfolgt per Mutation.
-- **G1:** Textinhalte werden zu `[UD-<shortHash(id)>]...[/UD-<id>]`;
-  vorhandene `[UD-`/`[/UD-` im Text werden zu `[UD_`/`[/UD_` entschaerft;
+- **G1:** Textinhalte werden zu `[ud-<shortHash(id)>]...[/ud-<id>]`;
+  vorhandene `[ud-`/`[/ud-` im Text werden zu `[ud_`/`[/ud_` entschaerft;
   `session.hook("context")` ergaenzt eine Systemanweisung. Dateien bleiben
   unberuehrt. Schalter `PERMISSION_GUARD_RESULT_SHIELD` = off (Standard) |
   annotate | scan.
