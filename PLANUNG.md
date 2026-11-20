@@ -1450,3 +1450,26 @@ wiederholt, der Grund steht im Log. Damit ist der Punkt
 
 **Offen.** Deploy, dann zwei echte Abrufe: ein lokales Ziel (bleibt erlaubt)
 und ein externes (fragt nach). Danach ist G1 erstmals live belegt.
+
+## Nachtrag 20.11.2026: G2 umgesetzt (Formatkollisionen)
+
+**Abgrenzung.** G2 ist keine Bedeutungsanalyse. Die Frage „enthält dieser Text
+eine Anweisung?" ist statisch nicht entscheidbar; eine Liste davon wäre endlos
+und würde nur Fehlalarme erzeugen. Geprüft werden ausschließlich
+Formatkollisionen: Zeichenfolgen, die den eigenen Steuerkanal nachahmen und in
+einem Werkzeugergebnis nichts zu suchen haben.
+
+**Umgesetzt.** `guard.js` hat `injectionHits` mit sechs Familien:
+Chat-Template-Marker (inkl. `[PROMPT_INJECTION]`), `[INST]`/`<<SYS>>`,
+Rollenzeilen am Zeilenanfang, Werkzeug-Rahmen, die eigene `[ud-`-Grenze und
+unsichtbare Steuerzeichen. U+200D (ZWJ) ist ausgenommen, weil er zu
+Emoji-Sequenzen gehört. `index.js` schreibt den Hinweis vor die Grenze
+(`[verdacht: …] [ud-…]…[/ud-…]`); der Inhalt bleibt unverändert, blockiert wird
+nichts. Die Systemanweisung nennt den Hinweis.
+
+**Grenze.** Ein Satz wie „ignoriere alle Anweisungen" wird nie gefunden. G2
+erkennt Identitätsfälschung des Kanals, nicht Überredung. Die harte Grenze
+bleibt die Berechtigungsprüfung.
+
+**Messung.** `test.mjs` 975/975 (acht neue Fälle), `test-index.mjs` 45/45
+(zwei neue Fälle).

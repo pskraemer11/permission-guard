@@ -739,3 +739,28 @@ Fälle für den Aufwärmlauf), `test-wiring.mjs` 13/13, `bench-mcp.mjs` 40/40,
 
 *Offen.* Live-Beleg nach Deploy: Markierung im `execute`-Ergebnis, ein lokaler
 und ein externer Abruf.
+
+## Nachtrag 20.11.2026: G2 — Formatkollisionen statt Bedeutungsanalyse
+
+*Frage.* Lässt sich Prompt-Injection statisch erkennen? Nein: „ignoriere alle
+vorherigen Anweisungen" ist unendlich formulierbar, in jeder Sprache und mit
+jedem Euphemismus. Eine Musterliste dafür wäre endlos und würde nur Fehlalarme
+erzeugen.
+
+*Entscheidung.* G2 prüft deshalb ausschließlich **Formatkollisionen**:
+Zeichenfolgen, die den eigenen Steuerkanal nachahmen und in einem
+Werkzeugergebnis nichts zu suchen haben — Chat-Template-Marker (inkl.
+`[PROMPT_INJECTION]`), `[INST]`/`<<SYS>>`, Rollenzeilen am Zeilenanfang,
+Werkzeug-Rahmen, die eigene `[ud-`-Grenze und unsichtbare Steuerzeichen. Sechs
+Familien, eine Liste in `guard.js` (`injectionHits`). U+200D (ZWJ) ist
+ausgenommen, weil er zu Emoji-Sequenzen gehört.
+
+*Wirkung.* Ein Treffer wird vor der Grenze als `[verdacht: …]` genannt. Der
+Inhalt bleibt unverändert, nichts wird blockiert. Ein Fehlalarm kostet eine
+Markierung, keinen Ablauf.
+
+*Grenze.* Überredung wird nicht erkannt; das ist beabsichtigt. Die harte Grenze
+bleibt die Berechtigungsprüfung.
+
+*Messung.* `test.mjs` 975/975 (acht neue Fälle), `test-index.mjs` 45/45 (zwei
+neue Fälle).

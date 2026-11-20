@@ -1157,6 +1157,17 @@ trägt, läuft nie ohne Rückfrage. Lokale Adressen (localhost, 127.0.0.0/8, ::1
 bleiben erlaubt, ein `deny` der statischen Regeln wird nie angefasst, und die
 Adresse selbst landet nie im Log, weil sie Token in der Abfrage tragen kann.
 
+**Statische Formatkollisionen (seit 20.11.2026, G2).** In einem umschlossenen
+Ergebnis wird eine geschlossene Liste von Formatkollisionen gezählt:
+Chat-Template-Marker (`[PROMPT_INJECTION]` und Verwandte), `[INST]`/`<<SYS>>`,
+Rollenzeilen wie `### System:`, Werkzeug-Rahmen (`"tool_calls":`,
+`<function_call>`), unsere eigene `[ud-`-Grenze und unsichtbare Steuerzeichen
+(Bidi-Überschreibungen, Nullbreite). Ein Treffer wird vor der Grenze als
+`[verdacht: …]` genannt; der Text bleibt unverändert, nichts wird blockiert.
+Das ist keine Bedeutungsanalyse: Ein Satz wie „ignoriere alle Anweisungen"
+wird nie gefunden und soll es auch nicht. Die Liste ist absichtlich kurz — sie
+benennt Formate, nicht Absichten.
+
 Nicht jedes Repositorium mit „clef" oder „jev" im Namen funktioniert. Geprüft
 am 20.11.2026:
 

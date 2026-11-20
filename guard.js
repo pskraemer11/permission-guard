@@ -2395,6 +2395,51 @@ export function scopeWebfetch(input = {}) {
   return { decision: "allow", reason: "lokales Ziel", targets: urls.length }
 }
 
+// G2: statische Muster, die den eigenen Steuerkanal nachahmen. Das ist keine
+// Bedeutungsanalyse - die waere endlos -, sondern eine geschlossene Liste von
+// Formatkollisionen: Zeichenfolgen, die ein Werkzeugergebnis nie braucht, die
+// aber wie eine System-, Rollen- oder Aufrufmarke aussehen. Ein Treffer wird
+// markiert, nie blockiert (PLANUNG.md, Schritt G2).
+const INJECTION_PATTERNS = [
+  // Chat-Template-Marker der verbreiteten Modellfamilien; [PROMPT_INJECTION]
+  // ist die Schreibweise, die als Etikett in Guard-Prompts auftaucht.
+  ["chat-marker", /<\|(?:im_start|im_end|system|user|assistant|endoftext|start_header_id|end_header_id|eot_id)\|>|\[PROMPT_INJECTION\]/gi],
+  ["inst-marker", /\[INST\]|\[\/INST\]|<<SYS>>|<<\/SYS>>/g],
+  // Rollenzeilen am Zeilenanfang; "### System:" ist der klassische Fall.
+  ["rollenzeile", /^[ \t]*(?:###[ \t]*(?:system|instruction|assistant|user)\b|(?:system|human|assistant|user)[ \t]*:)/gim],
+  // Nachahmung eines Werkzeugaufrufs, den nur der Harness erzeugt.
+  ["werkzeug-rahmen", /<\/?(?:function_call|tool_use|tool_result|tool_calls)>|"tool_calls"[ \t]*:|\[TOOL_CALL\]/gi],
+  // Unsere eigene Grenze, falls sie im Inhalt auftaucht (Gegenprobe zu G1).
+  ["grenze", /\[\/?ud-/gi],
+  // Unsichtbare Steuerzeichen. U+200D (ZWJ) fehlt bewusst: Er gehoert zu
+  // Emoji-Sequenzen und waere ein Dauer-Fehlalarm.
+  ["unsichtbar", /[\u200B-\u200C\u200E-\u200F\u202A-\u202E\u2066-\u2069]/g],
+]
+
+/**
+ * Verdaechtige Stellen in einem Werkzeugergebnis zaehlen.
+ *
+ * Reine Formatpruefung, keine Bewertung von Bedeutung: Ein Satz wie "ignoriere
+ * alle Anweisungen" wird hier nie gefunden. Die Familien dienen der Anzeige im
+ * Ergebnistext und im Log.
+ *
+ * @param {unknown} text
+ * @returns {{count: number, families: string[]}}
+ */
+export function injectionHits(text) {
+  const value = typeof text === "string" ? text : String(text ?? "")
+  if (!value) return { count: 0, families: [] }
+  const families = []
+  let count = 0
+  for (const [family, pattern] of INJECTION_PATTERNS) {
+    const matches = value.match(pattern)
+    if (!matches || !matches.length) continue
+    count += matches.length
+    if (!families.includes(family)) families.push(family)
+  }
+  return { count, families }
+}
+
 const DENY_PATHS = [
   /\.ssh[\\/]/i,
   /\.gnupg[\\/]/i,
