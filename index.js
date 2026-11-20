@@ -22,7 +22,7 @@ import { Plugin } from "@opencode/plugin"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { MCP_GATING_MODE, contextScope, evaluate, gitShadowRecord, mcpAction, mcpCriteria, mcpObservation, mcpVerdict, scopeEdit } from "./guard.js"
+import { MCP_GATING_MODE, contextScope, evaluate, gitShadowRecord, mcpAction, mcpCriteria, mcpObservation, mcpVerdict, scopeEdit, scopeWebfetch } from "./guard.js"
 import { appendRecord, auditPath, callKey, readState, shortHash } from "./audit.js"
 import { commandSummary, ensurePrivateDir, ensurePrivateFile, guardLogDir } from "./diagnostics.js"
 import { appendShadow, shadowPath } from "./shadow.js"
@@ -137,6 +137,13 @@ export default Plugin.define({
     // G1: Grenz-Markierung. Textinhalte werden umschlossen, vorhandene Marker
     // im Inhalt entschaerft. "scan" zaehlt nur. Laeuft vor dem Audit und
     // unabhaengig davon, weil das Audit abschaltbar ist.
+    //
+    // Zwei Faelle: die Antwort eines MCP-Werkzeugs und das Ergebnis des
+    // Werkzeugs "execute" (Code Mode). In Code Mode ruft der Agent MCP-
+    // Werkzeuge aus JavaScript heraus; das Modell sieht dann nicht die Antwort
+    // des Werkzeugs, sondern das Ergebnis von "execute". Live belegt am
+    // 20.11.2026: Der Hook markierte die MCP-Antwort, das Modell bekam die
+    // Markierung nie zu sehen.
     const shieldResult = (payload) => {
       const result = payload?.result
       if (!result) return 0
@@ -339,6 +346,25 @@ export default Plugin.define({
             return
           }
 
+          // Webabrufe (Action "webfetch"): Der Code-Mode-Interpreter darf jede
+          // Adresse ansprechen, und die statische Regel erlaubt "webfetch"
+          // pauschal. Der Guard fragt deshalb ausserhalb von localhost nach -
+          // dort ginge ein Datenabfluss ohne Rueckfrage durch. Ein deny der
+          // statischen Regeln bleibt unberuehrt, und die Adresse selbst landet
+          // nie im Log, weil sie Token in der Abfrage tragen kann.
+          if (String(input.action ?? "").toLowerCase() === "webfetch") {
+            const webEffect = String(input.effect ?? "unbekannt").toLowerCase()
+            if (webEffect !== "deny") {
+              const web = scopeWebfetch(input)
+              if (web.decision === "ask" && webEffect !== "ask") {
+                input.effect = "ask"
+                input.message = `permission-guard: Webabruf ${web.reason}`
+              }
+              debug(`webfetch ${webEffect} -> ${web.decision === "ask" ? "ask" : webEffect} ${web.reason} ziele=${web.targets}`)
+            }
+            return
+          }
+
           // Im globalen Kontext endet die Pruefung hier: Nur MCP wird
           // beobachtet, Shell-Befehle bleiben bei den statischen Regeln.
           if (homeContext) return
@@ -451,7 +477,8 @@ export default Plugin.define({
             const tool = String(payload?.tool ?? "")
             // Grenz-Markierung zuerst und unabhaengig vom Audit: sie soll auch
             // greifen, wenn das Audit abgeschaltet ist.
-            if (tool && seenMcpTools.has(tool) && RESULT_SHIELD_MODE !== "off" && payload?.status === "completed") {
+            const shieldable = seenMcpTools.has(tool) || tool === "execute"
+            if (tool && shieldable && RESULT_SHIELD_MODE !== "off" && payload?.status === "completed") {
               shieldResult(payload)
             }
             if (!tool || !seenMcpTools.has(tool) || !auditFile || !auditOn) return

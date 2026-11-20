@@ -141,6 +141,32 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Webabrufe im Guard (20.11.2026):** `guard.js` hat `scopeWebfetch`: Ziele
+  außerhalb von localhost (`localhost`, `[IP_ADDRESS]`/8, `::1`) ergeben `ask`,
+  lokale Ziele bleiben erlaubt, ein `deny` der statischen Regeln wird nicht
+  angefasst, und ohne lesbare http(s)-Adresse gilt `ask`. `index.js` prüft die
+  Action `webfetch` vor dem globalen Kontext, weil sie nur verschärft.
+  Adressen stehen nie im Log. Anlass: Code Mode darf jede Adresse abrufen, und
+  `opencode.jsonc` erlaubt `webfetch` pauschal — ein Datenabfluss wäre ohne
+  Rückfrage durchgegangen. `test-index.mjs` 43/43 (fünf neue Fälle).
+- **Grenz-Markierung greift auch in Code Mode (20.11.2026):** Live-Befund: Der
+  `execute.after`-Hook markierte die Antwort des MCP-Werkzeugs
+  (`shield annotate tool=deepwiki_read_wiki_contents parts=1`), das Modell bekam
+  die Markierung nie zu sehen. Ursache im OpenCode-Binary belegt: Code Mode ist
+  der Standardweg für MCP-Werkzeuge, das Modell sieht das Ergebnis des
+  Werkzeugs `execute`, nicht die Antwort des MCP-Werkzeugs; `content` und
+  `output` sind getrennte Felder. `index.js` umschließt deshalb zusätzlich das
+  Ergebnis von `execute`. Eine Regel für beide Wege. `test-index.mjs` 38/38
+  (drei neue Fälle). Die Systemanweisung über `session.hook("context")` kam
+  live an (durch einen Subagenten bestätigt).
+- **Aufwärmlauf erkennt Netzfehler tiefer (20.11.2026):** `reviewer.js` sucht
+  den Fehlercode nicht mehr nur in `cause.code`, sondern auch in `cause.cause`
+  und `cause.errors` (AggregateError); wiederholbar sind `ECONNREFUSED` und
+  `ECONNRESET`. Der Grund nennt jetzt die Ursache (`TypeError: connect
+  ECONNREFUSED …`) statt nur den Fehlernamen. Anlass: `setup: Aufwaermlauf
+  fehlgeschlagen 0 ms (TypeError)` am 20.11.2026 — ohne Code keine
+  Wiederholung, obwohl der Server gerade erst startete. `test.mjs` 967/967
+  (zwei neue Fälle).
 - **`deploy.ps1` ergänzt fehlende Schlüssel (20.11.2026):** `Update-RuntimeConfig`
   gleicht die Laufzeitkonfiguration mit `shell-reviewer.config.example.json` ab:
   fehlende Schlüssel werden ergänzt, vorhandene Werte bleiben unangetastet. Neue

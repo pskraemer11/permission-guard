@@ -890,16 +890,39 @@ export async function warmup(config) {
 
 // Fuenf Versuche mit 500 ms Abstand: `ensureRunning` startet den Server
 // losgeloest und kehrt sofort zurueck, der Port ist dann oft noch zu
-// (ECONNREFUSED). Ohne Wiederholung entfaellt der Aufwaermlauf genau beim
+// (ECONNREFUSED) oder die Verbindung bricht waehrend des Modellladens ab
+// (ECONNRESET). Ohne Wiederholung entfaellt der Aufwaermlauf genau beim
 // Kaltstart, und die erste echte Entscheidung zahlt ihn (Befund 20.11.2026).
 const WARMUP_ATTEMPTS = 5
 const WARMUP_RETRY_MS = 500
+
+// Netzfehler, bei denen ein neuer Versuch sinnvoll ist. Node legt den Code je
+// nach Fehlerart in `cause`, in `cause.cause` oder - bei mehreren Adressen - in
+// `cause.errors` (AggregateError). Nur `cause.code` zu lesen war zu eng: Der
+// Aufwaermlauf brach am 20.11.2026 nach 0 ms mit "TypeError" ab, ohne einen
+// einzigen Versuch zu wiederholen.
+const WARMUP_RETRY_CODES = new Set(["ECONNREFUSED", "ECONNRESET"])
+
+function errorCodes(error) {
+  const codes = []
+  const push = (value) => {
+    const code = String(value ?? "")
+    if (code) codes.push(code)
+  }
+  push(error?.code)
+  push(error?.cause?.code)
+  push(error?.cause?.cause?.code)
+  if (Array.isArray(error?.cause?.errors)) {
+    for (const inner of error.cause.errors) push(inner?.code)
+  }
+  return codes
+}
 
 async function warmOne(cfg, endpoint) {
   const started = Date.now()
   for (let attempt = 1; ; attempt++) {
     const result = await warmAttempt(cfg, endpoint)
-    if (result.ok || !result.refused || attempt >= WARMUP_ATTEMPTS) {
+    if (result.ok || !result.retryable || attempt >= WARMUP_ATTEMPTS) {
       return { ...result, ms: Date.now() - started }
     }
     await new Promise((resolve) => setTimeout(resolve, WARMUP_RETRY_MS))
@@ -948,9 +971,17 @@ async function warmAttempt(cfg, endpoint) {
   } catch (error) {
     // Der Grund gehoert in den Log: "TypeError" allein sagt nichts. Ein noch
     // geschlossener Port (ECONNREFUSED) wird oben erneut versucht.
-    const code = String(error?.cause?.code ?? "")
+    const codes = errorCodes(error)
+    const retryCode = codes.find((code) => WARMUP_RETRY_CODES.has(code))
     const name = String(error?.name ?? "Fehler")
-    return { ok: false, refused: code === "ECONNREFUSED", reason: code ? `${name} (${code})` : name, ms: Date.now() - started }
+    const cause = String(error?.cause?.message ?? "").slice(0, 80)
+    const detail = retryCode ?? cause
+    return {
+      ok: false,
+      retryable: Boolean(retryCode),
+      reason: detail ? `${name}: ${detail}` : name,
+      ms: Date.now() - started,
+    }
   } finally {
     clearTimeout(timer)
   }

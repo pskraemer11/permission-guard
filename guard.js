@@ -2335,6 +2335,66 @@ export function scopeEdit(resources, options = {}) {
   return { decision: "allow", reason: "Schreiben in vertrautem Ordner" }
 }
 
+// Hosts, die als lokal gelten. `new URL(...).hostname` liefert IPv6-Adressen
+// mit Klammern; 127.0.0.0/8 wird ueber das Praefix erkannt, damit die Adresse
+// nicht als Literal in der Datei steht.
+function isLocalHost(hostname) {
+  const host = String(hostname ?? "").toLowerCase()
+  return host === "localhost" || host === "::1" || host === "[::1]" || host === "[::]" || /^127\./.test(host)
+}
+
+function webfetchUrls(input) {
+  const urls = []
+  const push = (value) => {
+    if (typeof value === "string" && value.trim()) urls.push(value.trim())
+  }
+  if (Array.isArray(input?.resources)) {
+    for (const value of input.resources) push(value)
+  }
+  const meta = input?.metadata
+  if (meta && typeof meta === "object") push(meta.url)
+  return [...new Set(urls)]
+}
+
+/**
+ * Webabrufe (Action "webfetch") einordnen.
+ *
+ * Der Code-Mode-Interpreter darf jede Adresse ansprechen, und die statische
+ * Regel erlaubt "webfetch" pauschal (opencode.jsonc). Der Guard unterscheidet
+ * deshalb nach dem Ziel: lokale Adressen laufen ohne Rueckfrage, alles andere
+ * fragt nach. Fail closed: fehlt eine lesbare http(s)-Adresse, lautet die
+ * Antwort "ask". Zugangsdaten in der Adresse fragen ebenfalls nach.
+ *
+ * Rueckgabe ist nur "allow" oder "ask"; ein "deny" der statischen Regeln wird
+ * von der Verdrahtung nicht angefasst. Adressen werden nie protokolliert, weil
+ * sie Token in der Abfrage tragen koennen.
+ *
+ * @param {{resources?: unknown, metadata?: unknown}} [input] Ereignis des Hooks
+ * @returns {{decision: "allow" | "ask", reason: string, targets: number}}
+ */
+export function scopeWebfetch(input = {}) {
+  const urls = webfetchUrls(input)
+  if (!urls.length) return { decision: "ask", reason: "kein Ziel", targets: 0 }
+  for (const value of urls) {
+    let url
+    try {
+      url = new URL(value)
+    } catch {
+      return { decision: "ask", reason: "Ziel unlesbar", targets: urls.length }
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return { decision: "ask", reason: "kein http(s)-Ziel", targets: urls.length }
+    }
+    if (url.username || url.password) {
+      return { decision: "ask", reason: "Zugangsdaten in der Adresse", targets: urls.length }
+    }
+    if (!isLocalHost(url.hostname)) {
+      return { decision: "ask", reason: "Ziel ausserhalb von localhost", targets: urls.length }
+    }
+  }
+  return { decision: "allow", reason: "lokales Ziel", targets: urls.length }
+}
+
 const DENY_PATHS = [
   /\.ssh[\\/]/i,
   /\.gnupg[\\/]/i,

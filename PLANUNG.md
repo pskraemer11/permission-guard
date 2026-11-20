@@ -1414,3 +1414,39 @@ Deploy nicht neu geladen (letzter `setup`-Eintrag 17:58, Deploy danach). Nach
 einem Neustart von OpenCode ist zu prüfen, ob im Guard-Log
 `shield annotate tool=… parts=…` erscheint und ob das Ergebnis die Markierung
 `[ud-…]` trägt.
+
+## Nachtrag 20.11.2026: G1 live geprüft, Webabrufe im Guard
+
+**Live-Befund zu G1.** Nach dem Neustart feuert der Hook (`shield annotate
+tool=deepwiki_read_wiki_contents parts=1`), das Modell bekam die Markierung aber
+nicht. Die Systemanweisung über `session.hook("context")` kommt an; ein
+Subagent hat den Satz in seinem Prompt bestätigt.
+
+**Ursache (Binary-Beleg).** `@opencode/cli` 2.2.7 baut nach dem Hook
+`q4(content, output)`; `content` gewinnt nur bei der direkten Werkzeugantwort.
+In Code Mode — dem Standardweg für MCP — bekommt das Skript `output`. Mein
+Aufruf lieferte `{result: "…"}`, also das Ausgabeschema des Werkzeugs. Die
+Mutation von `content` erreicht das Modell dort nie.
+
+**Umgesetzt.** `index.js` umschließt zusätzlich das Ergebnis des Werkzeugs
+`execute`. Eine Regel für beide Wege; `test-index.mjs` 38/38.
+
+**Grenze der Markierung.** Sie verhindert keine Codeausführung. Ein
+Werkzeugergebnis ist ein Wert, kein Programm; der Angriffsweg ist der nächste
+Aufruf, den das Modell schreibt. Die Markierung ist ein Hinweis, keine Grenze —
+so steht es jetzt auch in `SECURITY.md`.
+
+**Neue Grenze: `webfetch`.** Code Mode ruft `fetch` über die Rechteprüfung auf
+(Binary: `f.assert({action:"webfetch", …})`), aber `opencode.jsonc` erlaubt
+`webfetch` pauschal, und der Guard hatte dazu keine Meinung. `scopeWebfetch`
+fragt jetzt jedes Ziel außerhalb von localhost nach; lokal bleibt erlaubt,
+`deny` bleibt `deny`, Adressen stehen nicht im Log.
+
+**Aufwärmlauf.** `reviewer.js` sucht den Fehlercode jetzt auch in `cause.cause`
+und `cause.errors` (AggregateError); `ECONNREFUSED` und `ECONNRESET` werden
+wiederholt, der Grund steht im Log. Damit ist der Punkt
+„Warmup-`TypeError` diagnostizieren" bearbeitet; der Beweis steht noch aus
+(nächster Kaltstart).
+
+**Offen.** Deploy, dann zwei echte Abrufe: ein lokales Ziel (bleibt erlaubt)
+und ein externes (fragt nach). Danach ist G1 erstmals live belegt.

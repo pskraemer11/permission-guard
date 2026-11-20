@@ -695,3 +695,47 @@ Befehlen bleiben alle Achsen unter 0,15.
 anderen entstehen bis zu fünf Prompts, und `noul` wird von einer Ratingskala
 gelesen. Gemessen ist ausschließlich Clef-Flash. Mit einem anderen Typ wäre die
 Achsenzahl ein Latenzfaktor und die Schwellen wären neu zu messen.
+
+## Nachtrag 20.11.2026: Grenz-Markierung im Code-Mode-Pfad und `webfetch`
+
+*Kontext.* G1 war umgesetzt, aber nie live geprüft. Der Live-Versuch zeigt: Der
+Hook feuert (`shield annotate tool=deepwiki_read_wiki_contents parts=1`), das
+Modell bekommt die Markierung nicht. Die Systemanweisung über
+`session.hook("context")` kommt dagegen an (durch einen Subagenten bestätigt).
+
+*Beleg.* Im OpenCode-Binary (`@opencode/cli` 2.2.7) steht nach dem Hook
+`q4(content, output)`: `content` gewinnt nur, wenn es vorhanden ist. In Code
+Mode — dem Standardweg für MCP-Werkzeuge — erhält das Skript jedoch `output`;
+der Aufruf lieferte `{result: "…"}`, also das Ausgabeschema des Werkzeugs. Die
+Mutation von `content` erreicht das Modell dort nie.
+
+*Entscheidung.* Die Markierung umschließt zusätzlich das Ergebnis des Werkzeugs
+`execute`. Eine Regel für beide Wege statt einer Heuristik über Feldnamen.
+
+*Grenze der Maßnahme.* Die Markierung verhindert keine Codeausführung. Ein
+Werkzeugergebnis ist ein Wert, kein Programm; der Interpreter führt nur aus,
+was das Modell geschrieben hat. Der Angriffsweg ist der nächste Aufruf, den das
+Modell auf Grundlage des Textes schreibt — die Markierung ist ein Hinweis an
+das Modell, keine Grenze. Das steht so in `SECURITY.md`.
+
+*Neue Grenze.* Im Binary ruft Code Mode `fetch` über die Rechteprüfung auf
+(`f.assert({action:"webfetch", …})`, Weiterleitungen über `assertNotDenied`).
+`opencode.jsonc` erlaubt `webfetch` jedoch pauschal, und der Guard hatte zu
+dieser Action keine Meinung — ein Datenabfluss wäre ohne Rückfrage
+durchgegangen. `scopeWebfetch` fragt jetzt jedes Ziel außerhalb von localhost
+nach; lokale Adressen bleiben erlaubt, ein `deny` der statischen Regeln bleibt
+`deny`, Adressen stehen nie im Log. Das ist eine Rückfrage, keine Grenze: Wer
+sie bestätigt, gibt den Abruf frei.
+
+*Nebenbefund.* Der Aufwärmlauf meldete `TypeError` ohne Fehlercode und
+wiederholte deshalb nicht. `reviewer.js` sucht den Code jetzt auch in
+`cause.cause` und `cause.errors` (AggregateError); `ECONNREFUSED` und
+`ECONNRESET` gelten als wiederholbar, der Grund steht im Log.
+
+*Messung.* `test-index.mjs` 43/43 (acht neue Fälle: `execute`-Markierung,
+unberührtes Fremdwerkzeug, vier webfetch-Fälle), `test.mjs` 967/967 (zwei neue
+Fälle für den Aufwärmlauf), `test-wiring.mjs` 13/13, `bench-mcp.mjs` 40/40,
+`pytest` 149 bestanden/1 übersprungen, `ruff` und `pyright` ohne Befund.
+
+*Offen.* Live-Beleg nach Deploy: Markierung im `execute`-Ergebnis, ein lokaler
+und ein externer Abruf.

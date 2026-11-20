@@ -1129,6 +1129,20 @@ everything unchanged — the switch is the user's decision. The marker is
 lowercase on purpose: `ud` stands for *untrusted data* and is not the
 quantization label `UD` (Unsloth Dynamic).
 
+Since 20.11.2026 the result of the Code Mode tool `execute` is wrapped as well.
+Code Mode is the default path for MCP tools in OpenCode V2: the model calls
+them from JavaScript and therefore never sees the tool's own answer, only the
+result of `execute`. Measured live on 20.11.2026: the hook marked the MCP
+answer, the model never received the marker. One rule now covers both paths —
+whatever a tool returns is data.
+
+**Web fetches (since 20.11.2026).** Code Mode can fetch any URL, and the static
+rule allows `webfetch` unconditionally. The guard therefore asks for every
+target outside localhost: a fetch that carries data to a foreign host never
+runs without a prompt. Local addresses (localhost, 127.0.0.0/8, ::1) stay
+allowed, a `deny` of the static rules is never touched, and the URL itself is
+never written to the log because it may carry tokens in the query.
+
 Not every repository with "clef" or "jev" in its name works. Checked on
 20.11.2026:
 

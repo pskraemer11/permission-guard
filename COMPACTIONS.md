@@ -2967,3 +2967,64 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
   steht auf Ready.
 - `staging/` ist ignoriert und enthaelt die Messhilfen (nicht versioniert).
 - Untracked bleiben: zwei Screenshots unter `docs/` und `review/`.
+
+
+================ Compaction 20.11.2026 / 21:23 ================
+## Objective
+- **Current:** G1 ist live geprüft, die Ursache belegt. Grenz-Markierung greift
+  jetzt auch für das Werkzeug `execute`; `webfetch` ist im Guard. Deploy und
+  Live-Test stehen aus.
+- **Completed:** Live-Beleg (Hook feuert, Markierung fehlt), Binary-Beleg für
+  `content` gegen `output`, `scopeWebfetch`, Aufwärmlauf-Fix, Doku in README
+  (beide Sprachen), SECURITY, CHANGELOG, PLANUNG.
+
+## Important Details
+- **Code Mode ist der Standardweg für MCP.** Das Modell ruft MCP-Werkzeuge aus
+  JavaScript heraus auf und sieht nur das Ergebnis von `execute`. Nach dem Hook
+  baut OpenCode `q4(content, output)`; `content` gewinnt nur bei der direkten
+  Werkzeugantwort. Deshalb wird jetzt auch das `execute`-Ergebnis umschlossen.
+- **Die Markierung ist ein Hinweis, keine Grenze.** Ein Werkzeugergebnis ist ein
+  Wert, kein Programm; der Angriffsweg ist der nächste Aufruf, den das Modell
+  schreibt. Genau so steht es in `SECURITY.md`.
+- **`webfetch` ist die eigentliche Lücke.** Im Binary ruft Code Mode `fetch`
+  über `f.assert({action:"webfetch", …})` auf; `opencode.jsonc` erlaubt
+  `webfetch` pauschal, der Guard kannte die Action nicht. `scopeWebfetch` fragt
+  jetzt alles außerhalb von localhost nach, lokal bleibt erlaubt, `deny` bleibt
+  `deny`, Adressen stehen nie im Log.
+- **Aufwärmlauf:** Fehlercodes werden auch in `cause.cause` und `cause.errors`
+  gesucht; `ECONNREFUSED` und `ECONNRESET` gelten als wiederholbar.
+
+## Work State
+- Geändert: `guard.js` (`scopeWebfetch`, `isLocalHost`), `index.js`
+  (`execute`-Markierung, webfetch-Zweig vor dem globalen Kontext),
+  `reviewer.js` (`errorCodes`, `WARMUP_RETRY_CODES`), `test-index.mjs`,
+  `test.mjs`, `README.md`, `README_de.md`, `SECURITY.md`, `CHANGELOG.md`,
+  `PLANUNG.md`.
+- Grün: `test.mjs` 967/967, `test-index.mjs` 43/43, `test-wiring.mjs` 13/13,
+  `bench-mcp.mjs` 40/40, `pytest` 149 bestanden/1 übersprungen, `ruff` und
+  `pyright` ohne Befund.
+- Nicht gemacht: Deploy, Live-Test, Commit.
+
+## Next Move
+1. `deploy.ps1` (einziger Weg ins Ziel), dann OpenCode neu starten.
+2. Live: `deepwiki_read_wiki_contents` aufrufen — im Log muss
+   `shield annotate tool=execute …` stehen, das Ergebnis `[ud-…]` tragen.
+3. Live: ein lokales Ziel (`http://localhost:8080/…`) bleibt erlaubt, ein
+   externes Ziel fragt nach.
+4. Commit erst nach diesen Belegen; Push und Merge macht der Nutzer.
+
+## Relevant Files
+- `guard.js`: `scopeWebfetch`, `isLocalHost`; bestehend `scopeEdit`,
+  `mcpVerdict`.
+- `index.js`: `shieldResult`-Aufruf mit `tool === "execute"`, webfetch-Zweig.
+- `reviewer.js`: `errorCodes`, `WARMUP_RETRY_CODES`, `warmOne`.
+- `test-index.mjs` 43/43, `test.mjs` 967/967.
+- `docs/adr/0002-reviewer-und-sandbox.md`: Nachtrag zu G1 und webfetch.
+
+## Important Context
+- Der Reviewer läuft auf Port 8080 (Clef-Flash Q4_K_M); nur ein Modell im VRAM
+  halten, sonst sind Latenzmessungen nicht belastbar.
+- `[IP_ADDRESS]` in Doku und Fixtures ist ein Platzhalter, kein echter Wert.
+- Die Laufzeitdatei liegt außerhalb der Schreibgrenze; nur `deploy.ps1` ändert
+  sie.
+- Untracked bleiben: zwei Screenshots unter `docs/` und `review/`.

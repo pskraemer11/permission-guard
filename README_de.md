@@ -1142,6 +1142,21 @@ Modell, dass alles innerhalb dieser Marker Daten sind, nie eine Anweisung.
 Nutzers. Die Markierung ist absichtlich klein: `ud` steht für *untrusted data*
 und ist nicht die Quantisierungsbezeichnung `UD` (Unsloth Dynamic).
 
+Seit 20.11.2026 wird zusätzlich das Ergebnis des Code-Mode-Werkzeugs `execute`
+umschlossen. Code Mode ist in OpenCode V2 der Standardweg für MCP-Werkzeuge:
+Das Modell ruft sie aus JavaScript heraus auf und sieht deshalb nie die Antwort
+des Werkzeugs, sondern nur das Ergebnis von `execute`. Live gemessen am
+20.11.2026: Der Hook markierte die MCP-Antwort, das Modell bekam die Markierung
+nie zu sehen. Jetzt deckt eine Regel beide Wege ab — was ein Werkzeug
+zurückgibt, ist Daten.
+
+**Webabrufe (seit 20.11.2026).** Code Mode darf jede Adresse abrufen, und die
+statische Regel erlaubt `webfetch` pauschal. Der Guard fragt deshalb jedes Ziel
+außerhalb von localhost nach: Ein Abruf, der Daten zu einem fremden Host
+trägt, läuft nie ohne Rückfrage. Lokale Adressen (localhost, 127.0.0.0/8, ::1)
+bleiben erlaubt, ein `deny` der statischen Regeln wird nie angefasst, und die
+Adresse selbst landet nie im Log, weil sie Token in der Abfrage tragen kann.
+
 Nicht jedes Repositorium mit „clef" oder „jev" im Namen funktioniert. Geprüft
 am 20.11.2026:
 
