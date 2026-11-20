@@ -1722,6 +1722,29 @@ const warmupChecks = []
   const noRetry = await warmup(cfgChat)
   warmupChecks.push(["anderer Netzfehler wird nicht wiederholt", noRetry.ok === false && calls === 1])
 
+  // Node legt den Code je nach Fehlerart tiefer ab (cause.cause, cause.errors).
+  // Am 20.11.2026 brach der Aufwaermlauf deshalb nach 0 ms ab, ohne einen
+  // zweiten Versuch.
+  calls = 0
+  globalThis.fetch = async () => {
+    calls++
+    if (calls === 1) {
+      const inner = Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" })
+      throw Object.assign(new TypeError("fetch failed"), { cause: new AggregateError([inner], "all failed") })
+    }
+    return { ok: true, arrayBuffer: async () => new ArrayBuffer(0), json: async () => ({}) }
+  }
+  const aggregate = await warmup(cfgChat)
+  warmupChecks.push(["AggregateError mit geschlossenem Port wird wiederholt", aggregate.ok === true && calls === 2])
+
+  calls = 0
+  globalThis.fetch = async () => {
+    calls++
+    throw Object.assign(new TypeError("fetch failed"), { cause: new Error("socket closed") })
+  }
+  const withCause = await warmup(cfgChat)
+  warmupChecks.push(["Fehlerursache steht im Grund", withCause.ok === false && /socket closed/.test(String(withCause.reason))])
+
   globalThis.fetch = realFetch2
 }
 for (const [name, ok] of warmupChecks) {

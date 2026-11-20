@@ -17,7 +17,10 @@ schützt **nicht** gegen:
 - einen Befehl, der als lesend erkannt wird, aber über einen Umweg schreibt,
 - ein manipuliertes Modell, das einen Graubereich freigibt,
 - einen Angreifer mit Schreibrechten auf das Plugin oder die Konfiguration,
-- Datenabfluss durch ein Werkzeug, das der Guard nicht sieht.
+- Datenabfluss durch ein Werkzeug, das der Guard nicht sieht,
+- Prompt-Injection in Werkzeugergebnissen. Die Grenz-Markierung `[ud-…]` um
+  MCP-Antworten und `execute`-Ergebnisse ist ein Hinweis an das Modell, keine
+  Grenze.
 
 Fehler führen bewusst zur Rückfrage, nicht zur Freigabe (`fail closed`). Ein
 `deny` der statischen Regeln wird nie überschrieben.
@@ -38,6 +41,12 @@ Freigabefenster nicht lesbar und wird reflexhaft bestätigt. Ein
 Größenlimit ist weiterhin **kein Fund**; die Begründung im Protokoll lautet
 `unpruefbar`, nicht `destruktiv`. Andere Fehler (Zeitüberschreitung, anderer
 HTTP-Fehler) bleiben `ask`.
+
+**Webabrufe (seit 20.11.2026):** Der Code-Mode-Interpreter darf jede Adresse
+abrufen, und die statische Regel erlaubt `webfetch` pauschal. Der Guard fragt
+deshalb jedes Ziel außerhalb von localhost nach. Das ist eine Rückfrage, keine
+Grenze: Wer sie bestätigt, gibt den Abruf frei. Lokale Adressen laufen ohne
+Rückfrage; ein `deny` der statischen Regeln wird nie überschrieben.
 
 ## Grenzen der Audit-Kette
 
