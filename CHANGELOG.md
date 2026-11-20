@@ -141,6 +141,17 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **`deploy.ps1` ergänzt fehlende Schlüssel (20.11.2026):** `Update-RuntimeConfig`
+  gleicht die Laufzeitkonfiguration mit `shell-reviewer.config.example.json` ab:
+  fehlende Schlüssel werden ergänzt, vorhandene Werte bleiben unangetastet. Neue
+  Parameter `-ShellThreshold` und `-ResultShield` setzen die beiden bewusst
+  kalibrierten Werte ausdrücklich; ohne Angabe bleibt der vorhandene Wert.
+  `-Check` ändert weiterhin nichts. `ConvertTo-Json` schreibt die Datei neu,
+  deshalb ist die Schlüsselreihenfolge danach alphabetisch statt thematisch.
+- **Compaction (20.11.2026 / 19:42):** `COMPACTIONS.md` hält Deny-Limits,
+  G0/G1, die Kleinschreibung `[ud-`, den Deploy-Weg für die Laufzeitdatei und
+  das offene Hindernis fest (OpenCode hat das Plugin nach dem Deploy nicht neu
+  geladen, Live-Beleg für G1 fehlt).
 - **Schalter in der Konfigurationsdatei (20.11.2026):** `reviewer.js` liest
   `resultShield`, `denyLimitConsecutive`, `denyLimitRecent` und
   `denyLimitWindow` aus `shell-reviewer.config.json`; `sanitizeSwitches()`

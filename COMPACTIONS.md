@@ -2896,3 +2896,74 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
   `OBSCURED_QUESTION`, `SHELL_AXES`, `shellThreshold: 0.65`.
 - `staging/probe-axis-table.mjs`, `staging/probe-spread.mjs`,
   `staging/probe-four-axes.mjs`: Messhilfen, nicht versioniert.
+
+
+=============== Compaction 20.11.2026 / 19:42 ================
+## Objective
+- **Current:** Branch `welle-3-deny-limits` mit Deny-Limits, Grenz-Markierung
+  und Konfigurationsweg; Commit der `deploy.ps1`-Erweiterung steht aus.
+- **Completed:** Deny-Limits (a067b04), G0/G1 (dc1e98b), Kleinschreibung
+  `[ud-` (ced1ce2), Schalter in der Konfiguration (c7326ca).
+
+## Important Details
+- **Deny-Limits:** Drei Rueckfragen in Folge oder zehn in den letzten fuenfzig
+  ergeben `deny`; Zaehler je Sitzung im `finally` des `evaluate`-Hooks, Reset
+  bei `session.execution.started`. Gezaehlt wird jede `ask`, nicht nur die des
+  Modells (Abweichung vom Codex-Vorbild, begruendet). Schwellen in
+  `shell-reviewer.config.json` oder per `PERMISSION_GUARD_DENY_*`.
+- **G0:** `Tool.Result` ist `{ output?, content?: string | Content[], metadata? }`;
+  `execute.after` bekommt `result` veraenderbar, der Callback gibt `void`
+  zurueck - die Aenderung erfolgt per Mutation.
+- **G1:** Textinhalte werden zu `[ud-<id>]...[/ud-<id>]`; vorhandene
+  `[ud-`/`[/ud-` im Text werden zu `[ud_`/`[/ud_` entschaerft;
+  `session.hook("context")` ergaenzt eine Systemanweisung. Dateien bleiben
+  unberuehrt. Schalter `resultShield` in der Konfiguration.
+- **Schreibweise:** `ud` klein, weil es "untrusted data" heisst und nicht mit
+  der Quantisierungsbezeichnung `UD` (Unsloth Dynamic) verwechselt werden soll.
+  `neutraliseMarkers` entschaerft beide Schreibweisen.
+- **deploy.ps1:** `Update-RuntimeConfig` ergaenzt fehlende Schluessel aus der
+  Vorlage; `-ShellThreshold` und `-ResultShield` setzen die kalibrierten Werte
+  ausdruecklich. `-Check` aendert nichts. Nebenwirkung: `ConvertTo-Json`
+  sortiert die Schluessel alphabetisch.
+- **Hindernis:** OpenCode hat das Plugin nach dem Deploy nicht neu geladen
+  (letzter `setup`-Eintrag 17:58, Deploy danach). Der Live-Beleg fuer G1 fehlt
+  deshalb; er braucht einen Neustart von OpenCode.
+- **Grenze:** Die Laufzeitdatei liegt unter
+  `~/.config/opencode/plugins/permission-guard/` und damit ausserhalb der
+  Schreibgrenze des Guards (`roots` = Projekt und `%TEMP%\opencode`). Nur
+  `deploy.ps1` kommt dorthin.
+
+## Work State
+- **Completed:** `index.js` (Deny-Limits, shieldResult, session-hook),
+  `reviewer.js` (sanitizeSwitches, DEFAULTS), `deploy.ps1`,
+  `shell-reviewer.config.example.json`, `test.mjs` 965/965,
+  `test-index.mjs` 35/35, beide READMEs, `PLANUNG.md`, `CHANGELOG.md`,
+  ADR-0002.
+- **Active:** Commit der `deploy.ps1`-Erweiterung und der Doku.
+- **Blocked:** Live-Spike G1 (OpenCode-Neustart noetig).
+
+## Next Move
+1. Commit, Push, PR fuer `welle-3-deny-limits`, Merge.
+2. OpenCode neu starten, dann Live-Spike: `deepwiki_read_wiki_structure`
+   aufrufen und pruefen, ob im Guard-Log `shield annotate ...` steht und das
+   Ergebnis `[ud-...]` traegt.
+3. Danach G2 (statische Injection-Muster) oder die Decision-Modelle aus der
+   ggml-Collection messen (Vormerk in `PLANUNG.md`).
+
+## Relevant Files
+- `index.js`: Deny-Limits (`noteDecision`, `applyDenyLimit`), Grenz-Markierung
+  (`shieldResult`, `neutraliseMarkers`, `SHIELD_NOTICE`), `session.hook`.
+- `reviewer.js`: `sanitizeSwitches`, DEFAULTS mit `resultShield` und den drei
+  Deny-Limit-Schwellen, `shellThreshold: 0.65`.
+- `deploy.ps1`: `Update-RuntimeConfig`, Parameter `-ShellThreshold`,
+  `-ResultShield`.
+- `test-index.mjs`: 35/35, inklusive vier Faelle fuer die Markierung.
+- `docs/adr/0002-reviewer-und-sandbox.md`: Nachtraege zu Stufe 3, Deny-Limits,
+  G0/G1.
+
+## Important Context
+- Der Live-Beleg fuer G1 fehlt; die Markierung ist nur im Trockentest belegt.
+- Der Reviewer laeuft auf Port 8080 (Clef-Flash Q4_K_M); der Watchdog-Task
+  steht auf Ready.
+- `staging/` ist ignoriert und enthaelt die Messhilfen (nicht versioniert).
+- Untracked bleiben: zwei Screenshots unter `docs/` und `review/`.

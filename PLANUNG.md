@@ -1388,3 +1388,29 @@ nennt die neuen Felder und ihre Bänder.
 `~/.config/opencode/plugins/permission-guard/` und damit **außerhalb** der
 Schreibgrenze des Guards (Projekt und Temp). Sie kann nicht aus einer
 Sitzung heraus geändert werden; das ist Absicht.
+
+## Nachtrag 20.11.2026: Deploy zieht die Laufzeitdatei nach
+
+**Anlass.** Die Laufzeitdatei wird vom Deploy nicht überschrieben. Jeder neue
+Schalter musste deshalb von Hand nachgetragen werden; beim ersten Deploy fehlten
+`resultShield` und die drei Deny-Limit-Schlüssel.
+
+**Umgesetzt.** `deploy.ps1` hat `Update-RuntimeConfig`: fehlende Schlüssel
+werden aus `shell-reviewer.config.example.json` ergänzt, vorhandene Werte
+bleiben. Zwei Parameter setzen die bewusst kalibrierten Werte ausdrücklich:
+`-ShellThreshold` und `-ResultShield`; ohne Angabe bleibt der vorhandene Wert.
+`-Check` ändert weiterhin nichts.
+
+**Belegt.** Deploy mit `-ShellThreshold 0.65 -ResultShield annotate`: Die
+Laufzeitdatei hat danach `shellThreshold: 0.65`, `resultShield: "annotate"` und
+die drei Deny-Limit-Schlüssel; `gitShadow: "shadow"` und `mcpThreshold: 0.7`
+blieben unverändert. Alle kopierten Dateien „identisch".
+
+**Nebenwirkung.** `ConvertTo-Json` schreibt die Datei neu; die Reihenfolge der
+Schlüssel ist danach alphabetisch statt thematisch. Inhaltlich gleich.
+
+**Offen.** Der Live-Versuch zu G1 steht aus: OpenCode hat das Plugin nach dem
+Deploy nicht neu geladen (letzter `setup`-Eintrag 17:58, Deploy danach). Nach
+einem Neustart von OpenCode ist zu prüfen, ob im Guard-Log
+`shield annotate tool=… parts=…` erscheint und ob das Ergebnis die Markierung
+`[ud-…]` trägt.

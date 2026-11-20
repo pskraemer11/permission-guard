@@ -1125,12 +1125,15 @@ nacheinander; parallele Slots wurden am 20.11.2026 gemessen und brachten nichts
 letzten fünfzig werden zu `deny` mit einer Meldung, die die Zahl nennt. Ein
 `deny` ist keine Rückfrage und setzt die Folge zurück, ein `allow` ebenso. Der
 Zähler lebt je Sitzung im Hook-State und wird bei jedem
-`session.execution.started` geleert, das Limit gilt also je Turn. Verstellbar
-über `PERMISSION_GUARD_DENY_CONSECUTIVE`, `PERMISSION_GUARD_DENY_RECENT` und
+`session.execution.started` geleert, das Limit gilt also je Turn. Verstellbar in
+`shell-reviewer.config.json` (`denyLimitConsecutive`, `denyLimitRecent`,
+`denyLimitWindow`) oder über die Umgebungsvariablen
+`PERMISSION_GUARD_DENY_CONSECUTIVE`, `PERMISSION_GUARD_DENY_RECENT` und
 `PERMISSION_GUARD_DENY_WINDOW`.
 
 **Ergebnisgrenze (seit 20.11.2026, standardmäßig aus).** Mit
-`PERMISSION_GUARD_RESULT_SHIELD=annotate` werden Textinhalte von
+`resultShield: "annotate"` in `shell-reviewer.config.json` (oder
+`PERMISSION_GUARD_RESULT_SHIELD=annotate`) werden Textinhalte von
 MCP-Ergebnissen in `[ud-<id>]…[/ud-<id>]` eingeschlossen, vorhandene
 `[ud-`-Marker im Text zu `[ud_` entschärft, und eine Systemanweisung sagt dem
 Modell, dass alles innerhalb dieser Marker Daten sind, nie eine Anweisung.

@@ -646,6 +646,17 @@ zurück).
 den Aufruf; ob der Agent danach abbricht, entscheidet er selbst. Ein Abbruch
 wäre ein eigener API-Weg und ist nicht gemessen.
 
+*Nachtrag 20.11.2026 (Konfiguration).* Der Schalter liegt jetzt in
+`shell-reviewer.config.json` (`resultShield`), nicht nur in einer
+Umgebungsvariable; `deploy.ps1 -ResultShield annotate` setzt ihn. Die
+Laufzeitdatei liegt außerhalb der Schreibgrenze des Guards und wird nur über
+`deploy.ps1` geändert.
+
+*Offen.* Der Live-Beleg fehlt: Ob OpenCode das mutierte Ergebnis an das Modell
+weiterreicht, ist nicht geprüft. Nach dem Deploy hatte OpenCode das Plugin
+nicht neu geladen (letzter `setup`-Eintrag 17:58, Deploy danach); ein Neustart
+und ein echter MCP-Aufruf stehen aus.
+
 ---
 
 ## Nachtrag 20.11.2026: Stufe 3 umgesetzt (vier Achsen)
