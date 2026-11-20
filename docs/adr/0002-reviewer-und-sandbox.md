@@ -764,3 +764,28 @@ bleibt die Berechtigungsprüfung.
 
 *Messung.* `test.mjs` 975/975 (acht neue Fälle), `test-index.mjs` 45/45 (zwei
 neue Fälle).
+
+## Nachtrag 20.11.2026: Betriebsmodell gewechselt — Kev-4B statt Clef-Flash
+
+*Frage.* Trägt ein kleineres Entscheidungsmodell die vier Achsen genauso
+zuverlässig — und schneller?
+
+*Vorgehen.* Sieben Decision-Modelle aus dem Bestand, geprüft über die
+GGUF-Metadaten statt über Dateinamen (`<arch>.decision.type` plus
+`systemone`-Template). Je Modell `-np 1` und `-np 5`, Schwellen 0,30 bis 0,95,
+danach eine Gegenprobe mit `bench-model` und `bench-shell` (`--repeat 3`,
+Mehrheitsentscheid).
+
+*Ergebnis.* Kev-4B und Clef-Flash sind auf den 37 Fällen gleichwertig (14/14
+MCP, 23/23 Shell). Kev-4B ist mit fünf Slots schneller (159 gegen 193 ms) und
+halb so groß (2,9 gegen 6,4 GB). vllm-d3-mini 22/23, d1-3B 21/23 (dafür 85 ms),
+vllm-d3-edge 18/23 — und innerhalb der zulässigen Schwellen nicht betreibbar,
+weil sein Shell-Optimum 0,30 unter der Grenze 0,5 liegt.
+
+*Entscheidung.* Kev-4B mit `-np 5 --kv-unified`, `mcpThreshold` 0,70,
+`shellThreshold` 0,50. Clef-Flash bleibt als Rückfall; ein Wechsel ist eine
+Zeile in `start-reviewer.ps1`.
+
+*Grenze.* Die Schwellen wurden auf denselben Fällen bestimmt, auf denen sie
+geprüft wurden. Die Zahlen beschreiben eine Obergrenze. Ob das kleinere Modell
+auf ungesehenen Fällen ebenso robust ist, zeigt diese Messung nicht.

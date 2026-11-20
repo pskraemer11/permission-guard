@@ -3073,3 +3073,55 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
 - `ask` wirkt nur bei abgeschalteter Automatik; mit „Berechtigungen automatisch
   akzeptieren" war die webfetch-Regel wirkungslos (live erlebt).
 - Untracked bleiben: zwei Screenshots, ein JPG und `review/`.
+
+
+================ Compaction 20.11.2026 / 23:22 ================
+## Objective
+- **Current:** Kev-4B ist das Betriebsmodell (Vorgaben in `start-reviewer.ps1`,
+  `shellThreshold` 0,50). Noch nicht committet.
+- **Completed:** Messung aller sieben Decision-Modelle mit `-np 1`/`-np 5`,
+  Gegenprobe mit Mehrheitsentscheid, Umbau der Vorgaben, Doku.
+
+## Important Details
+- **Entscheidung:** Kev-4B, `-np 5`, `--kv-unified`, `mcpThreshold` 0,70,
+  `shellThreshold` 0,50. Clef-Flash bleibt als Rückfall (eine Zeile
+  `-ModelPath`).
+- **Beleg:** Gegenprobe `bench-model`/`bench-shell --repeat 3`: Kev-4B 14/14 und
+  23/23 bei 159 ms, Clef-Flash 14/14 und 23/23 bei 193 ms, vllm-d3-mini 14/14
+  und 22/23 bei 205 ms, d1-3B 13/14 und 21/23 bei 85 ms, vllm-d3-edge 13/14 und
+  18/23 bei 43 ms.
+- **`-np 5` wirkt nur bei Prefix-Teilung:** Kev 236→159 ms, lev 245→207 ms,
+  Clef unverändert (194→193), vllm-d3 schlechter (208→266).
+- **vllm-d3-edge ist nicht betreibbar:** Shell-Optimum 0,30 liegt unter
+  `THRESHOLD_BOUNDS` (0,5); bei 0,50 sechs Fehlverweigerungen, bei 0,70 auf MCP
+  7/14 (Fehlfreigaben).
+- **`confidence`:** nur für `choice`/`score`, die Achsen sind `noul`. Half nur
+  bei vllm-d3-edge; bei den übrigen ohne Wirkung.
+
+## Work State
+- Geändert: `start-reviewer.ps1` (Vorgabe Kev-4B, `-Np 5`, `--kv-unified`
+  automatisch), `reviewer.js` (`confidence`), `shell-reviewer.config.example.json`,
+  `README.md`, `README_de.md`, `CHANGELOG.md`, `PLANUNG.md`, `COMPACTIONS.md`.
+- Messhilfen unter `staging/` (nicht versioniert): `gguf-scan.mjs`, `measure.mjs`,
+  `measure-all.ps1`, `analyze-measure.mjs`, `gegenprobe.ps1`, `run-bench.mjs`.
+- Nicht gemacht: Prüfläufe, Deploy mit `-ShellThreshold 0.50`, Commit.
+
+## Next Move
+1. Sechs Prüfungen (`test.mjs`, `test-index.mjs`, `test-wiring.mjs`,
+   `bench-mcp.mjs`, `pytest`, `ruff`, `pyright`).
+2. `deploy.ps1 -ShellThreshold 0.50`, dann OpenCode neu starten und prüfen:
+   `/v1/models` nennt Kev-4B, Guard-Log zeigt `setup: Aufwaermlauf ok`.
+3. Commit; Branch/PR/Merge durch den Nutzer.
+
+## Relevant Files
+- `start-reviewer.ps1`: `$ModelPath` (Kev-4B), `$Np` (5), `--kv-unified` bei
+  `Np > 1`, Wartezeit 60 s.
+- `reviewer.js`: `confidence` in `systemoneVerdict` und `requestSystemone`.
+- `staging/measure-*.json`, `staging/gegenprobe-*.txt`: Rohdaten der Messung.
+
+## Important Context
+- Schwellen wurden auf denselben 37 Fällen bestimmt, auf denen sie geprüft
+  wurden — Obergrenze, nicht Alltag.
+- Nur ein Modell im VRAM; während der Messung waren Reviewer und Watchdog-Tasks
+  deaktiviert, danach wieder aktiv.
+- Untracked bleiben: zwei Screenshots, ein JPG und `review/`.

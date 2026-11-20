@@ -1612,6 +1612,8 @@ const systemoneChecks = []
   systemoneChecks.push(["Textwert wird gelesen", systemoneVerdict("0.8", 0.7).decision === "allow"])
   systemoneChecks.push(["hoehere Schwelle greift", systemoneVerdict(0.85, 0.9).decision === "ask"])
   systemoneChecks.push(["Grund nennt die Wahrscheinlichkeit", systemoneVerdict(0.9, 0.7).reason.includes("0.900")])
+  systemoneChecks.push(["Konfidenz wird durchgereicht", systemoneVerdict(0.9, 0.7, 0.42).confidence === 0.42])
+  systemoneChecks.push(["fehlende Konfidenz bleibt null", systemoneVerdict(0.9, 0.7).confidence === null])
 }
 for (const [name, ok] of systemoneChecks) {
   if (!ok) failed++
