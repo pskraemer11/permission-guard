@@ -38,8 +38,16 @@ try {
         return ($out | Out-String).Trim()
     }
 
-    $dirty = Invoke-Git @('status', '--porcelain')
+    # Nur verfolgte Aenderungen blockieren. Unversionierte Dateien (Screenshots,
+    # review/) bleiben unberuehrt und werden nur genannt - sie sind nicht Teil
+    # des Commits, und der Commit ist das, was hier ausgeliefert wird.
+    $dirty = Invoke-Git @('status', '--porcelain', '--untracked-files=no')
     if ($dirty) { throw "Arbeitsbaum ist nicht sauber:`n$dirty" }
+    $untracked = Invoke-Git @('ls-files', '--others', '--exclude-standard')
+    if ($untracked) {
+        Write-Host 'Hinweis: unversionierte Dateien bleiben unberuehrt:'
+        $untracked -split "`n" | ForEach-Object { Write-Host "  $_" }
+    }
 
     $current = Invoke-Git @('rev-parse', '--abbrev-ref', 'HEAD')
     if ($current -ne 'main') { throw "Aktueller Branch ist '$current', erwartet 'main'." }
