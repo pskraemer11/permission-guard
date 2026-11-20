@@ -8,6 +8,14 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **Grenz-Markierung für MCP-Ergebnisse (20.11.2026, G1):** `index.js` umschließt
+  im `execute.after`-Hook die Textinhalte von MCP-Ergebnissen mit
+  `[UD-<id>]…[/UD-<id>]`, entschärft vorhandene `[UD-`-Marker im Text zu
+  `[UD_` (Spoofing-Schutz) und ergänzt über `session.hook("context")` eine
+  Systemanweisung, dass der Inhalt Daten und keine Anweisung ist.
+  Dateiinhalte bleiben unberührt. Schalter
+  `PERMISSION_GUARD_RESULT_SHIELD` mit `off` (Standard), `annotate` und `scan`.
+  `test-index.mjs` 35/35 (vier neue Fälle).
 - **Deny-Limits (20.11.2026):** `index.js` zählt je Sitzung die Rückfragen.
   Drei in Folge oder zehn in den letzten fünfzig werden zu `deny` mit einer
   Meldung, die die Zahl nennt; `allow` und `deny` setzen die Folge zurück. Der

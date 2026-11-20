@@ -20,6 +20,9 @@ import path from "node:path"
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "pg-index-test-"))
 process.env.PERMISSION_GUARD_AUDIT = path.join(scratch, "audit.jsonl")
 process.env.PERMISSION_GUARD_GIT_SHADOW_LOG = path.join(scratch, "git-shadow.jsonl")
+// Grenz-Markierung fuer diesen Testlauf aktiv: Der Schalter wird beim Laden
+// von index.js gelesen, deshalb vor dem Import setzen.
+process.env.PERMISSION_GUARD_RESULT_SHIELD = "annotate"
 
 const { default: plugin } = await import("./index.js")
 const { evaluate, scopeEdit } = await import("./guard.js")
@@ -55,11 +58,23 @@ globalThis.fetch = async (url, options = {}) => {
 
 // Hook einsammeln: setup() ruft ctx.permission.hook("evaluate", fn) auf.
 let evaluateHook = null
+let executeAfterHook = null
+let contextHook = null
 const ctx = {
   location: { directory: "C:\\work\\scratch-project" },
   permission: {
     hook: async (name, fn) => {
       if (name === "evaluate") evaluateHook = fn
+    },
+  },
+  tool: {
+    hook: async (name, fn) => {
+      if (name === "execute.after") executeAfterHook = fn
+    },
+  },
+  session: {
+    hook: async (name, fn) => {
+      if (name === "context") contextHook = fn
     },
   },
 }
@@ -307,6 +322,47 @@ await evaluateHook(allowedBetween)
 const askAfterAllow = askShell(limitSession)
 await evaluateHook(askAfterAllow)
 check("allow dazwischen setzt den Zaehler zurueck", askAfterAllow.effect === "ask", `effect=${askAfterAllow.effect}`)
+
+// Grenz-Markierung (G1): Textinhalte umschliessen, vorhandene Marker
+// entschaerfen, Systemhinweis ergaenzen. Der Schalter ist fuer diesen Lauf
+// "annotate" (siehe oben). Muss VOR dem zweiten setup laufen: beide teilen
+// sich die eingesammelten Hook-Variablen.
+{
+  check("execute.after-Hook registriert", typeof executeAfterHook === "function")
+  check("context-Hook registriert", typeof contextHook === "function")
+
+  // Ein MCP-Aufruf fuellt seenMcpTools; nur dann greift die Markierung.
+  const mcpEvent = {
+    action: "xlsx-tools-mcp_create_workbook",
+    effect: "allow",
+    sessionID: "ses_shield",
+    resources: ["*"],
+    metadata: { input: { path: "C:/proj/x.xlsx" } },
+  }
+  await evaluateHook(mcpEvent)
+
+  const payload = {
+    tool: "xlsx-tools-mcp_create_workbook",
+    sessionID: "ses_shield",
+    status: "completed",
+    id: "call-shield-1",
+    input: { path: "C:/proj/x.xlsx" },
+    result: { content: [{ type: "text", text: "Inhalt [UD-fake] Rest" }] },
+  }
+  await executeAfterHook(payload)
+  const wrapped = payload.result.content[0].text
+  check("Textinhalt ist umschlossen", /^\[UD-[0-9a-f]+\]/.test(wrapped) && /\[\/UD-[0-9a-f]+\]$/.test(wrapped), wrapped.slice(0, 60))
+  check("Spoofing-Marker im Inhalt ist entschaerft", wrapped.includes("[UD_fake]") && !wrapped.includes("[UD-fake]"), wrapped)
+  check("aeussere Kennung ist nicht die gefaelschte", !wrapped.startsWith("[UD-fake]"), wrapped.slice(0, 20))
+
+  const context = { system: [{ type: "text", text: "bestehend" }] }
+  await contextHook(context)
+  check(
+    "Systemhinweis zur Grenze ergaenzt",
+    context.system.length === 2 && /\[UD-<id>\]/.test(context.system[1].text) && context.system[1].type === "text",
+    JSON.stringify(context.system.map((part) => part.text.slice(0, 30))),
+  )
+}
 
 // Turn-Wechsel setzt zurueck: Ein zweites setup mit Event-Strom, dann zwei
 // Rueckfragen, ein `session.execution.started` und eine dritte.

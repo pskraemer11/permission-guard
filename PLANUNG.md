@@ -1332,3 +1332,39 @@ eigener API-Weg und ist nicht gemessen.
 **Messung.** `test-index.mjs` 29/29, davon sechs neue Fälle: dritte Rückfrage
 in Folge wird verweigert, Meldung nennt die Zahl, `allow` setzt zurück,
 Turn-Event setzt zurück.
+
+## Nachtrag 20.11.2026: G0/G1 umgesetzt (Grenz-Markierung)
+
+**G0 — Form des Ergebnisses.** `Tool.Result` ist
+`{ output?, content?: string | Content[], metadata? }`; `Content` ist
+`{ type: "text", text }` oder `{ type: "file", uri, mime, name? }`. Der
+`execute.after`-Hook bekommt `result` **veränderbar** (nicht `readonly`), der
+Callback gibt `void` zurück — die Änderung erfolgt also durch Mutation des
+übergebenen Objekts. Im Test belegt (`test-index.mjs`): Der Text ist nach dem
+Hook umschlossen, die Mutation bleibt am Objekt.
+
+**G1 — Grenz-Markierung.** `index.js`:
+
+- Textinhalte (`string` oder `{ type: "text" }`) werden zu
+  `[UD-<shortHash(id)>]…[/UD-<id>]`. Dateiinhalte (`type: "file"`) bleiben
+  unberührt.
+- Vorhandene `[UD-` und `[/UD-` im Text werden zu `[UD_` und `[/UD_`
+  entschärft, damit ein Werkzeug keine Grenze vortäuschen kann.
+- Über `session.hook("context")` wird eine Systemanweisung ergänzt: Inhalt
+  innerhalb der Marker ist Daten, keine Anweisung.
+- Schalter `PERMISSION_GUARD_RESULT_SHIELD`: `off` (Standard), `annotate`,
+  `scan` (zählt nur im Log). Wirkung nur auf Entscheidung des Nutzers (G4).
+
+**Belege.** `@opencode/schema/dist/tool.d.ts` (`Result`, `Content`),
+`@opencode/plugin/dist/promise/tool.d.ts` (`execute.after` mit veränderbarem
+`result`), `@opencode/ai/dist/schema/messages.d.ts` (`SystemPart`).
+
+**Messung.** `test-index.mjs` 35/35 (vier neue Fälle: umschlossen,
+Spoofing-Marker entschärft, äußere Kennung nicht die gefälschte,
+Systemhinweis ergänzt).
+
+**Nicht geprüft — der Live-Teil von G0.** Ob OpenCode das mutierte Ergebnis
+tatsächlich an das Modell weiterreicht, ist im Test **nicht** belegt; der Test
+zeigt nur, dass die Mutation am übergebenen Objekt bleibt. Dafür braucht es
+einen Deploy mit `PERMISSION_GUARD_RESULT_SHIELD=annotate` und einen echten
+MCP-Aufruf. Das steht aus.

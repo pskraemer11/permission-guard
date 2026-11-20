@@ -2815,6 +2815,44 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
    wrappen.
 3. Danach die Decision-Modelle aus der ggml-Collection messen (Vormerk).
 
+
+=============== Compaction 20.11.2026 / 18:26 ================
+## Objective
+- **Current:** G0/G1 (Grenz-Markierung fuer MCP-Ergebnisse) umgesetzt und im
+  Test belegt; Commit steht aus.
+- **Next:** Commit, dann Live-Spike mit Deploy (offene Frage aus G0).
+
+## Important Details
+- **G0-Form:** `Tool.Result` = `{ output?, content?: string | Content[],
+  metadata? }`; `Content` = `{ type: "text", text }` oder `{ type: "file",
+  uri, mime, name? }`. Der `execute.after`-Hook bekommt `result` veraenderbar,
+  der Callback gibt `void` zurueck - die Aenderung erfolgt per Mutation.
+- **G1:** Textinhalte werden zu `[UD-<shortHash(id)>]...[/UD-<id>]`;
+  vorhandene `[UD-`/`[/UD-` im Text werden zu `[UD_`/`[/UD_` entschaerft;
+  `session.hook("context")` ergaenzt eine Systemanweisung. Dateien bleiben
+  unberuehrt. Schalter `PERMISSION_GUARD_RESULT_SHIELD` = off (Standard) |
+  annotate | scan.
+- **Testfalle:** Zwei `plugin.setup`-Aufrufe teilen sich die eingesammelten
+  Hook-Variablen. Der Shield-Test muss VOR dem Turn-Reset-Test laufen, sonst
+  zeigt `executeAfterHook` auf das zweite setup mit leerem `seenMcpTools`.
+- **Nicht belegt:** Ob OpenCode das mutierte Ergebnis an das Modell
+  weiterreicht. Der Test zeigt nur die Mutation am Objekt. Dafuer braucht es
+  Deploy mit `annotate` und einen echten MCP-Aufruf.
+- **Messung:** `test-index.mjs` 35/35 (vier neue Faelle).
+
+## Work State
+- **Completed:** `index.js` (shieldResult, neutraliseMarkers, SHIELD_NOTICE,
+  session-hook), `test-index.mjs`, beide READMEs, `PLANUNG.md`,
+  `CHANGELOG.md`.
+- **Active:** Commit.
+- **Blocked:** keiner.
+
+## Next Move
+1. Commit.
+2. Live-Spike: deployen mit `PERMISSION_GUARD_RESULT_SHIELD=annotate`, einen
+   harmlosen MCP-Aufruf machen und pruefen, ob der Wrapper im Ergebnis steht.
+3. Danach G2 (statische Injection-Muster) oder die Decision-Modelle messen.
+
 ## Relevant Files
 - `reviewer.js`: `SENSITIVE_QUESTION`, `UNTRUSTED_QUESTION`,
   `OBSCURED_QUESTION`, `SHELL_AXES`, `shellThreshold: 0.65`.

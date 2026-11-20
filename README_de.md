@@ -1129,6 +1129,15 @@ Zähler lebt je Sitzung im Hook-State und wird bei jedem
 über `PERMISSION_GUARD_DENY_CONSECUTIVE`, `PERMISSION_GUARD_DENY_RECENT` und
 `PERMISSION_GUARD_DENY_WINDOW`.
 
+**Ergebnisgrenze (seit 20.11.2026, standardmäßig aus).** Mit
+`PERMISSION_GUARD_RESULT_SHIELD=annotate` werden Textinhalte von
+MCP-Ergebnissen in `[UD-<id>]…[/UD-<id>]` eingeschlossen, vorhandene
+`[UD-`-Marker im Text zu `[UD_` entschärft, und eine Systemanweisung sagt dem
+Modell, dass alles innerhalb dieser Marker Daten sind, nie eine Anweisung.
+`scan` zählt die Teile nur im Log. Dateiinhalte werden nie angefasst. `off`
+(der Standard) lässt alles unverändert — der Schalter ist die Entscheidung des
+Nutzers.
+
 Nicht jedes Repositorium mit „clef" oder „jev" im Namen funktioniert. Geprüft
 am 20.11.2026:
 
