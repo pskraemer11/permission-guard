@@ -1,5 +1,5 @@
 // Verdrahtungstest fuer index.js (OpenCode-Plugin). Braucht @opencode/plugin
-// (devDependency): `npm install` vor dem ersten Lauf. Ausfuehren: node test-index.mjs
+// (devDependency): `npm install` vor dem ersten Lauf. Ausfuehren: node test/test-index.mjs
 //
 // Das Plugin wird mit einem Fake-ctx eingebunden; die Hook-Funktion wird
 // abgefangen und mit einem Shell-Ereignis aufgerufen. fetch ist eine Attrappe,
@@ -24,9 +24,9 @@ process.env.PERMISSION_GUARD_GIT_SHADOW_LOG = path.join(scratch, "git-shadow.jso
 // von index.js gelesen, deshalb vor dem Import setzen.
 process.env.PERMISSION_GUARD_RESULT_SHIELD = "annotate"
 
-const { default: plugin } = await import("./index.js")
-const { evaluate, scopeEdit } = await import("./guard.js")
-const { guardLogDir } = await import("./diagnostics.js")
+const { default: plugin } = await import("../src/index.js")
+const { evaluate, scopeEdit } = await import("../src/guard.js")
+const { guardLogDir } = await import("../src/diagnostics.js")
 
 let failed = 0
 const checks = []

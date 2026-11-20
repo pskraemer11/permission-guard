@@ -32,7 +32,10 @@ CODEX_TARGET=${PERMISSION_GUARD_CODEX_TARGET:-"$HOME/.codex/hooks"}
 
 # Quellen duerfen in Unterordnern liegen (scripts/); im Ziel liegt jede Datei
 # flach, weil der Plugin-Lader index.js dort erwartet.
-FILES="guard.js index.js audit.js diagnostics.js reviewer.js shadow.js git-shadow-report.mjs test.mjs README.md README_de.md scripts/start-reviewer.ps1 smoke-reviewer.mjs scripts/bench-reviewer.ps1 scripts/bench-quality.ps1 shared-cases.jsonl"
+# Ins Ziel kommt nur, was dort laeuft: die Module und die Startskripte. Tests,
+# Fixtures und Messwerkzeuge bleiben im Repo - sie liegen unter test/ und
+# importieren ../src/, was im flachen Ziel nicht aufloest.
+FILES="src/guard.js src/index.js src/audit.js src/diagnostics.js src/reviewer.js src/shadow.js src/git-shadow-report.mjs README.md README_de.md scripts/start-reviewer.ps1 scripts/bench-reviewer.ps1 scripts/bench-quality.ps1"
 CODEX_FILES="codex_guard.py"
 CONFIG_NAME="shell-reviewer.config.json"
 CONFIG_EXAMPLE="shell-reviewer.config.example.json"

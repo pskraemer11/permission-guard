@@ -1965,7 +1965,7 @@ function approvedRuffBootstrapTargets(statement, resolved, opts, base) {
 // umkehrbar, und ein Ziel mit Platzhalter laesst nicht erkennen, was genau
 // verloren geht. Solche Aufrufe werden rueckgefragt statt freigegeben.
 // Bewusst ohne Dateisystemzugriff: guard.js bleibt reine Funktion, damit
-// node test.mjs den Klassifizierer ohne Umgebung testen kann. Statt `stat`
+// node test/test.mjs den Klassifizierer ohne Umgebung testen kann. Statt `stat`
 // gilt deshalb "Ziel ohne Endung ist ein Verzeichnis" - ein Punkt an erster
 // Stelle (.git) zaehlt nicht als Endung.
 const DELETE_CMDLETS = new Set([
@@ -2920,8 +2920,12 @@ function classifyNode(s, ctx) {
   if (/(^|[\\/])permission-guard$/i.test(base)) roots.push(base)
   for (const root of roots) {
     if (!isUnder(abs, root)) continue
-    const tail = abs.slice(root.length + 1)
-    if (NODE_SELF_SCRIPTS.has(tail)) return "read"
+    // Seit dem Umzug in src/ und test/ steht der Ordner im Pfad. Nur diese
+    // beiden Ebenen werden abgezogen; tiefer verschachtelte Skripte bleiben
+    // Rueckfrage, ebenso Fremdnamen im selben Ordner.
+    const tail = abs.slice(root.length + 1).replace(/\\/g, "/")
+    const name = tail.startsWith("src/") || tail.startsWith("test/") ? tail.slice(tail.indexOf("/") + 1) : tail
+    if (NODE_SELF_SCRIPTS.has(name)) return "read"
   }
   return "unknown"
 }

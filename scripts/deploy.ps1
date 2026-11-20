@@ -58,27 +58,25 @@ param(
 $ErrorActionPreference = "Stop"
 
 $source = Split-Path -Parent $PSScriptRoot
+# Ins Ziel kommt nur, was dort laeuft: die Module, die Berichtswerkzeuge und die
+# Startskripte. Tests, Fixtures und Messwerkzeuge bleiben im Repo - sie liegen
+# unter test/ und importieren ../src/, was im flachen Ziel nicht aufloest.
 $files = @(
-    "guard.js",
-    "index.js",
-    "reviewer.js",
-    "audit.js",
-    "diagnostics.js",
-    "shadow.js",
-    "git-shadow-report.mjs",
-    "verify-audit.mjs",
-    "mcp-report.mjs",
-    "bench-model.mjs",
-    "mcp-model-cases.jsonl",
-    "shared-cases.jsonl",
-    "test.mjs",
+    "src/guard.js",
+    "src/index.js",
+    "src/reviewer.js",
+    "src/audit.js",
+    "src/diagnostics.js",
+    "src/shadow.js",
+    "src/git-shadow-report.mjs",
+    "src/verify-audit.mjs",
+    "src/mcp-report.mjs",
+    "src/stats.mjs",
     "README.md",
     "README_de.md",
     "scripts/start-reviewer.ps1",
-    "smoke-reviewer.mjs",
     "scripts/bench-reviewer.ps1",
-    "scripts/bench-quality.ps1",
-    "stats.mjs"
+    "scripts/bench-quality.ps1"
 )
 # Der Codex-Guard ist ein einzelnes Programm; sein Hook in ~/.codex/hooks.json
 # ruft es ueber %USERPROFILE% auf.
@@ -184,7 +182,7 @@ function Update-RuntimeConfig {
 # 1. Tests: nur deployen, was gruen ist.
 if (-not $Check -and -not $SkipTests) {
     Write-Host "== Tests =="
-    & node (Join-Path $source "test.mjs")
+    & node (Join-Path $source "test\test.mjs")
     if ($LASTEXITCODE -ne 0) {
         throw "Tests fehlgeschlagen (Exitcode $LASTEXITCODE) - kein Deploy."
     }

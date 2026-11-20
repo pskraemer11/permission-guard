@@ -6,7 +6,7 @@
 // geprueft, dass der Shim nicht aufgerufen wurde. Eine erlaubte Gegenprobe
 // (`git status`) beweist, dass der Shim selbst funktioniert.
 //
-// Ausfuehren mit: node test-wiring.mjs
+// Ausfuehren mit: node test/test-wiring.mjs
 
 import { spawnSync } from "node:child_process"
 import {
@@ -20,7 +20,7 @@ import {
 } from "node:fs"
 import { tmpdir } from "node:os"
 import { delimiter, join } from "node:path"
-import { evaluate } from "./guard.js"
+import { evaluate } from "../src/guard.js"
 
 const root = mkdtempSync(join(tmpdir(), "pg-wiring-"))
 const bin = join(root, "bin")

@@ -4,9 +4,9 @@
 // Es werden nur Feldnamen, Zaehler und Hashes gelesen; Befehlstexte enthaelt
 // die Datei ohnehin nicht.
 //
-//   node git-shadow-report.mjs
-//   node git-shadow-report.mjs --json
-//   node git-shadow-report.mjs --file=<pfad>
+//   node src/git-shadow-report.mjs
+//   node src/git-shadow-report.mjs --json
+//   node src/git-shadow-report.mjs --file=<pfad>
 
 import { readFileSync } from "node:fs"
 import { pathToFileURL } from "node:url"

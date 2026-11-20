@@ -53,7 +53,7 @@ Rückfrage; ein `deny` der statischen Regeln wird nie überschrieben.
 
 ## Grenzen der Audit-Kette
 
-`audit.js` schreibt eine SHA256-Kette über MCP-Entscheidungen. Sie erkennt
+`src/audit.js` schreibt eine SHA256-Kette über MCP-Entscheidungen. Sie erkennt
 Veränderung und Umordnung, aber **kein Abschneiden am Ende** ohne externen
 Anker. Sie ist keine Signatur. Wer Schreibrechte auf die Datei hat, kann sie
 neu aufbauen.

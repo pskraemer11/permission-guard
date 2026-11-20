@@ -5,12 +5,12 @@
 // Zeilenformat: <ISO-Zeit> <allow|ask|deny>[ (reviewer)] <Grund>[ | <Name#Hash>]
 //
 // Aufruf:
-//   node stats.mjs                      # alles, Textausgabe
-//   node stats.mjs --since 2026-10-25   # ab Datum (lokal, inklusive)
-//   node stats.mjs --days 7             # die letzten sieben Kalendertage
-//   node stats.mjs --top 5 --examples 3 # weniger Ausgabe
-//   node stats.mjs --json               # maschinenlesbar
-//   node stats.mjs --file <pfad>        # andere Datei (z. B. gesicherte Kopie)
+//   node src/stats.mjs                      # alles, Textausgabe
+//   node src/stats.mjs --since 2026-10-25   # ab Datum (lokal, inklusive)
+//   node src/stats.mjs --days 7             # die letzten sieben Kalendertage
+//   node src/stats.mjs --top 5 --examples 3 # weniger Ausgabe
+//   node src/stats.mjs --json               # maschinenlesbar
+//   node src/stats.mjs --file <pfad>        # andere Datei (z. B. gesicherte Kopie)
 //
 // Bewusst ohne Netz und ohne Abhaengigkeiten: reine Textauswertung.
 
@@ -182,7 +182,7 @@ function toJson(summary) {
 function main() {
   const args = parseArgs(process.argv.slice(2))
   if (args.help) {
-    console.log("node stats.mjs [--since YYYY-MM-DD] [--days N] [--top N] [--examples N] [--json] [--file PFAD]")
+    console.log("node src/stats.mjs [--since YYYY-MM-DD] [--days N] [--top N] [--examples N] [--json] [--file PFAD]")
     return 0
   }
   if (!fs.existsSync(args.file) && !fs.existsSync(`${args.file}.1`)) {

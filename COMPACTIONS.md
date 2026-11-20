@@ -3214,3 +3214,63 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
   das Fenster. Deshalb sperrt eine Reihe von Rückfragen die Sitzung, bis genug
   Einträge aus dem Fenster fallen.
 - Untracked bleiben: drei Screenshots, ein JPG und `review/`.
+
+
+================ Compaction 21.11.2026 / 00:36 ================
+## Objective
+- **Current:** Stufe 2 des Aufräumens ist umgesetzt und deployt, aber noch nicht
+  committet: `src/` für Module und Berichtswerkzeuge, `test/` für Tests,
+  Messwerkzeuge und Falllisten.
+- **Completed:** `git mv` von 24 Dateien, Importe, Guard-Regel, Deploy-Listen,
+  `package.json`, Gate, CI, Pytest-Pfad, Doku.
+
+## Important Details
+- **Zwang aus dem Umzug:** Tests importieren `../src/`; im flachen Ziel liefe
+  das ins Leere. Deshalb liefert der Deploy nur noch aus, was dort läuft:
+  sechs Module, vier Berichtswerkzeuge, `stats.mjs`, beide READMEs, drei
+  PowerShell-Skripte. Fünf alte Kopien im Ziel sind noch da.
+- **Löschen im Ziel ist gesperrt:** Der Guard meldet „geschuetzter Pfad" für
+  `~/.config/opencode/plugins/permission-guard/*.mjs`. Die fünf Dateien muss
+  der Nutzer selbst entfernen; `shell-reviewer.config.json` bleibt.
+- **`classifyNode`:** zieht eine führende Ebene `src/` oder `test/` ab, bevor
+  der Name gegen `NODE_SELF_SCRIPTS` geprüft wird. Tiefer verschachtelt und
+  fremde Namen bleiben `ask`.
+- **Reihenfolge war wichtig:** Erst `deploy.ps1` laufen lassen (es startet
+  `node test/test.mjs` als Kindprozess und ist damit unabhängig von der
+  Allow-Regel), danach waren `node test/…`-Aufrufe erlaubt. Sonst hätte jeder
+  Prüflauf eine Rückfrage gekostet und das Deny-Limit erreicht.
+
+## Work State
+- Grün: `test/test.mjs` 992/992, `test/test-index.mjs` 45/45,
+  `test/test-wiring.mjs` 13/13, `test/bench-mcp.mjs` 40/40, Pytest 149/1
+  übersprungen, Ruff, Ruff-Format, Pyright, actionlint.
+- Deployt und geprüft: `deploy.ps1` meldet alle Dateien identisch; im Ziel
+  fehlen jetzt nur noch die fünf Altkopien.
+- Nicht gemacht: Commit, Push.
+
+## Next Move
+1. Die fünf Altkopien im Ziel löschen (Nutzer, eigener Terminal):
+   `Remove-Item` auf `test.mjs`, `smoke-reviewer.mjs`, `bench-model.mjs`,
+   `shared-cases.jsonl`, `mcp-model-cases.jsonl` in
+   `~/.config/opencode/plugins/permission-guard/`.
+2. Committen; Auslieferung mit `scripts/ship.ps1` durch den Nutzer.
+
+## Relevant Files
+- `src/`: `guard.js` (`classifyNode`), `index.js`, `reviewer.js`, `audit.js`,
+  `diagnostics.js`, `shadow.js`, `analyze.mjs`, `replay.mjs`, `stats.mjs`,
+  `mcp-report.mjs`, `git-shadow-report.mjs`, `verify-audit.mjs`,
+  `skill-verdicts.mjs`.
+- `test/`: `test.mjs` (992 Fälle), `test-index.mjs`, `test-wiring.mjs`,
+  `smoke-reviewer.mjs`, `bench-mcp.mjs`, `bench-model.mjs`, `bench-shell.mjs`,
+  vier `*-cases.jsonl`.
+- `scripts/deploy.ps1`, `scripts/deploy.sh`: Auslieferliste.
+- `.githooks/test-gate.conf`: Präfixe `src/`, `test/`.
+
+## Important Context
+- **`staging/*.mjs` sind noch nicht nachgezogen:** 21 Messhilfen importieren
+  weiter `../guard.js`, `../reviewer.js`, `../audit.js`. Der Ordner ist
+  ignoriert und nicht Teil des Commits; Fix ist ein Suchen-und-Ersetzen auf
+  `../src/`.
+- `docs/adr/0002` und die Forschungsnotizen in `docs/` nennen weiter die alten
+  Pfade; der ADR trägt dazu einen Nachtrag.
+- Untracked bleiben: drei Screenshots, ein JPG und `review/`.

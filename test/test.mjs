@@ -1,19 +1,19 @@
-// Testtabelle fuer guard.js. Ausfuehren mit: node test.mjs
-import { contextScope, evaluate, gitShadowRecord, injectionHits, mcpAction, mcpCriteria, mcpObservation, mcpVerdict, scopeEdit } from "./guard.js"
-import { appendRecord, canonicalJson, hashRecord, parseLines, verifyChain } from "./audit.js"
-import { summarizeShadow } from "./git-shadow-report.mjs"
-import { shadowPath } from "./shadow.js"
-import { summarizeAudit } from "./mcp-report.mjs"
-import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMcpAnswer, review, reviewMcp, scheduleWarmup, segments, warmup } from "./reviewer.js"
-import { buildShellSystemoneRequest, buildSystemoneRequest, sanitizeArguments, sanitizeSwitches, sanitizeThresholds, systemoneVerdict } from "./reviewer.js"
-import { parseLine, summarize } from "./stats.mjs"
+// Testtabelle fuer src/guard.js. Ausfuehren mit: node test/test.mjs
+import { contextScope, evaluate, gitShadowRecord, injectionHits, mcpAction, mcpCriteria, mcpObservation, mcpVerdict, scopeEdit } from "../src/guard.js"
+import { appendRecord, canonicalJson, hashRecord, parseLines, verifyChain } from "../src/audit.js"
+import { summarizeShadow } from "../src/git-shadow-report.mjs"
+import { shadowPath } from "../src/shadow.js"
+import { summarizeAudit } from "../src/mcp-report.mjs"
+import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMcpAnswer, review, reviewMcp, scheduleWarmup, segments, warmup } from "../src/reviewer.js"
+import { buildShellSystemoneRequest, buildSystemoneRequest, sanitizeArguments, sanitizeSwitches, sanitizeThresholds, systemoneVerdict } from "../src/reviewer.js"
+import { parseLine, summarize } from "../src/stats.mjs"
 import { createHash } from "node:crypto"
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { spawnSync } from "node:child_process"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { dirname, join } from "node:path"
-import { commandSummary, ensurePrivateDir, ensurePrivateFile, guardLogDir } from "./diagnostics.js"
+import { commandSummary, ensurePrivateDir, ensurePrivateFile, guardLogDir } from "../src/diagnostics.js"
 
 // Integration aus dem Replay (22.10.2026): Logreader mit ReadLine-[void]-Familie.
 const logReaderScript = [
@@ -546,6 +546,8 @@ const interp = [
   ["node tools\\permission-guard\\test-wiring.mjs", "allow"],
   ["node tools\\permission-guard\\bench-mcp.mjs --change", "allow"],
   ["node tools\\permission-guard\\smoke-reviewer.mjs", "allow"],
+  ["node tools\\permission-guard\\test\\test.mjs", "allow"],
+  ["node tools\\permission-guard\\src\\stats.mjs", "allow"],
   [`node "${projBase}\\tools\\permission-guard\\replay.mjs"`, "allow"],
   [`cd "${projBase}\\tools\\permission-guard"\nnode test.mjs`, "allow"],
   ["$dir = \"tools\\permission-guard\"\nnode \"$dir\\analyze.mjs\"", "allow"],
@@ -741,6 +743,12 @@ const nodeBaseChecks = [
   ["node test.mjs im Guard-Ordner -> allow", evaluate("node test.mjs", guardBaseOptions).decision === "allow"],
   ["node test-index.mjs im Guard-Ordner -> allow", evaluate("node test-index.mjs", guardBaseOptions).decision === "allow"],
   ["node .\\test.mjs im Guard-Ordner -> allow", evaluate("node .\\test.mjs", guardBaseOptions).decision === "allow"],
+  // Seit dem Umzug liegen Tests unter test/, Module und Werkzeuge unter src/.
+  ["node test\\test.mjs -> allow", evaluate("node test\\test.mjs", guardBaseOptions).decision === "allow"],
+  ["node test/test.mjs -> allow", evaluate("node test/test.mjs", guardBaseOptions).decision === "allow"],
+  ["node src\\stats.mjs -> allow", evaluate("node src\\stats.mjs", guardBaseOptions).decision === "allow"],
+  ["node test\\unter\\test.mjs -> ask", evaluate("node test\\unter\\test.mjs", guardBaseOptions).decision === "ask"],
+  ["node test\\fremd.mjs -> ask", evaluate("node test\\fremd.mjs", guardBaseOptions).decision === "ask"],
   ["fremdes test.mjs in anderem Ordner -> ask", evaluate("node test.mjs", { ...interpOptions, base: "C:\\work\\other" }).decision === "ask"],
 ]
 for (const [name, ok] of nodeBaseChecks) {
@@ -2289,7 +2297,7 @@ const reviewerProbe = spawnSync(
   [
     "--input-type=module",
     "-e",
-    `const m = await import(${JSON.stringify(pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), "reviewer.js")).href)}); await m.ensureRunning({ enabled: true, baseUrl: "http://127.0.0.1:9/v1" }); console.log("ok")`,
+    `const m = await import(${JSON.stringify(pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), "..", "src", "reviewer.js")).href)}); await m.ensureRunning({ enabled: true, baseUrl: "http://127.0.0.1:9/v1" }); console.log("ok")`,
   ],
   { env: { ...process.env, PATH: "" }, encoding: "utf8", timeout: 20000 },
 )

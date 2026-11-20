@@ -1,11 +1,11 @@
 // Smoke-Test fuer reviewer.js gegen ein laufendes lokales Modell.
-// Aufruf: node smoke-reviewer.mjs [port]
+// Aufruf: node test/smoke-reviewer.mjs [port]
 // Ohne Argument gilt der Port aus shell-reviewer.config.json.
 //
 // Erwartung "info" heisst: die Entscheidung ist modellabhaengig und wird nur
 // angezeigt. Gemma 4 12B antwortet auf "Get-Command" zu vorsichtig mit "Nein",
 // Jev-Omni mit "Ja" - beides ist unschaedlich.
-import { loadConfig, review } from "./reviewer.js"
+import { loadConfig, review } from "../src/reviewer.js"
 
 const cfg = loadConfig()
 const port = process.argv[2]

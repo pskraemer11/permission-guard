@@ -141,6 +141,29 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Module nach `src/`, Tests nach `test/` (21.11.2026, Stufe 2):** `guard.js`,
+  `index.js`, `reviewer.js`, `audit.js`, `diagnostics.js`, `shadow.js` und die
+  Berichtswerkzeuge `analyze.mjs`, `replay.mjs`, `stats.mjs`, `mcp-report.mjs`,
+  `git-shadow-report.mjs`, `verify-audit.mjs`, `skill-verdicts.mjs` liegen unter
+  `src/`; `test.mjs`, `test-index.mjs`, `test-wiring.mjs`, `smoke-reviewer.mjs`,
+  `bench-mcp.mjs`, `bench-model.mjs`, `bench-shell.mjs` und die vier Falllisten
+  unter `test/`. Die Tests importieren jetzt `../src/`; `test.mjs` 992/992
+  (acht neue Fälle für die neuen Pfade).
+- **Deploy liefert nur noch Laufzeitdateien (21.11.2026):** `deploy.ps1` und
+  `deploy.sh` kopieren die Module, die Berichtswerkzeuge, `stats.mjs`, beide
+  READMEs und die drei PowerShell-Skripte. Tests, Falllisten und Messwerkzeuge
+  bleiben im Repo: sie importieren `../src/` und liefen im flachen Ziel ins
+  Leere. Im Ziel liegen dadurch fünf veraltete Kopien (`test.mjs`,
+  `smoke-reviewer.mjs`, `bench-model.mjs`, `shared-cases.jsonl`,
+  `mcp-model-cases.jsonl`), die von Hand zu löschen sind — der Guard schützt
+  sein Laufzeitverzeichnis und verweigert das Löschen.
+- **`classifyNode` kennt die neuen Ordner (21.11.2026):** Eine führende Ebene
+  `src/` oder `test/` wird abgezogen, bevor der Dateiname gegen
+  `NODE_SELF_SCRIPTS` geprüft wird. Tiefer verschachtelte Skripte und fremde
+  Namen bleiben `ask`.
+- **`diagnostics.js` fehlte in `package.json` (`files`) (21.11.2026):**
+  nachgetragen; `exports` zeigt auf `./src/index.js`, alle `scripts` auf die
+  neuen Pfade.
 - **Eigene Prüfskripte auch im Guard-Ordner erlaubt (21.11.2026):** Die
   `node`-Allow-Regel war auf `<workspace>\tools\permission-guard` verankert.
   Wurde direkt in diesem Ordner gearbeitet, entstand der doppelt verschachtelte

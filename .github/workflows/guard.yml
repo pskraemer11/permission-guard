@@ -40,19 +40,19 @@ jobs:
         run: npm ci
 
       - name: Classifier tests
-        run: node test.mjs
+        run: node test/test.mjs
 
       - name: Wiring test (fake git)
-        run: node test-wiring.mjs
+        run: node test/test-wiring.mjs
 
       - name: Wiring index.js (plugin)
-        run: node test-index.mjs
+        run: node test/test-index.mjs
 
       - name: MCP forwarding (33 cases)
-        run: node bench-mcp.mjs
+        run: node test/bench-mcp.mjs
 
       - name: Case inventory unchanged
-        run: node bench-mcp.mjs --change
+        run: node test/bench-mcp.mjs --change
 
       - name: Package contents
         run: npm pack --dry-run

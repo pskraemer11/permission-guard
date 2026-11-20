@@ -6,10 +6,10 @@
 // Schattenurteil" und prueft die Aktivierungskriterien.
 //
 // Aufruf:
-//   node mcp-report.mjs                 # alles
-//   node mcp-report.mjs --days 7        # letzte 7 Tage
-//   node mcp-report.mjs --since 2026-11-01
-//   node mcp-report.mjs --json
+//   node src/mcp-report.mjs                 # alles
+//   node src/mcp-report.mjs --days 7        # letzte 7 Tage
+//   node src/mcp-report.mjs --since 2026-11-01
+//   node src/mcp-report.mjs --json
 //
 // Es werden nur Feldnamen, Zaehler und Hashes gelesen - der Audit enthaelt
 // keine Argumentwerte.

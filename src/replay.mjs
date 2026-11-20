@@ -11,7 +11,7 @@
 // (z. B. "ConvertFrom-Json"), nicht der Befehl. Ein Replay darauf misst Unsinn.
 //
 // Aufruf:
-//   node replay.mjs [logdatei] [Optionen]
+//   node src/replay.mjs [logdatei] [Optionen]
 //
 // Optionen:
 //   --since <datum>   nur Eintraege ab JJJJ-MM-TT bzw. ISO-Zeitpunkt

@@ -33,7 +33,7 @@ and `PERMISSION_GUARD_CODEX_TARGET=/mnt/c/Users/<name>/.codex/hooks` (WSL) or
 `/c/Users/<name>/...` (Git Bash).
 
 One prompt for the whole operation instead of one per write. Neither deploy
-script deploys when `node test.mjs` or `python -m pytest tests -q` fails, and
+script deploys when `node test/test.mjs` or `python -m pytest tests -q` fails, and
 both report any byte difference between source and runtime. The
 site-specific `shell-reviewer.config.json` is created from
 `shell-reviewer.config.example.json` on first deploy only and never
@@ -53,10 +53,13 @@ This directory is cut so that it works as the root of its own repository
 | `LICENSE`              | MIT                                                              |
 | `package.json`         | `"type": "module"`, `npm test`, Node ≥ 20                        |
 | `.gitignore`           | excludes `shell-reviewer.config.json`, logs, `node_modules`      |
+| `src/`                 | plugin modules and reporting tools (JavaScript)                  |
+| `test/`                | Node tests, measurement tools and their case lists               |
+| `scripts/`             | operation: deploy, reviewer, watchdog, ship, benchmarks          |
 | `scripts/deploy.sh`    | POSIX counterpart to `deploy.ps1`                                |
 | `scripts/deploy.ps1`   | Windows, with test run and SHA256 comparison, two targets        |
 | `codex_guard.py`       | Codex hook (`PreToolUse`), pure text checking                    |
-| `tests/`               | Pytest suite for the Codex guard, including `shared-cases.jsonl` |
+| `tests/`               | Pytest suite for the Codex guard                                 |
 | `pyproject.toml`       | Ruff and Pyright configuration for the Python part               |
 | `requirements-dev.txt` | pins for pytest, Ruff and Pyright                                |
 | `README.md`            | this file, English                                               |
@@ -66,7 +69,7 @@ Both programs live here: the OpenCode plugin (Node) and the Codex guard
 (Python). The tests run separately because the runtimes are separate:
 
 ```powershell
-node test.mjs                     # OpenCode side, 932 cases
+node test/test.mjs                     # OpenCode side, 992 cases
 python -m pytest tests -q         # Codex side, 149 passed, 1 skipped
 python -m ruff check .            # lint of the Python part
 python -m pyright                 # type check of the Python part
@@ -82,7 +85,7 @@ GitHub, AWS).
 
 `guard.yml` is the reusable **CI test workflow** (tests, package contents,
 path and key scan). It does not check runtime calls; runtime protection is the
-plugin made of `index.js`, `guard.js` and `reviewer.js`.
+plugin made of `src/index.js`, `src/guard.js` and `src/reviewer.js`.
 
 These do not belong in the repository: `shell-reviewer.config.json`
 (machine-dependent), logs and measurement artefacts. Credentials are
@@ -273,7 +276,7 @@ Both are explicit user decisions, anchored to paths like pytest:
 
 | Case                                                                                                            | Assessment                                                             |
 | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `node tools/permission-guard/test.mjs`, `replay.mjs`, `analyze.mjs`, plus `test-index.mjs`, `test-wiring.mjs`, `bench-*.mjs`, `smoke-reviewer.mjs` — also relative, with `2>&1`, after `cd` or | reading — the guard maintaining itself, content versioned              |
+| `node tools/permission-guard/test/test.mjs`, `src/replay.mjs`, `src/analyze.mjs`, plus `test/test-index.mjs`, `test/test-wiring.mjs`, `bench-*.mjs`, `test/smoke-reviewer.mjs` — also relative, with `2>&1`, after `cd` or | reading — the guard maintaining itself, content versioned              |
 | with an unambiguously assigned path prefix                                                                      |                                                                        |
 | `python <script>` with a target path inside the project (`*.py`), script parameters unchecked                   | reading — content is versioned and therefore reviewable before it runs |
 | `python -c`, `python -m <other>`, `python` without target script (REPL)                                         | `ask` — inline code is invisible to review                             |
@@ -297,7 +300,7 @@ an allowance even when the review record ends in `ask`.
 The verdict file condenses the SkillSpector reports and the review records:
 
 ```powershell
-node tools/permission-guard/skill-verdicts.mjs --reports logs/skillspector/2026-10-25 --reports logs/skillspector/2026-11-05 --write
+node tools/permission-guard/src/skill-verdicts.mjs --reports logs/skillspector/2026-10-25 --reports logs/skillspector/2026-11-05 --write
 ```
 
 `--reports` is repeatable; for the same skill name, the directory named later
@@ -362,13 +365,13 @@ The record contains **no argument values, result contents, URLs or paths**:
 only timestamp, mode, hashed session, tool, intent, target kinds, flags,
 decision, layer and an abbreviated reason.
 
-Storage: `%LOCALAPPDATA%\opencode\permission-guard\audit.jsonl`, overridable
+Storage: `%LOCALAPPDATA%\opencode\permission-guard\src/audit.jsonl`, overridable
 with `PERMISSION_GUARD_AUDIT` (`off` disables it). Rotation at 5 MB to
-`audit.jsonl.1`; the chain continues across generations.
+`src/audit.jsonl.1`; the chain continues across generations.
 
 ```powershell
-node verify-audit.mjs          # checks both generations
-node verify-audit.mjs --last   # current one only
+node src/verify-audit.mjs          # checks both generations
+node src/verify-audit.mjs --last   # current one only
 ```
 
 Exit 1 at the first break. Limit: the chain detects modification and
@@ -377,17 +380,17 @@ a signature.
 
 ### F: evaluating the decisions (05.11.2026)
 
-`mcp-report.mjs` reads the same records and counts by tool, intent, decision,
+`src/mcp-report.mjs` reads the same records and counts by tool, intent, decision,
 layer and mode. It shows the matrix "static effect against shadow verdict", the
 irregularities (unknown intent, secret suspicion, unanalysable, unresolved
 targets, content fields), open calls without `execute.after`, and the level-3
 decisions with reason.
 
 ```powershell
-node mcp-report.mjs                 # entire period
-node mcp-report.mjs --days 7        # last 7 days
-node mcp-report.mjs --since 2026-11-01
-node mcp-report.mjs --json
+node src/mcp-report.mjs                 # entire period
+node src/mcp-report.mjs --days 7        # last 7 days
+node src/mcp-report.mjs --since 2026-11-01
+node src/mcp-report.mjs --json
 ```
 
 At the end the state of the activation criteria appears in plain text:
@@ -409,7 +412,7 @@ execution target is not readable in the line:
 | call operator          | `& node $tp $src 2>&1`, `& $browser`       | `deny` — the target sits in a variable                            |
 | dot-sourcing           | `. .\init.ps1`                             | `deny` — loads a script into the running session                  |
 | block with such a form | `if ($ok) { & run.ps1 }`                   | `deny` — the denial dominates the whole block                     |
-| fully spelled-out call | `node "C:\...\node.exe" "C:\...\test.mjs"` | normal classification — path visible, `ask`/`allow` per all rules |
+| fully spelled-out call | `node "C:\...\node.exe" "C:\...\test/test.mjs"` | normal classification — path visible, `ask`/`allow` per all rules |
 
 Denial also beats the secret prompt (`& $t` next to `$env:GITHUB_TOKEN` →
 `deny`). The operator must reformulate such commands with fully spelled-out
@@ -547,14 +550,14 @@ implementation does not affect the other.
 
 | Property    | OpenCode                                                           | Codex                                                      |
 | ----------- | ------------------------------------------------------------------ | ---------------------------------------------------------- |
-| Entry point | `index.js`: `Plugin.define` with `permission.hook("evaluate")`     | `PreToolUse` hook from `~/.codex/hooks.json`, 10 s timeout |
-| Check code  | `guard.js` (about 100 KB)                                          | `codex_guard.py` here in the repo (about 270 lines)        |
+| Entry point | `src/index.js`: `Plugin.define` with `permission.hook("evaluate")`     | `PreToolUse` hook from `~/.codex/hooks.json`, 10 s timeout |
+| Check code  | `src/guard.js` (about 100 KB)                                          | `codex_guard.py` here in the repo (about 270 lines)        |
 | Verdicts    | `allow`, `ask`, `deny`                                             | `deny` or pass through                                     |
 | Basis       | shell decomposition, static lists, path check, MCP in three layers | text patterns on the command text, fixed catalogue         |
 | Model       | yes, level 1/3 for unclear cases via `llama-server`                | no                                                         |
 | Runtime     | inside the OpenCode process, synchronous                           | own process per call, synchronous                          |
 | Failure     | exception is logged; static rules decide                           | hook does not start: Codex reports and lets it run         |
-| Tests       | `node test.mjs` (932 cases)                                        | `python -m pytest tests -q` (149 passed, 1 skipped)        |
+| Tests       | `node test/test.mjs` (992 cases)                                        | `python -m pytest tests -q` (149 passed, 1 skipped)        |
 
 **Why separate.** Codex has no `ask`; a hook can only deny or let through. The
 Codex part is a narrow catalogue of hard cases; the sandbox covers the rest.
@@ -562,8 +565,8 @@ OpenCode can ask and therefore judge more finely. The differing treatment of
 `git push` (OpenCode `ask`, Codex `forbidden`) is documented in ADR 0004 of the
 parent project (`docs/adr/0004-codex-push-verbieten-opencode-fragt.md`).
 
-**Checked together.** `shared-cases.jsonl` holds 40 commands with the verdict
-expected on each side; `node test.mjs` and the Pytest run read the same file.
+**Checked together.** `test/shared-cases.jsonl` holds 40 commands with the verdict
+expected on each side; `node test/test.mjs` and the Pytest run read the same file.
 Both deny `reset --hard`, `checkout .`, `restore .`, `clean -f` and
 `--no-verify` (including the short form `git commit -n`). For `git push`, `filter-branch`, `filter-repo`, recursive
 deletion and `robocopy /MIR`, Codex denies while OpenCode asks. Since
@@ -578,7 +581,7 @@ denied (review 17.11.2026). The project anchor is the execution folder from the
 hook input, otherwise the folder of the hook process.
 
 **For maintenance.** A new rule must be maintained in both implementations. For
-the 40 cases in `shared-cases.jsonl` the test breaks as soon as one side
+the 40 cases in `test/shared-cases.jsonl` the test breaks as soon as one side
 diverges; everything else remains a silent gap. Both sides now live in the same
 repository, so each suite checks its half of the file without skipping.
 
@@ -629,22 +632,22 @@ The guard check skips global options such as `-C`, `-c`, `--git-dir` and
 `git branch -d` there. That is the deliberately accepted side effect of
 alternative 2. On Linux/macOS `git branch -d` remains a prompt.
 
-For `ask` and `deny`, `index.js` sets the message from `evaluate()`; it names
+For `ask` and `deny`, `src/index.js` sets the message from `evaluate()`; it names
 the pattern and — provided there is no secret suspicion — the command.
 
 The shadow run (variant 3) can be enabled via `gitShadow: "shadow"` and has
 been active for seven days since 09.11.2026. It logs destructive Git forms with
-`effect=allow` to `%LOCALAPPDATA%\opencode\permission-guard\git-shadow.jsonl`
+`effect=allow` to `%LOCALAPPDATA%\opencode\permission-guard\git-src/shadow.jsonl`
 without deciding and without command texts. Evaluation:
 
 ```powershell
-node git-shadow-report.mjs
-node git-shadow-report.mjs --json
+node src/git-shadow-report.mjs
+node src/git-shadow-report.mjs --json
 ```
 
 The matrix is pinned by `gitGuardrails`, `reviewerGit` and `messageChecks` in
-`test.mjs`. `test-wiring.mjs` verifies with a fake `git` that a `deny` decision
-does not execute the command. The static rules are not part of `test.mjs`; they
+`test/test.mjs`. `test/test-wiring.mjs` verifies with a fake `git` that a `deny` decision
+does not execute the command. The static rules are not part of `test/test.mjs`; they
 are checked via `check_jsonc.py` and the dialog.
 
 ## Command decomposition and command style
@@ -660,13 +663,13 @@ as `&$cmd`). Inside `2>&1` and inside quotes `&` is text.
 
 In the model check with `shellBackend: "systemone"`, each segment is assessed
 individually. The weakest result decides, and a harmless segment cannot mask a
-writing one (`reviewer.js`, function `review`).
+writing one (`src/reviewer.js`, function `review`).
 
 According to the code, redirections are classified like this:
 
 - standard handle redirections such as `2>&1`, `*>&1`, `1>&2`, `2>$null` and
-  `2>NUL` count neither as obfuscation nor as writing (`guard.js`,
-  `hasRedirection`; `reviewer.js`, comment on `OPERATOR_CHARS`).
+  `2>NUL` count neither as obfuscation nor as writing (`src/guard.js`,
+  `hasRedirection`; `src/reviewer.js`, comment on `OPERATOR_CHARS`).
 - file redirections (`>`, `>>`, `1>`, `2>`) count as writing. In the model path
   they are obfuscating operators. `1>` and `2>` have been checked against the
   target since 17.11.2026; before, they went unnoticed because the digit before
@@ -681,7 +684,7 @@ disappeared on 26.10.2026 when the model path exempted standard handle
 redirections. Today the rule serves readability and preserving error messages.
 One command per call also makes decisions in the log easier to follow.
 
-## Level 1: local decider (`reviewer.js`)
+## Level 1: local decider (`src/reviewer.js`)
 
 If a `nicht einordenbar` (not classifiable) remains after the static check, the
 plugin asks a local model. The flow is deliberately two-stage:
@@ -723,7 +726,7 @@ reached the model. Unreadable `&`/`.` calls are already denied by the guard.
 **Lifecycle and warm-up.** The plugin does not keep the server alive
 permanently; it ties it to OpenCode:
 
-- **Start:** `reviewer.js → ensureRunning()` checks `/health` during plugin
+- **Start:** `src/reviewer.js → ensureRunning()` checks `/health` during plugin
   setup and otherwise starts `start-reviewer.ps1` detached. The call does not
   wait for loading.
 - **Warm-up:** `warmup()` then sends one request without a command check so
@@ -802,7 +805,7 @@ Checking a new model — measure first, then switch:
 .\scripts\bench-quality.ps1 -Model "D:\…\modell.gguf" -Label "Kandidat"
 .\scripts\bench-quality.ps1 -Model "D:\…\modell.gguf" -Mmproj "D:\…\mmproj.gguf" -Label "Kandidat (Vision)"
 # then: change model in shell-reviewer.config.json, then
-node smoke-reviewer.mjs
+node test/smoke-reviewer.mjs
 ```
 
 ### Backend comparison
@@ -832,13 +835,13 @@ Without `grammar`, Gemma 4 12B on llama.cpp emits only channel tokens
 (`"<|channel>0101010"`, `finish_reason: length`).
 Unusable, and it looks like a server problem.
 <-> With `root ::= "Ja" | "Nein"` it cleanly returns `Ja`.
-LM Studio accepts the parameter and ignores it; `reviewer.js` repeats the
+LM Studio accepts the parameter and ignores it; `src/reviewer.js` repeats the
 request once without grammar if a backend rejects it.
 
 **OpenRouter (Jev 1.13)**
 is *not* a chat model but runs via the decision endpoint
 `/api/alpha/decisions` (model ID `typesafe/jev-1.13`) and returns probabilities
-instead of text. That makes it no interchangeable backend for `reviewer.js`, but
+instead of text. That makes it no interchangeable backend for `src/reviewer.js`, but
 a usable third opinion for the test case set.
 It answers *our* question but is not ground truth, and the command text leaves
 the machine in the process — acceptable for a one-off evaluation, not for
@@ -859,10 +862,10 @@ The index serves pre-selection; our own 18-command set remains authoritative.
 .\scripts\start-reviewer.ps1 -ModelPath "D:\…\anderes.gguf" -Port 8081
 .\scripts\start-reviewer.ps1 -Cpu -Server "C:\…\llama-server.exe"   # no GPU offload
 .\scripts\start-reviewer.ps1 -Batch 2048 -Ubatch 2048               # smaller batch
-node smoke-reviewer.mjs                    # 9 cases against the running configuration
-node test.mjs                              # 934 unit tests
-node test-index.mjs                        # 23 integration cases (fake OpenCode)
-node test-wiring.mjs                       # 13 wiring tests (fake git)
+node test/smoke-reviewer.mjs                    # 9 cases against the running configuration
+node test/test.mjs                              # 992 unit tests
+node test/test-index.mjs                        # 23 integration cases (fake OpenCode)
+node test/test-wiring.mjs                       # 13 wiring tests (fake git)
 .\scripts\start-reviewer.ps1 -Stop
 ```
 
@@ -912,7 +915,7 @@ therefore does **not** take effect immediately:
 - A mere restart of the app window is **not** enough. The desktop app connects
   to the already running `opencode-cli` server, which holds the plugin instance
   and thus the old configuration.
-- Reliable is a file touch on `index.js` or `reviewer.js`: the file watcher
+- Reliable is a file touch on `src/index.js` or `src/reviewer.js`: the file watcher
   reloads the plugin, and a new `setup: base=…` line appears in the log.
 - Alternatively, terminate all OpenCode processes (including `opencode-cli`)
   and start again.
@@ -961,7 +964,7 @@ Catalogue rules:
 
 ### Step C: verdict in three layers
 
-`mcpVerdict()` in `guard.js` forms a verdict, `mcpAction()` decides whether it
+`mcpVerdict()` in `src/guard.js` forms a verdict, `mcpAction()` decides whether it
 applies. Both are pure and testable without a backend.
 
 | Layer                     | Checks                                               | Result                                            |
@@ -1017,7 +1020,7 @@ Order and limits:
   argument values are neutralised, and an instruction in the untrusted part is
   by itself a reason for "no". An intent memory does not exist yet (decision 2
   of 01.11., deferred).
-- **The switch sits in the source:** `MCP_GATING_MODE` in `guard.js` has been
+- **The switch sits in the source:** `MCP_GATING_MODE` in `src/guard.js` has been
   `"active"` since 05.11.2026. The verdict only applies to calls that the
   static rules answer with `ask`; `allow`, `deny` and stored approvals remain
   untouched. To revoke: set it back to `"shadow"`, run the tests, deploy — one
@@ -1040,7 +1043,7 @@ secret suspicion or more than 32000 characters of arguments never reach it. The 
 restricted by a grammar to `Ja` or `Nein` (`root ::= "Ja" | "Nein"`),
 `max_tokens` 8, `temperature` 0, timeout 2500 ms.
 
-Measurement uses `bench-model.mjs` against `mcp-model-cases.jsonl`: 14 tools
+Measurement uses `test/bench-model.mjs` against `test/mcp-model-cases.jsonl`: 14 tools
 without a recognisable verb, five clearly reading, nine not. Because the same
 model scatters at `temperature 0` depending on prompt cache (the same prompt
 returned 10/14 and 12/14), the run uses a fixed seed and no cache
@@ -1196,7 +1199,7 @@ silently discards values outside that band and uses the default, so
 
 ### Step E: test regime before activation
 
-`bench-mcp.mjs` checks the verdict against `mcp-cases.jsonl`: **33 calls with a
+`test/bench-mcp.mjs` checks the verdict against `test/mcp-cases.jsonl`: **33 calls with a
 predefined target**, of which 8 `allow`, 14 `ask`, 9 `deny` and 2 in the grey
 area (`model`). Nine blocks are about one third — the plan's requirement. The
 expectation sits in the case line, not in the code; otherwise the regime would
@@ -1220,9 +1223,9 @@ the expectations — where our verdict deliberately differs, the reason is in
 | `mail_send` with `$TEAM`/`$REPORT`       | escalate | ask         | writing, target unknown                                              |
 
 ```powershell
-node bench-mcp.mjs              # forward and verdict, without network and model
-node bench-mcp.mjs --model      # additionally level 3 against the running server
-node bench-mcp.mjs --change     # only deviations and the sum
+node test/bench-mcp.mjs              # forward and verdict, without network and model
+node test/bench-mcp.mjs --model      # additionally level 3 against the running server
+node test/bench-mcp.mjs --change     # only deviations and the sum
 ```
 
 The set protects itself: if a case is missing, an ID is duplicated or the
@@ -1309,14 +1312,14 @@ Without `npm ci` the test gate fails at commit. That is intended.
 
 ## Measurement
 
-Reproducible with `replay.mjs`. It reads the "spawning process" lines from
+Reproducible with `src/replay.mjs`. It reads the "spawning process" lines from
 `opencode.log` (full command, argument list and `cwd`) and replays them against
 `evaluate()` — with the working folder of the session at the time as base:
 
 ```powershell
-node replay.mjs                       # default log, entire period
-node replay.mjs --since 2026-10-01    # only newer calls
-node replay.mjs --json --examples 0   # machine-readable
+node src/replay.mjs                       # default log, entire period
+node src/replay.mjs --since 2026-10-01    # only newer calls
+node src/replay.mjs --json --examples 0   # machine-readable
 ```
 
 Status 23.10.2026 (log 18.–23.10., 1292 unique commands): **53.3 % without a
@@ -1356,18 +1359,18 @@ Two limitations so the number is not over-interpreted:
 
 ```powershell
 cd "$HOME\Python-Projekte\AI+IDE-Hints\tools\permission-guard"
-node test.mjs
-node test-wiring.mjs            # fake git: deny prevents execution
-node test-index.mjs             # plugin wiring
-node bench-mcp.mjs              # 33 fixed MCP cases
+node test/test.mjs
+node test/test-wiring.mjs            # fake git: deny prevents execution
+node test/test-index.mjs             # plugin wiring
+node test/bench-mcp.mjs              # 33 fixed MCP cases
 python -m pytest tests -q      # Codex guard, 149 passed, 1 skipped
 python -m ruff check .         # Python lint
 python -m pyright              # Python type check
-node replay.mjs                # measurement: how many commands run without a prompt
-node analyze.mjs               # point-8 analysis: where exactly "not classifiable" comes from
+node src/replay.mjs                # measurement: how many commands run without a prompt
+node src/analyze.mjs               # point-8 analysis: where exactly "not classifiable" comes from
 ```
 
-932 cases in the groups without/with project reference, CLI allowlists, help and
+992 cases in the groups without/with project reference, CLI allowlists, help and
 version, gitleaks, sqlite3/gh, network reads, denial & secret replacement,
 python, interpreters, Ruff bootstrap, reviewer (risk list, false alarms,
 answer format, structure), MCP (detection, keys, secret suspicion, criteria,
@@ -1375,9 +1378,9 @@ three-layer verdict including emergency brake, intent from arguments, data
 exfiltration, unresolved targets, switch, prompt channels and model call with
 replacement `fetch`), audit chain, skill verdict file, evaluation, decision
 model and statistics. The total includes 40 shared cases with the Codex guard,
-whose target values are kept in `shared-cases.jsonl`. Exit code 1 on deviation.
-The classifier (`guard.js`) is a pure function and needs neither OpenCode nor
-network. `replay.mjs` and `analyze.mjs` stay in the project and are not
+whose target values are kept in `test/shared-cases.jsonl`. Exit code 1 on deviation.
+The classifier (`src/guard.js`) is a pure function and needs neither OpenCode nor
+network. `src/replay.mjs` and `src/analyze.mjs` stay in the project and are not
 deployed.
 
 The Python part runs with the same rules as the parent repository:
@@ -1398,10 +1401,10 @@ file are private on POSIX (0700/0600).
 
 ## Changeability
 
-- Allowed commands: `READ_CMDLETS`, `READ_BINARIES`, `READ_GIT` in `guard.js`
+- Allowed commands: `READ_CMDLETS`, `READ_BINARIES`, `READ_GIT` in `src/guard.js`
 - script blocks (always `ask`): `PIPELINE_BLOCK_CMDLETS`, `hasScriptBlock()`
 - reading .NET types and methods: `TYPE_READ`, `SAFE_METHODS` — every addition
-  needs a test case evidenced from the log (`analyze.mjs`)
+  needs a test case evidenced from the log (`src/analyze.mjs`)
 - redirection search/string masking: `maskStrings()`, `hasRedirection()`
 - network reads: `NET_CMD_NAMES`, `NET_BLOCK_FLAGS`, `NET_SAFE_METHODS`
 - python allowance: `classifyPython()`
@@ -1414,9 +1417,9 @@ file are private on POSIX (0700/0600).
 - file writing (path-checked): `FILE_WRITE_CMDLETS`, `FILE_WRITE_METHODS`
 - hard writing (always `ask`): `WRITE_VERBS`
 - hard blocks: `DENY_PATHS`, `DENY_COMMANDS`
-- trusted folders: `guardOptions()` in `index.js`
+- trusted folders: `guardOptions()` in `src/index.js`
 
-After every change, run `node test.mjs` and adjust the expectation in the test —
+After every change, run `node test/test.mjs` and adjust the expectation in the test —
 the test is the specification.
 
 

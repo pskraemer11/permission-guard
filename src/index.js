@@ -16,7 +16,7 @@
 // statischen Regeln werden am Zielpfad gemessen (scopeEdit in guard.js).
 //
 // Die Entscheidungslogik liegt in guard.js und reviewer.js und ist ohne
-// OpenCode testbar (node test.mjs). Dieses Modul ist nur die Verdrahtung.
+// OpenCode testbar (node test/test.mjs). Dieses Modul ist nur die Verdrahtung.
 
 import { Plugin } from "@opencode/plugin"
 import fs from "node:fs"
