@@ -1,6 +1,6 @@
 # PLANUNG — permission-guard
 
-Stand: 18.11.2026
+Stand: 20.11.2026
 
 ## Wozu dieses Dokument
 
@@ -46,7 +46,6 @@ Ablageort.
 | P3   | Dreiweg-Antwort „Unbestimmt" entscheiden                                                  | S       | Messung                       |
 | P3   | Warmup-`TypeError` diagnostizieren                                                        | S       | —                             |
 | P3   | Suchmuster mit Befehlsnamen (`iex`) löst Verweigerung aus                                 | S       | —                             |
-| P3   | `repository`/`bugs`/`homepage` in `package.json`                                          | S       | Nutzerentscheid               |
 | P3   | Smoke braucht Warmup (Lessons learned 16.11.2026)                                         | S       | —                             |
 
 ## Plan 1: Eigenständiges Repository
@@ -55,6 +54,11 @@ Ablageort.
 
 Ziel: Weder Dateien noch Commit-Metadaten verraten, wem das Repository gehört.
 Der Inhalt bleibt unverändert; geändert werden nur Fixtures und Identitäten.
+
+*(Fassung 20.11.2026: Der GitHub-Handle ist erlaubt, siehe Entscheidung 10.
+E-Mail-Adressen und Klarnamen bleiben ausgeschlossen. Ursprünglich sollte auch
+der Handle nicht vorkommen; er steht für den Workflow-Aufruf aber ohnehin in
+`.github/workflows/guard.yml`.)*
 
 1. `mcp-cases.jsonl`: `owner`, `repo` und `org` durch neutrale Fixtures
    ersetzen (`team`, `lumen`), passend zu den bereits vorhandenen
@@ -82,9 +86,11 @@ Der Inhalt bleibt unverändert; geändert werden nur Fixtures und Identitäten.
 
 **Abnahme:**
 
-- `git grep` findet weder Benutzername noch echte Adresse;
+- `git grep` findet weder E-Mail-Adresse noch Klarname (der Handle ist seit
+  dem 20.11.2026 erlaubt, Entscheidung 10);
 - `git log --format='%an <%ae> | %cn <%ce>' | sort -u` liefert genau eine
-  neutrale Zeile;
+  neutrale Zeile; *(am 20.11.2026 nicht erfüllt: acht Commits vom 09.–18.11.
+  tragen `PSK`. Vom Nutzer bewusst unverändert gelassen.)*
 - `node test.mjs` 518/518 und `node bench-mcp.mjs` 33/33;
 - das Bundle ist geprüft und liegt außerhalb des Repositories.
 
@@ -388,6 +394,7 @@ Festgelegt:
 | 6   | npm            | GitHub-only für v0.1.0, `"private": true` (05.11.2026)           |
 | 7   | Kriterien F    | 7 verschiedene Tage, ≥ 50 Aufrufe, ≥ 3 Werkzeuge, davon ≥ 1 schreibend (05.11.2026) |
 | 9   | Merge-Regel    | Pflicht-Checks bleiben, Zwang „Branch aktuell“ entfällt          |
+| 10  | Handle         | erlaubt (20.11.2026); E-Mail und Klarname bleiben verboten       |
 
 Offen:
 
@@ -920,3 +927,378 @@ Entscheidungsauftrag. Ziel: weniger `ask` bei gleicher fail-closed-
 Härte. Messung vorher/nachher: Rate der Rückfragen
 (`replay.mjs --all`, `stats.mjs`) und Gate 7/7 gruen. Erst nach
 ARC-Auftrag umsetzen; die P0-Fixes bleiben davon unberuehrt.
+
+
+## Vormerk 19.11.2026: `pdftotext` und `pandoc` im Guard (saubere Variante)
+
+Anlass: Der Leser-Agent (`researcher`) braucht `pdftotext` und `pandoc`, um
+lokale PDF- und Bürodateien zu lesen. Die Agentenregeln können das nur
+pauschal freigeben, weil OpenCode Muster nur als ganze Werte mit `*`/`?`
+abgleicht und die Shell-Prüfung des Guards bei einer statischen `allow`-Regel
+übersprungen wird (`index.js`: `if (effect !== "ask") return`).
+
+Gemessen am 19.11.2026 (Pandoc 3.14, Poppler 26.09.0), jeweils Exit 0:
+
+| Aufruf                              | Wirkung                        |
+| ----------------------------------- | ------------------------------ |
+| `pdftotext -layout -enc UTF-8 X -`  | Text nach stdout               |
+| `pdftotext -layout -enc UTF-8 X Y`  | schreibt Datei `Y`             |
+| `pandoc X -t gfm`                   | Markdown nach stdout           |
+| `pandoc X -o Y`                     | schreibt Datei `Y`             |
+| `pandoc X -L filter.lua -t gfm`     | führt Lua aus, schreibt Dateien |
+| `pandoc X -Lfilter.lua -t gfm`      | dasselbe ohne Leerzeichen      |
+| `pandoc X --lua-filter=filter.lua`  | dasselbe in langer Form        |
+| `pandoc X -d defaults.yaml`         | schreibt `output-file` aus YAML |
+| `pandoc X --sandbox -L filter.lua`  | Sandbox verhindert nichts      |
+
+Zwei getrennte Aufgaben:
+
+1. **`pdftotext` in `READ_BINARIES` aufnehmen** (Zeile 184 in `guard.js`).
+   Das genügt nicht: `pdftotext X Y` schreibt dann als „lesend" eingestuft.
+   Zusätzlich muss die Zwei-Argument-Form als Schreiben gelten — das zweite
+   Argument ist ein Dateipfad, wenn es nicht `-` ist.
+
+2. **`pandoc` braucht eine eigene Prüfung**, kein Eintrag in
+   `READ_BINARIES`. Als lesend darf nur gelten:
+   - kein `-o`/`--output=`
+   - kein `-L`/`--lua-filter=`
+   - kein `--filter=`/`-F`
+   - kein `-d`/`--defaults`
+   - kein `--pdf-engine=`/`--extract-media=`
+   Alles andere: `ask`.
+
+Beides ist **umgesetzt am 20.11.2026** — mit einer Abweichung vom Vorschlag
+oben: `pdftotext` steht **nicht** in `READ_BINARIES`, sondern hat eine eigene
+Funktion `classifyPdftotext()`. In `READ_BINARIES` müsste die
+Zwei-Argument-Form über eine Ausnahme davor wieder eingefangen werden; eine
+Stelle ist besser als zwei.
+
+Belegt gegen die Hilfetexte der installierten Fassungen, nicht geschätzt:
+
+- Poppler 26.09.0 nennt 14 Optionen mit eigenem Wert (`-f`, `-l`, `-r`, `-x`,
+  `-y`, `-W`, `-H`, `-fixed`, `-remove-hyphens`, `-enc`, `-eol`, `-colspacing`,
+  `-opw`, `-upw`). Ohne diese Liste zählte etwa `-enc UTF-8` als Dateiname.
+  Fehlende Einträge erzeugen nur zusätzliche Rückfragen, nie eine Fehlfreigabe.
+- Pandoc 3.14 nennt `-o`/`--output`, `-d`/`--defaults`, `-F`/`--filter`,
+  `-L`/`--lua-filter` als die schreibenden oder Code startenden Kurzoptionen.
+  `-f`/`-r` sind `--from`/`--read` und bleiben lesend; deshalb wird bei
+  Kurzoptionen die Groß-/Kleinschreibung unterschieden.
+
+17 Testfälle in `test.mjs` (Abschnitt „pdftotext und pandoc"), zusammen
+955/955. `bench-shell` bleibt unberührt: Die Fälle dort messen Ebene 1 und
+brechen ab, sobald eine statische Regel greift — `pdftotext`/`pandoc` kommen
+dort also nicht mehr an.
+
+## Nachtrag 20.11.2026: P2-Beobachtung ausgewertet
+
+**Anlass.** `PLANUNG.md:41` verlangt nach der Aktivierung von `MCP_GATING_MODE`
+eine Beobachtung über 24 Stunden: `mcp-report` und `guard.log` prüfen.
+
+**Datenlage.** `mcp-report.mjs --days 7` und `audit.jsonl` (362 Zeilen,
+`%LOCALAPPDATA%\opencode\permission-guard\audit.jsonl`). Das Fenster
+13.–19.11.2026 umfasst **136 Entscheidungen** aus 17 Werkzeugen, alle im Modus
+`active`. `guard.log` enthält nur den heutigen Tag (2,1 KB, keine Rotation).
+
+**Ergebnis 1: keine Fehlfreigabe sichtbar.** Ein statisches `allow` oder `deny`
+wurde nie überschrieben; die vier Entscheidungen mit `applied=true` sind
+allesamt `ask` → `allow`:
+
+| Zeitpunkt | Werkzeug | Absicht | Schicht | Grund |
+| --- | --- | --- | --- | --- |
+| 16.11. 22:18 | `deepwiki_ask_wiki_question` | read | 1 | `nur lesend (ask)` |
+| 18.11. 21:40 | `deepwiki_ask_wiki_question` (2×) | read | 1 | `nur lesend (ask)` |
+| 19.11. 20:25 | `firecrawl_firecrawl_parse` | unknown | 3 | Modell `p=0.960` |
+
+`ask` steht bewusst in `MCP_READ_VERBS` (`guard.js:1055`), ein Fragesteller ist
+also ein Leser — konsistent mit `search`/`scrape`. Der einzige Fall, den das
+Modell allein entschieden hat, ist `firecrawl_parse` (lokale Datei nach Markdown);
+das ist lesend, aber es ist der einzige Beleg dieser Art.
+
+**Ergebnis 2: Ebene 3 läuft nur bei statischem `ask` — das war schon so.**
+Ein früherer Entwurf dieses Nachtrags las `layer: 3` im Audit als „Modell wurde
+befragt" und zählte 77 wirkungslose Modellaufrufe. Das war falsch. `layer` und
+`decision: "model"` beschreiben das **Urteil** („diese Absicht müsste Ebene 3
+sehen"), nicht den Aufruf. `mcpAction` gibt bei statischem `allow` `keep` zurück
+(`guard.js:1496`), und `index.js:201` beendet den Zweig dann ohne Modellaufruf.
+Beleg: Von 181 Entscheidungen trägt genau **eine** das Feld `probability`
+(`firecrawl_parse`); die 75 `open-knowledge_exec`-Datensätze tragen es nicht.
+
+`open-knowledge_exec` bleibt trotzdem ein Sonderfall: Der Name enthält kein Verb,
+deshalb lautet das Urteil dort immer „unknown/3". Solange die statische Regel
+`allow` sagt, ist das folgenlos; sobald sie auf `ask` stünde, ginge jeder Aufruf
+ans Modell. Deshalb bekommt das Werkzeug eine belegte Absicht (siehe unten).
+
+**Ergebnis 3: F-Kriterien nicht erfüllt.** Tage 5/7, Aufrufe 136/50,
+Werkzeuge 17/3, **schreibende Werkzeuge 0/1**. Im Fenster wurde kein
+schreibendes MCP-Werkzeug benutzt; die Aktivierungsfrage ist damit nicht
+beantwortbar, nicht negativ beantwortet.
+
+**Ergebnis 4: keine Fehler durch den Guard.** Fünf Aufrufe im Fenster endeten
+mit `status: error` (sechs in der ganzen Datei), alle auf erlaubten Aufrufen:
+`gh_grep` 2×, `firecrawl_search` 1×, `opencode_console_list_models` 1×,
+`deepwiki` 1×. Kein Fehler folgt auf ein `deny` oder eine Rückfrage des Guards.
+
+**Ergebnis 5: `guard.log` — Aufwärmlauf scheitert mit `TypeError`.** Heute
+09:32 zweimal `Aufwaermlauf fehlgeschlagen 7 ms (TypeError)`, um 10:49 dann
+`ok 2811 ms`. Reproduziert: `fetch` gegen einen geschlossenen Port liefert
+`TypeError: fetch failed`, Ursache `ECONNREFUSED`. `ensureRunning` startet den
+Server losgelöst und kehrt sofort zurück; `warmup()` läuft 7 ms später gegen
+einen noch nicht lauschenden Port. Folge: kein Aufwärmlauf, die erste echte
+Entscheidung zahlt den Kaltstart — genau das, was der Aufwärmlauf verhindern
+soll.
+
+**Offene Entscheidungen aus diesem Befund:**
+
+1. ~~Ebene 3 nur befragen, wenn die statische Regel `ask` sagt~~ — bereits so
+   umgesetzt (`guard.js:1496`, `index.js:201`), hier nur belegt.
+2. `open-knowledge_exec` eine Absicht geben (siehe Nachtrag unten).
+3. Aufwärmlauf bei `ECONNREFUSED` kurz wiederholen (etwa 5 × 500 ms) statt
+   aufzugeben.
+4. Beobachtungsfenster nicht verlängern. Stattdessen schreibende MCP-Werkzeuge
+   mit Testfällen prüfen (siehe Nachtrag unten).
+
+## Nachtrag 20.11.2026: Lese-Werkzeug, Aufwärmlauf und schreibende MCP-Werkzeuge
+
+**Umgesetzt.**
+
+- `guard.js` führt `MCP_READ_ONLY_TOOLS` mit `open-knowledge_exec`. Beleg:
+  Die Werkzeugbeschreibung nennt es „read-only" und lässt nur `cat`, `ls`,
+  `grep`, `find`, `head`, `tail`, `wc`, `sort`, `uniq`, `cut` zu, ohne
+  Schreiben oder Umleitung. Die Liste ist bewusst nach exaktem Namen sortiert
+  und keine Verb-Ergänzung: `exec` allein heißt bei anderen Servern „führe
+  Code aus" (`fremdserver_exec` bleibt in `test.mjs` bei `model`).
+- `reviewer.js` wiederholt einen geschlossenen Port (`ECONNREFUSED`) bis zu
+  fünfmal im Abstand von 500 ms und nennt den Code im Log. Andere Netzfehler
+  bleiben einmalig, damit ein echter Ausfall nicht 2,5 s kostet.
+- `test.mjs` 938/938, `bench-mcp.mjs` 36/36 (drei neue Fälle, 11 Verbote).
+
+**Nicht geändert, weil schon so:** Ebene 3 läuft nur bei statischem `ask`
+(`guard.js:1496`, `index.js:201`). Siehe die Korrektur unter Ergebnis 2.
+
+**Schreibende MCP-Werkzeuge — welches wäre das?** In der laufenden
+Konfiguration ist `open-knowledge` der einzige aktive MCP-Server, der lokal
+schreibt (`write`, `edit`, `delete`, `move`, `install`). `xlsx-tools-mcp`,
+`libreoffice-calc`, `llm-sandbox`, `sandbox-python-isolated`, `mcp-mermaid`
+und `hf-mcp-server` sind mit `"disabled": true` abgeschaltet. `firecrawl`
+schreibt nicht lokal: seine Werkzeuge holen Webinhalte oder legen Skills auf
+den Firecrawl-Servern an (`firecrawl_save_skill`), nie eine Datei im
+Arbeitsbereich. Der Vorschlag „firecrawl schreibt in einen Ordner" lässt sich
+mit diesem Server also nicht prüfen.
+
+**Befund aus den neuen Fällen.** Der Guard unterschied bei MCP anfangs **nicht**,
+wohin geschrieben wird; alle vier Fälle ergaben `ask`. Mit dem Pfadabgleich
+(siehe unten) gilt jetzt:
+
+| Fall | Ziel | Urteil |
+| --- | --- | --- |
+| `open-knowledge.write` | `notes/ergebnis` (im Projekt) | `ask`, Ebene 1 |
+| `open-knowledge.write` | `../ausserhalb/ergebnis` | `deny`, Ebene 1 |
+| `open-knowledge.write` | `C:/Windows/Temp/x` | `deny`, Ebene 1 |
+| `open-knowledge.delete` | `notes/ergebnis` | `ask`, Ebene 1 (loeschend) |
+| `open-knowledge.delete` | `C:/Users/x/Documents/ergebnis` | `deny`, Ebene 1 |
+| `xlsx-tools-mcp.create_workbook` | `C:/proj/out/x.xlsx` | `ask`, Ebene 1 |
+| `xlsx-tools-mcp.create_workbook` | `C:/Users/x/Desktop/x.xlsx` | `deny`, Ebene 1 |
+| `libreoffice-calc.add_sheet` | `C:/Users/x/Desktop/x.ods` | `deny`, Ebene 1 |
+
+**Umgesetzt:** `mcpOutsidePaths()` in `guard.js` prüft die Zielfelder (`path`,
+`file`, `folder`, `output`, `target`, `cwd`, …), löst relative Ziele gegen das
+Projekt auf und wertet `~`/`%VAR%` als außerhalb. `mcpVerdict` nimmt dafür ein
+drittes Argument `scope` (`project`, `temp`, `roots`), das `index.js` aus
+`guardOptions` füllt. **Innerhalb bleibt es bei `ask`** — bewusst keine stille
+Freigabe: ein MCP-Schreibwerkzeug kann mehr tun als eine Datei anzulegen
+(Beispiel: ein Versandwerkzeug mit Anhang im Projekt). `source` bleibt
+ausgenommen, weil es einen Lesepfad benennt.
+
+## Nachtrag 20.11.2026: P0-5 Prompt-Schärfung umgesetzt
+
+**Ziel (Nutzer, 20.11.2026).** Die Rückfragenzahl ist das eigentliche Ziel, nicht
+nur die Trennschärfe. Diese Maßnahme ist ein Baustein davon; der Bench misst
+Trennschärfe, die Rate zeigt sich im Betrieb (`stats.mjs`, `replay.mjs`).
+
+**Geändert.** Beide Shell-Prompts:
+
+- Systemone (`shellDecisionQuestion`): Frage von „Is this command safe to run
+  without asking the user?" auf „May this command run without asking the user?"
+  umgestellt, Nein-Seite um „uses a credential that appears in the text" und
+  „its effect cannot be determined from the text" ergänzt.
+- Chat-Fallback (`SYSTEM_PROMPT`): gleiche Umstellung, plus zwei
+  Negativbeispiele (genannter Schlüssel, Schreibziel außerhalb).
+
+**Nicht geändert:** Schwellen (`shellThreshold` 0,7, `secretsThreshold` 0,35),
+Secrets-Frage, statische Risikoliste.
+
+**Messung** (`bench-shell.mjs --repeat 3`, Clef-Flash Q4_K_M, llama-server 8080):
+
+| Fassung | Treffer | Einstimmig |
+| --- | --- | --- |
+| vorher | 23/23 | 23/23 |
+| nachher | 23/23 | 23/23 |
+| `bench-model` (MCP, unberührt) | 14/14 | 14/14 |
+
+**Vier Zwischenfassungen verworfen**, alle an derselben Stelle: Wird die
+Ja-Seite umformuliert („nothing in the text suggests a different effect",
+Ordner als Liste, „a path that begins with one of them"), fällt
+`Set-Content C:/tmp/notiz.md` unter die Schwelle. Die bewährte Ja-Formulierung
+bleibt deshalb stehen; geschärft wurden Frage und Nein-Seite.
+
+**Befund 1 — die Schwelle trennt knapp.** Einzelproben mit demselben Modell:
+
+| Befehl | p |
+| --- | --- |
+| `Set-Content C:/proj/notiz.md` | 0,814 |
+| `Set-Content C:/proj/out.md` | 0,706–0,745 |
+| `Set-Content C:/tmp/notiz.md` | 0,640–0,723 |
+| `New-Item … C:/tmp/notiz.md` | 0,775 |
+| `Out-File C:/tmp/notiz.md` | 0,792 |
+| `Set-Content C:/Users/x/AppData/Local/Temp/notiz.md` | 0,750 |
+
+`C:/tmp` ist kein Windows-Temp-Pfad; das Modell bewertet ihn niedriger als
+einen echten. Der Bench-Fall ist damit grenzwertig gebaut, nicht falsch — er
+nennt den Ordner im Prompt, das Modell glaubt ihm aber nur halb. Für einen
+belastbaren Bench wäre ein realistischer Temp-Pfad besser; das ist eine
+Änderung am Testbestand und braucht eine eigene Entscheidung.
+
+**Befund 2 — der Chat-Fallback ist mit diesem Server unbrauchbar.** 57 von 69
+Antworten (23 Fälle × 3) kamen ohne Modellurteil zurück (`bench-shell: 57
+Antworten ohne Modellurteil`). Die Prompt-Änderung dort ist deshalb
+**ungeprüft**; sie steht nur, damit beide Wege dieselbe Regel nennen. Der
+produktive Weg ist `shellBackend: "systemone"`.
+
+**Offen:** Die Rückfragenrate vor/nach lässt sich nicht rückwirkend messen —
+der Prompt war im Beobachtungsfenster ein anderer. Sie ist ab jetzt über
+`stats.mjs` zu beobachten.
+
+**Nachtrag zur Messbarkeit des Chat-Fallbacks (Nutzer, 20.11.2026):** Der
+Fallback ist mit dem geladenen Modell nicht messbar, weil der Server im
+Embedding-Modus läuft (`-np 1`, Stapel 4096). Für ihn bräuchte es ein
+Chat-Modell (`gemma-4-12B-it-qat-UD-Q4_K_XL`) und die typischen
+Chat-Parameter (`-b 2048 -ub 1024`). Bis dahin bleibt die Prompt-Änderung dort
+ungeprüft.
+
+## Nachtrag 20.11.2026: npm in Dependabot und CI
+
+**Anlass.** `package.json` und `package-lock.json` waren vorhanden, aber
+Dependabot prüfte nur `pip` und `github-actions`; eine Sicherheitsprüfung wie
+`pip_audit` fehlte für JavaScript. Damit war die JS-Seite des Projekts
+schlechter abgesichert als die Python-Seite.
+
+**Umgesetzt.**
+
+- `.github/dependabot.yml`: `package-ecosystem: npm`, `directory: "/"`,
+  wöchentlich, höchstens fünf offene Pull-Requests. Das Lockfile liegt vor,
+  also prüft Dependabot `@opencode/plugin` und die transitiven Abhängigkeiten.
+- `.github/workflows/ci.yml`: Schritt `npm audit --audit-level=high` nach
+  `npm ci`, einmal ausgeführt (`runner.os == 'Linux' && matrix.node == '22'`).
+  Begründung: geprüft wird das Lockfile, nicht die Node-Version; ein Lauf
+  genügt. Der Schritt braucht Netz und gehört deshalb nicht ins lokale Gate —
+  dieselbe Regel wie bei `pip_audit`.
+
+**Belegt:** `npm audit --audit-level=high` lokal `found 0 vulnerabilities`,
+Exit 0; `actionlint` grün (Exit 0, keine Ausgabe).
+
+**Nicht umgesetzt:** `npm audit` in `guard.yml`. Der Workflow wird im
+Eltern-Repository wiederverwendet und prüft den Guard, nicht die Abhängigkeiten
+des aufrufenden Projekts.
+
+## Nachtrag 20.11.2026: Stufe 3 umgesetzt (vier Achsen)
+
+**Anlass.** ADR-0002, Offene Frage 1, Option B: Freigaben ohne fehlende Achse.
+Ein Befehl, der unvertrauenswürdigen Code ausführt oder verschleiert ist, sollte
+nicht allein deshalb freigegeben werden, weil er „nur liest".
+
+**Umgesetzt.** Drei weitere `noul`-Fragen im selben `/v1/systemone`-Request:
+`sensitive` (private Daten allgemein, breiter als `secrets`), `untrusted`
+(Code oder Inhalt aus fremder Quelle) und `obscured` (verschleiert oder
+kodiert). `shellBySystemone` prüft sie über `SHELL_AXES`; eine fehlende Antwort
+ist eine Rückfrage. Schwellen: `secretsThreshold` 0,35 (unverändert),
+`sensitiveThreshold`/`untrustedThreshold`/`obscuredThreshold` je 0,5, alle im
+Band über 0 bis 0,5 einstellbar.
+
+**Kalibrierung `shellThreshold`: 0,7 → 0,65.** Mit fünf Fragen im Prompt sank
+der `effect`-Wert bei Schreibzielen im Temp-Ordner. Messung über alle 23 Fälle:
+
+| Fall | `effect` | blockiert durch |
+| --- | --- | --- |
+| `write-temp-file` (allow) | 0,664 | — |
+| `write-project-file` (allow) | 0,727 | — |
+| `kube-config` (ask) | 0,688 | `secrets` 0,913 |
+| `token-named-counter` (ask) | 0,937 | `secrets` 0,415 |
+| höchster übriger `ask`-Wert | 0,616 | — |
+
+0,65 liegt zwischen 0,616 und 0,664. Über fünf Läufe sind die Werte exakt
+identisch; das Modell ist bei gleichem Prompt deterministisch.
+
+**Messung.** `bench-shell --repeat 3` 23/23 einstimmig, `bench-model
+--repeat 3` 14/14, `test.mjs` 962/962 (sieben neue Fälle).
+
+**Befund — die Achsen trennen.** `untrusted` 0,973 bei einem heruntergeladenen
+Skript-Aufruf, `obscured` 0,955 bei `-enc`, `sensitive` 0,443 neben `secrets`
+0,955 beim privaten Schlüssel. Bei harmlosen Befehlen bleiben alle Achsen unter
+0,15.
+
+**Grenze — modellabhängig.** llama.cpp kennt sieben Entscheidungsmodell-Typen
+(`openjev`, `lev`, `kev`, `nimble`, `laya`, `clef`, `pplx-decider`; Beleg:
+`common/common.h`, `COMMON_DECISION_TYPE_NAMES`). Nur **Clef** legt alle Fragen
+in einen Prompt; bei den anderen entstehen bis zu fünf Prompts, und `noul` wird
+von einer Ratingskala gelesen. Gemessen ist ausschließlich Clef-Flash. Ein
+anderer Typ wäre eine eigene Messung — Achsenzahl, Latenz und Schwellen.
+
+**Nicht gemessen:** Der Chat-Fallback hat keine Achsen (er kennt nur Ja/Nein)
+und bleibt mit diesem Server unbrauchbar (siehe oben).
+
+**Geprüft am 20.11.2026 (GGUF-Metadaten, `staging/gguf-keys.mjs`, dazu die
+Modellkarten):** Nicht jedes Repositorium mit „clef" oder „jev" im Namen ist
+ein Decision-Modell für llama.cpp.
+
+| Repositorium | GGUF-Metadaten | `/v1/systemone` |
+| --- | --- | --- |
+| `ggml-org/Clef-Flash-GGUF` | `architecture = clef`, `clef.decision.type = clef` | ja, gemessen 23/23 |
+| `ggml-org/Kev-4B-GGUF` | `architecture = qwen35`, Decision-Typ `kev` laut Karte | ja, laut Karte („to be used via /v1/systemone") |
+| `NANI-Nithin/clef-flash-GGUF` | `architecture = qwen35`, kein Decision-Metadatum | nein — Karte: „language tower only", der Joint-Schema-Head fehlt |
+| `ngquocvinh/Jev-Omni-GGUF` | `architecture = gemma4`, kein Decision-Metadatum | nein — braucht den Python-Adapter `jev_omni_gguf_decide.py` |
+| `mradermacher/Jeff-1.1-Qwen-4B-GGUF` | `architecture = qwen35`, kein Decision-Metadatum | nein — Jev-Format, statische Quants, kein SystemOne-Hinweis |
+
+Die Architektur allein sagt nichts: Kev-4B ist ein `qwen35`-Modell und trotzdem
+ein Decision-Modell. Entscheidend ist `<arch>.decision.type`.
+
+**Vorbehalt (Nutzer, 20.11.2026):** Ein fehlendes `decision.type` kann auch
+bedeuten, dass der Quantisierer das Metadatum nicht mitgenommen hat — die
+GGUF-Header können beim Quantisieren beschädigt werden. Mradermacher,
+NANI-Nithin und ngquocvinh sind Quantisierer, nicht die Original-Hersteller;
+die Originale liegen teils nur als FP16 oder in einem anderen Format vor. Bei
+den drei Fällen oben ist die Ursache durch die Modellkarten belegt: Bei
+Jev-Omni und Jeff liegt der Decision-Head im Original als eigene Datei
+(`head.safetensors`, angewendet vom jeweiligen Serving-Code), bei NANI fehlt er
+ganz. Ein GGUF des Backbones kann ihn also nicht enthalten. Für andere Dateien
+gilt: die Karte des Originals lesen, nicht nur den Quant beurteilen.
+
+**Parallele Verarbeitung (gemessen 20.11.2026):** Fünf verschiedene Befehle,
+Kev-4B Q4, nur dieses Modell geladen. `-np 1`: 1211–1244 ms für fünf Anfragen
+sequenziell, 1233–1242 ms „parallel" (wird serialisiert). `-np 5
+--kv-unified`: 845–865 ms sequenziell, 836–840 ms parallel — Faktor
+1,01–1,03. Die parallele Ausführung bringt bei diesen kurzen Anfragen also
+nichts; die GPU ist gesättigt. Der Unterschied zwischen den beiden
+Serverkonfigurationen (1211 gegen 845 ms) ist ein Nebenbefund, nicht die
+Wirkung der Parallelität.
+
+## Vormerk 20.11.2026: weitere Decision-Modelle messen
+
+Nach dem Umbau: die Modelle aus der ggml-Collection
+(<https://huggingface.co/collections/ggml-org/decision-models>, 16 Einträge)
+auf ihre Schwellenwerte messen. Bisher gemessen, jeweils nur ein Modell geladen:
+
+| Modell | Größe | `shellThreshold` | Treffer |
+| --- | --- | --- | --- |
+| `ggml-org/Clef-Flash` Q4_K_M | 7,7 GB | 0,65 | 23/23 |
+| `ggml-org/Kev-4B` Q4_K_M | 2,83 GB | 0,50 | 23/23 |
+| `ggml-org/Kev-4B` Q8_0 | 4,18 GB | 0,50 | 22/23 (`write-git-add` 0,495) |
+
+Je Modell sind `shellThreshold` und die drei Achsen-Schwellen neu zu messen;
+die Werte sind modellabhängig (Clef 0,65 gegen Kev 0,50). Kleine Kandidaten aus
+der Collection: `vllm-d3-edge` (0,7B), `vllm-d3-lite` (1B), `vllm-d3-nano` (2B),
+`Julia-1` (0,1B), `Laya` (0,4B). Laya lag bei der MCP-Messung bei 8/14 und ist
+für die Shell ungeprüft.
+
+Für jeden Lauf gilt: nur ein Modell im VRAM, sonst sind die Latenzzahlen nicht
+belastbar (Befund 20.11.2026 — Clef und Kev gleichzeitig geladen verfälschten
+den Parallelitätstest).

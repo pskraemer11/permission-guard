@@ -2322,3 +2322,464 @@ beide READMEs nennen 32000 Zeichen (JSON).
 gruen; `bench-model` 14/14 einstimmig (Reviewer lief). Details je Blocker in
 `.full-review/fix-log.md`. Nichts committet; der ubatch-Stand aus dem
 Vornachtrag gilt unveraendert (Messung nicht ausgefuehrt).
+
+
+=============== Compaction 20.11.2026 / Groesse, Geheimnisfrage, Modellstapel ================
+## Objective
+- **Current:** Weniger falsche Rueckfragen, mehr Schutz. Drei kleine, belegte
+  Schritte: Groessenlimit (Option C), fehlende Geheimnis-Antwort, belegter
+  Serverfehler "zu gross". Danach Stufe 3 (vier Achsen).
+
+## Decisions
+- **Groessenlimit Option C:** MCP-Argumente ueber 32000 Zeichen (JSON) bleiben
+  `allow` nur bei belegter Leseabsicht ohne Geheimnisverdacht; sonst `deny`
+  mit Grund `unpruefbar`. Ein Groessenlimit ist weiter **kein Fund**.
+- **Fehlende Geheimnis-Antwort:** `ask` mit eigenem Grund statt Rueckfall auf
+  die Hauptfrage. Der alte Testfall ist umgedreht.
+- **Belegter Serverfehler:** "input ... is too large to process" (HTTP 500)
+  ergibt `deny`; andere Fehler bleiben `ask`.
+- **Stapelgroesse:** `config.ini` bleibt bei `batch-size = 2048`,
+  `ubatch-size = 1024` — das ist die richtige Einstellung fuer **Chatmodelle**.
+  Fuer das Entscheidungsmodell uebergibt `start-reviewer.ps1` die Werte im
+  Aufruf (`-b 4096 -ub 4096`, Parameter `-Batch`/`-Ubatch`), weil
+  Kommandozeilenargumente die Datei uebersteuern. Watchdog und Plugin starten
+  ueber dieses Skript; eine zweite Stelle gibt es nicht.
+- **Zurueckgestellt:** Deny-Limits, Ausweitung Skriptblock/`$(…)` auf den
+  Reviewer (nur mit rotem Fall).
+
+## Work State
+- **Completed:** `guard.js` (`mcpVerdict`), `reviewer.js` (`requestSystemone`
+  wertet Body bei 500 aus, `shellBySystemone`, `reviewMcp`), `test.mjs`
+  (933/933, drei neue Faelle), `mcp-cases.jsonl` (zwei Faelle auf `deny`),
+  `bench-mcp.mjs` (`EXPECTED` 12 ask/11 deny), `AGENTS.md` (11 Verbote),
+  `README.md`, `README_de.md`, `SECURITY.md` (Ausnahme von der
+  Rueckfrage-Zusage), `CHANGELOG.md`, ADR-Nachtrag, `PLANUNG.md` (Stand).
+- **Gate (20.11.2026):** `test.mjs` 934/934, `test-wiring.mjs` 13/13,
+  `bench-mcp.mjs` 33/33 (11 Verbote), `bench-shell` 23/23 einstimmig,
+  `bench-model` 14/14 einstimmig, `pytest` 149 bestanden/1 uebersprungen,
+  Ruff, Ruff-Format, Pyright gruen.
+- **Starter geprueft:** `start-reviewer.ps1` startet llama-server mit
+  `-b 4096 -ub 4096` (Prozesszeile belegt), Parser-Pruefung 0 Fehler.
+- **Endlauf gegen den echten Server** (`-b 4096 -ub 4096`): 24000 und 28000
+  Zeichen `allow`, 31000 und 33000 `deny` mit
+  `unpruefbar: Eingabe zu gross fuer den Modellstapel`.
+
+## Important Details
+- **Fruehere Aussage korrigiert:** Die Grenze lag nicht bei "~4000 Zeichen",
+  sondern bei `ubatch 1024` (5000 ok, 6000 HTTP 500). Mit 2048: 12000 ok,
+  16000 500. Mit 4096: 24000 ok, 31000 500. GPU bei 4096: 7054 von 16283 MiB.
+- **Quelle der Grenze:** llama.cpp im Embedding-Modus erzwingt
+  `n_batch = n_ubatch`; der Serverfehler nennt den Stapel im Klartext.
+- **Sandbox:** `codex sandbox` startet den Windows-Dienst
+  `CodexSandboxService.OpenAI.Codex` nicht (waehrend des Laufs Stopped,
+  Prozessbaum `codex.exe` -> `codex.exe` -> `cmd.exe`, Exit 0). Der Screenshot
+  vom 18.11. zeigt den Dienst als Kindprozess der ChatGPT-GUI.
+- **Fehler im Vorbild:** `:tmpdir` deckt `%TEMP%`/`%TMP%` nicht ab; ohne
+  explizite Deny-Eintraege schreibt die Sandbox dorthin.
+- **Korpusgrenze:** `bench-shell` ruft den Reviewer direkt; im Produktionspfad
+  erreichen nur 2 von 23 Faellen den Reviewer. 0,5 und 0,7 liefern dasselbe
+  Ergebnis (Luecke zwischen 0,26 und 0,74). Als Referenz fuer "1-2 Fragen vs.
+  4 Achsen" ist der Korpus untauglich.
+
+## Next Move
+1. Stufe 3 (vier Achsen) mit eigenen Graubereich-Faellen messen.
+2. Danach: Commit auf Freigabe, dann Deploy (nur `deploy.ps1`, damit die
+   deployte Kopie von `start-reviewer.ps1` die Stapelwerte mitbringt).
+
+## Nachtrag 20.11.2026 (Fortsetzung): Korrektur und drei Umsetzungen
+
+**Korrektur einer eigenen Fehlaussage.** Der erste P2-Bericht las `layer: 3`
+im Audit als "Modell wurde befragt" und zaehlte 77 wirkungslose Modellaufrufe.
+Falsch: `layer`/`decision: "model"` beschreiben das **Urteil**, nicht den
+Aufruf. `mcpAction` gibt bei statischem `allow` `keep` (`guard.js:1496`), und
+`index.js:201` beendet den Zweig ohne Modellaufruf. Beleg: Von 181
+Entscheidungen traegt genau eine das Feld `probability`. Punkt 1 der
+Nutzerfreigabe war damit bereits erfuellt; nichts geaendert, nur belegt.
+
+**Umgesetzt:**
+- `MCP_READ_ONLY_TOOLS` mit `open-knowledge_exec` (Beleg: Werkzeugbeschreibung
+  nennt es read-only, Allowlist cat/ls/grep/find/head/tail/wc/sort/uniq/cut).
+  Bewusst exakter Name statt Verb `exec`, weil das bei anderen Servern
+  "fuehre Code aus" heisst; `fremdserver_exec` bleibt `model`.
+- Aufwaermlauf wiederholt `ECONNREFUSED` bis 5x im Abstand von 500 ms, nennt
+  den Code im Log; andere Netzfehler bleiben einmalig.
+- `mcp-cases.jsonl` um drei schreibende Faelle ergaenzt; `bench-mcp` 36/36.
+
+**Befund zu schreibenden MCP-Werkzeugen:** Einziger aktiver lokaler Schreiber
+ist `open-knowledge` (write/edit/delete/move). `firecrawl` schreibt nicht
+lokal; `xlsx-tools-mcp`, `libreoffice-calc`, `llm-sandbox`, `mermaid` und
+`hf-mcp-server` sind abgeschaltet. Der Guard fragt bei **jedem** Schreibziel,
+auch bei `../ausserhalb` und `C:/Windows/Temp` — anders als die Shell-Pruefung,
+die dort verweigert. Naechste Stufe waere ein Pfadabgleich fuer MCP
+(Signaturaenderung an `mcpVerdict`).
+
+**Gate (20.11.2026, nach diesen Aenderungen):** `test.mjs` 938/938,
+`test-wiring.mjs` 13/13, `bench-mcp.mjs` 36/36, `test-index.mjs` 23/23,
+`pytest` 149/1, Ruff, Ruff-Format, Pyright gruen.
+
+## Nachtrag 20.11.2026 (zweite Fortsetzung): MCP-Pfadabgleich
+
+**Anlass:** Der Nutzer hat `libreoffice-calc` und `xlsx-tools-mcp` aktiviert und
+den Pfadabgleich fuer MCP freigegeben. Damit gibt es drei lokale
+Schreibwerkzeuge statt nur `open-knowledge`.
+
+**Umgesetzt:** `mcpOutsidePaths(input, scope)` in `guard.js` sammelt die
+Zielfelder (`path`, `file`, `filename`, `filepath`, `file_path`, `directory`,
+`dir`, `folder`, `output`, `cwd`, `workdir`, `target`, `dest`, `destination`),
+loest relative Ziele gegen das Projekt auf (mit `..`), wertet `~` und `%VAR%`
+als ausserhalb und vergleicht gegen Projekt, Temp und die vertrauten Wurzeln.
+`mcpVerdict(criteria, input, scope)` verweigert `write` und `destructive` bei
+einem Ziel ausserhalb; innerhalb bleibt es bei `ask`. `index.js` uebergibt
+`{project, temp, roots}` aus `guardOptions`. Ohne `scope` bleibt das alte
+Verhalten, damit die reine Urteilslogik ohne Projekt testbar bleibt.
+
+**Bewusst nicht:** Schreiben innerhalb des Projekts auf `allow` heben. Ein
+MCP-Schreibwerkzeug kann mehr tun als eine Datei anzulegen (Versand mit
+Anhang im Projekt waere sonst eine stille Freigabe).
+
+**Nicht geprueft:** `source` bei `open-knowledge.write` (Asset-Upload) bleibt
+aussen vor; ein Upload einer privaten Datei aus dem Home ergibt weiterhin
+`ask`, nicht `deny`. Das waere ein eigener Fall.
+
+**Gate (20.11.2026, nach dem Pfadabgleich):** `test.mjs` 938/938,
+`test-wiring.mjs` 13/13, `bench-mcp.mjs` 40/40 (15 Verbote), `test-index.mjs`
+23/23, `pytest` 149/1, Ruff, Ruff-Format, Pyright gruen.
+
+## Nachtrag 20.11.2026 (dritte Fortsetzung): Live-Beleg am laufenden System
+
+Deployt am 20.11.2026 ueber `deploy.ps1` (alle Dateien "identisch",
+`guard.js` SHA256 `E7EF18DF…` in Quelle und Ziel gleich). Danach zwei echte
+MCP-Aufrufe von `xlsx-tools-mcp.create_workbook`:
+
+| Fall | Ziel | Ergebnis |
+| --- | --- | --- |
+| ausserhalb | `~/pg-probe.xlsx` | `deny`, Aufruf abgewiesen, **keine Datei** entstanden |
+| innerhalb | `staging/pg-probe.xlsx` | `ask`, Rueckfrage erschien, nach Freigabe geschrieben |
+
+Belege:
+
+- `guard.log`: `mcp ask xlsx-tools-mcp_create_workbook agent=general
+  args=2 felder=path,sheets absicht=write/create ziel=path urteil=deny/1`,
+  danach `mcp deny (aktiv) schreibend ausserhalb des Projekts (1)`.
+  Beim zweiten Aufruf `urteil=ask/1` und
+  `mcp ask (aktiv) schreibend oder oeffentlich (create)`.
+- `audit.jsonl`: erster Aufruf `decision: deny`, `effect: ask`, `layer: 1`,
+  `intent: write`, `applied: true`, `seq: 363`.
+- Dateisystem: `Test-Path ~/pg-probe.xlsx` → `False`; die Probe im Projekt
+  wurde nach dem Nachweis geloescht.
+
+**Was damit belegt ist:** Der Pfadabgleich greift vor der Ausfuehrung, die
+Begruendung nennt keinen Pfad (nur die Anzahl), und der Aufruf steht
+vollstaendig in der Audit-Kette. Innerhalb des Projekts bleibt es bei der
+Rueckfrage — keine stille Freigabe.
+
+**Nicht belegt:** Ein Schreibziel innerhalb des Projekts, das ein Versand-
+oder Veroeffentlichungswerkzeug ist (etwa `mail_send` mit Anhang im Projekt).
+Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
+
+
+=============== Compaction 20.11.2026 / 15:21 ================
+## Objective
+- **Current:** Sitzung abgeschlossen; PR #10 (`welle-2-mcp-pfad`) ist offen,
+  alle Pruefungen gruen, nicht gemergt.
+- **Completed:** ADR-0002-Entscheidungen in drei Stufen umgesetzt, live belegt
+  und dokumentiert.
+
+## Important Details
+- **Entscheidungen (Nutzer):** Groessenlimit Option C (deny ausser belegtem
+  Lesen); fehlende Geheimnis-Antwort ergibt `ask`; belegter Serverfehler
+  „input … too large" ergibt `deny`; Stapel `-b/-ub 4096` im Starter, nicht in
+  `config.ini` (die bleibt fuer Chatmodelle); MCP-Pfadabgleich fuer
+  `write`/`destructive`; Deny-Limits und Vier-Achsen-Messung zurueckgestellt.
+- **Korrektur einer eigenen Fehlaussage:** `layer: 3` im Audit bedeutet
+  „Urteil haette Ebene 3 gebraucht", nicht „Modell wurde befragt". Von 181
+  Entscheidungen trug genau eine `probability`. Punkt „Ebene 3 nur bei
+  statischem ask" war daher schon erfuellt (`guard.js:1496`, `index.js:201`).
+  Lehre: Audit-Felder am Quelltext pruefen, bevor eine Zahl als Befund gilt.
+- **Sandbox:** `codex sandbox` startet den Windows-Dienst
+  `CodexSandboxService.OpenAI.Codex` nicht (waehrend des Laufs Stopped,
+  Exit 0). Fehler im Vorbild `Inspect-Evals`: `:tmpdir` deckt `%TEMP%`/`%TMP%`
+  nicht ab; erst explizite Deny-Eintraege blockieren das Schreiben dorthin.
+- **Stapelgrenze:** 1024 deckt ~5000 Zeichen, 2048 ~12000, 4096 ~24000;
+  GPU bei 4096: 7054 von 16283 MiB.
+- **Gate:** `test.mjs` 938/938, `test-wiring` 13/13, `bench-mcp` 40/40
+  (15 Verbote), `test-index` 23/23, `pytest` 149/1, Ruff/Format/Pyright gruen.
+- **Live-Beleg nach Deploy:** `xlsx-tools-mcp.create_workbook` mit Ziel
+  ausserhalb → `deny`, keine Datei; Ziel im Projekt → `ask`, nach Freigabe
+  geschrieben.
+
+## Work State
+### Completed / Active / Blocked
+- **Completed:** Commits `315d6d7`, `9587e99`, `1e1046a` auf dem Branch;
+  Deploy ueber `deploy.ps1` (SHA256 gleich); PR #10 offen, Checks gruen.
+- **Active:** Compaction (diese Datei), noch nicht committet.
+- **Blocked:** keiner.
+
+## Next Move
+1. Compaction committen und auf `welle-2-mcp-pfad` pushen, damit sie in PR #10
+   landet.
+2. PR #10 mergen; danach lokal `git switch main`, `git fetch origin`,
+   `git reset --hard origin/main`.
+3. Offen aus PLANUNG: Stufe 3 (vier Achsen) mit eigenen Graubereich-Faellen,
+   `pdftotext`/`pandoc`, Deny-Limits.
+
+## Relevant Files
+- `guard.js`: `mcpOutsidePaths`, `MCP_READ_ONLY_TOOLS`, Groessenlimit-Regel.
+- `reviewer.js`: Geheimnisfrage fail-closed, `unanalysable`, Aufwaermlauf-Wiederholung.
+- `index.js`: `scope` fuer `mcpVerdict`.
+- `start-reviewer.ps1`: `-Batch`/`-Ubatch`, Standard 4096.
+- `mcp-cases.jsonl`, `bench-mcp.mjs`: 40 Faelle, 15 Verbote.
+- `PLANUNG.md`: P2-Auswertung samt Korrektur; `SECURITY.md`: drei Ausnahmen.
+- `docs/adr/0002-reviewer-und-sandbox.md`: Nachtrag mit Messreihen.
+
+## Important Context
+- Branch `welle-2-mcp-pfad` = Arbeitsstand; `main` lokal auf `925b562`
+  (Stand vor dieser Sitzung), deshalb zeigt `AGENTS.md` dort wieder 33/9.
+- `staging/` ist nur auf dem Branch ignoriert; auf `main` erscheint es als
+  untracked. Vor `git add -A` auf `main` beachten.
+- Deployt ist `9587e99`; `1e1046a` ist reine Doku.
+- Push und Merge bleiben beim Nutzer.
+
+
+=============== Compaction 20.11.2026 / 16:01 ================
+## Objective
+- **Current:** `pdftotext`/`pandoc` im Guard umgesetzt, ADR-0002 als
+  angenommen markiert; `package.json` bleibt ohne Repository-Angaben.
+- **Next:** P0-5 (Prompt-Schaerfung) planen, nicht umsetzen.
+
+## Important Details
+- **Entscheidung (Nutzer):** Der GitHub-Login soll in **keiner** Datei stehen.
+  Damit sind `repository`, `bugs` und `homepage` in `package.json` nicht
+  fuellbar - alle drei enthalten die Web-Adresse mit dem Login. Der Punkt ist
+  in `PLANUNG.md` auf "zurueckgestellt bis oeffentlicher Umzug" gesetzt.
+  Hintergrund ist die S0-Regel: Weder Dateien noch Commit-Metadaten verraten
+  den Eigentuemer.
+- **Abweichung vom Vormerk:** `pdftotext` steht nicht in `READ_BINARIES`,
+  sondern hat `classifyPdftotext()`. In `READ_BINARIES` muesste die
+  Zwei-Argument-Form ueber eine Ausnahme davor wieder eingefangen werden.
+- **Belegt statt geschaetzt:** Poppler 26.09.0 nennt 14 Optionen mit eigenem
+  Wert (auch `-opw`/`-upw`, `-colspacing`, `-fixed`); Pandoc 3.14 nennt `-o`,
+  `-d`, `-F`, `-L` als schreibend. `-f`/`-r` sind `--from`/`--read`, deshalb
+  wird bei Kurzoptionen die Gross-/Kleinschreibung unterschieden.
+- **Grenze der Umsetzung:** `pandoc --sandbox` ist keine Freigabe; gemessen
+  verhindert es nichts. Lesend bleibt nur, was gar keine schreibende Option
+  traegt.
+- **`codex_guard.py` unberuehrt:** Er hat keine Allowlist fuer Shell-Binaries
+  (reine Deny-Liste), `shared-cases.jsonl` enthaelt nur gemeinsame Faelle.
+
+## Work State
+- **Completed:** `guard.js` (`classifyPdftotext`, `classifyPandoc`),
+  `test.mjs` 955/955 (17 neue Faelle), beide READMEs (Tabelle + Ueberschrift),
+  `PLANUNG.md` (Vormerk umgestellt, P3-Zeile), `CHANGELOG.md`,
+  ADR-Statuszeile. Gate: `test-wiring` 13/13, `bench-mcp` 40/40,
+  `test-index` 23/23, `pytest` 149/1, Ruff/Format/Pyright gruen.
+- **Active:** Commit dieser Aenderungen.
+- **Blocked:** keiner.
+
+## Next Move
+1. Commit (Doku und Code zusammen).
+2. P0-5 planen: Kriterien statt "harmlos?", zwei Negativbeispiele,
+   Messauftrag `bench-shell --repeat 3` und `bench-model --repeat 3`
+   vorher/nachher.
+3. Danach Stufe 3 (vier Achsen), zuletzt Deny-Limits.
+
+## Relevant Files
+- `guard.js`: `classifyPdftotext`, `classifyPandoc`, `PDFTOTEXT_VALUE_OPTIONS`,
+  `PANDOC_WRITE_LONG`/`PANDOC_WRITE_SHORT`.
+- `test.mjs`: Block `docTools`, in der Summe als `docTools.length`.
+- `staging/table-insert.mjs`, `staging/row-replace.mjs`: Einmalhelfer zum
+  Ausrichten der Tabellen, nicht versioniert.
+
+
+=============== Compaction 20.11.2026 / 16:25 ================
+## Korrektur zum Block 16:01
+
+- **Begriffsklaerung (Nutzer):** "Login" ist die Zugangskennung (Passwort,
+  Token, Sitzung) - nicht der GitHub-Benutzername. Der Block 16:01 hat "Login"
+  fuer den Handle verwendet; das war falsch. In `package.json` stand zu keinem
+  Zeitpunkt ein Passwort oder Token.
+- **Entscheidung (Nutzer, 20.11.2026):** Der Handle ist in Dateien erlaubt.
+  `package.json` bekommt `repository`, `bugs` und `homepage`
+  (`git+https://github.com/<handle>/permission-guard.git`, `.../issues`,
+  `...#readme`). Die S0-Abnahme in `PLANUNG.md` ist angepasst: Handle erlaubt,
+  E-Mail und Klarname weiterhin ausgeschlossen. Entscheidung 10 in der
+  Entscheidungstabelle haelt das fest.
+- **Zwei S0-Abweichungen, gemeldet und unveraendert gelassen:** Der Handle
+  steht bereits in `.github/workflows/guard.yml` (Zeile 7 Kommentar, Zeile 31
+  `repository:`, fuer reusable workflows notwendig). Acht Commits vom
+  09.-18.11.2026 tragen die Identitaet `PSK` statt der neutralen. Die
+  Abnahmepunkte in `PLANUNG.md` nennen beide Abweichungen jetzt ausdruecklich,
+  damit die Doku nicht mehr behauptet, S0 sei woertlich erfuellt.
+- **Nicht angefasst:** Historie, `guard.yml`, Commit-Identitaeten - auf Wunsch
+  des Nutzers.
+
+
+=============== Compaction 20.11.2026 / 16:27 ================
+## Objective
+- **Current:** P0-5 (Prompt-Schaerfung der Shell-Pruefung) umgesetzt und
+  gemessen; Commit steht aus.
+- **Next:** Dependabot-Frage (npm) entscheiden, danach Stufe 3.
+
+## Important Details
+- **Ziel des Nutzers (20.11.2026):** Die Rueckfragenzahl ist das eigentliche
+  Ziel, nicht nur die Trennschaerfe. P0-5 ist ein Baustein davon; die Rate
+  misst man im Betrieb (`stats.mjs`, `replay.mjs`), nicht im Bench.
+- **Umgesetzt:** `shellDecisionQuestion` (Systemone) und `SYSTEM_PROMPT`
+  (Chat-Fallback) fragen jetzt "May this command run without asking the user?"
+  statt "Is this command safe to run...". Nein-Seite um zwei Gruende ergaenzt.
+  Schwellen (0,7 / 0,35), Secrets-Frage und Risikoliste unveraendert.
+- **Vier Zwischenfassungen verworfen:** Jede Umformulierung der Ja-Seite
+  ("nothing suggests a different effect", Ordner als Liste, "a path that begins
+  with one of them") drueckte `Set-Content C:/tmp/notiz.md` unter 0,7. Die
+  bewaehrte Ja-Formulierung blieb stehen.
+- **Messung:** `bench-shell --repeat 3` 23/23 einstimmig (vorher und nachher),
+  `bench-model --repeat 3` 14/14. Grenzfaelle: `C:/proj` 0,706-0,814,
+  `C:/tmp` 0,640-0,723, echter Windows-Temp-Pfad 0,750. Die Schwelle trennt
+  knapp.
+- **Befund Chat-Fallback:** 57 von 69 Antworten ohne Modellurteil
+  (`bench-shell: 57 Antworten ohne Modellurteil`). Mit diesem Server nicht
+  messbar; die Prompt-Aenderung dort ist ungeprueft.
+- **Befund Testbestand:** `C:/tmp` ist kein Windows-Temp-Pfad. Der Bench-Fall
+  `write-temp-file` ist grenzwertig gebaut, nicht falsch. Ein realistischer
+  Pfad waere eine eigene Entscheidung.
+- **Eigener Fehler, korrigiert:** Ein Health-Check gegen `[IP_ADDRESS]:8080`
+  schlug fehl; die Adresse war die maskierte Darstellung, nicht der echte Wert.
+  Mit `localhost:8080` antwortet der Reviewer in 36 ms. Der Server lief die
+  ganze Zeit.
+
+## Work State
+- **Completed:** `reviewer.js` (beide Prompts), `PLANUNG.md` (Nachtrag mit
+  Messung und Befunden), `CHANGELOG.md`.
+- **Active:** Commit; Dependabot-Frage beantworten.
+- **Blocked:** keiner.
+
+## Next Move
+1. Commit der Prompt-Schaerfung.
+2. Dependabot: `package-ecosystem: npm` aufnehmen (Lockfile vorhanden) und
+   `npm audit` in die CI als Gegenstueck zu `pip_audit`.
+3. Danach Stufe 3 (vier Achsen), zuletzt Deny-Limits.
+
+## Relevant Files
+- `reviewer.js`: `shellDecisionQuestion`, `SYSTEM_PROMPT`.
+- `bench-shell.mjs`: 23 Faelle, `shellBackend: "systemone"` fest.
+- `staging/bench-shell-chat.mjs`, `staging/probe-shell-prompt.mjs`,
+  `staging/probe-temp-path.mjs`: Messhilfen, nicht versioniert.
+
+
+=============== Compaction 20.11.2026 / 16:40 ================
+## Objective
+- **Current:** npm in Dependabot und CI aufgenommen; Commit steht aus.
+- **Next:** Stufe 3 (vier Achsen), zuletzt Deny-Limits.
+
+## Important Details
+- **Entscheidung (Nutzer):** `package-ecosystem: npm` in `dependabot.yml`
+  aufnehmen und `npm audit --audit-level=high` in die CI. Beides umgesetzt.
+- **Begruendung der Luecke:** `package.json` und `package-lock.json` waren da,
+  Dependabot pruefte aber nur pip und github-actions, und eine
+  Sicherheitspruefung wie `pip_audit` fehlte fuer JavaScript. Die JS-Seite war
+  damit schlechter abgesichert als die Python-Seite.
+- **Laufzeit:** `npm audit` braucht Netz und laeuft deshalb nur in der CI,
+  nicht im lokalen Gate (gleiche Regel wie `pip_audit`). Der Schritt laeuft
+  einmal (Linux, Node 22), weil er das Lockfile prueft, nicht die
+  Node-Version.
+- **Belegt:** lokal `found 0 vulnerabilities`, Exit 0; `actionlint` Exit 0.
+- **Chat-Fallback (Nutzer):** Mit dem geladenen Modell nicht messbar, weil der
+  Server im Embedding-Modus laeuft. Fuer ihn braeuchte es ein Chat-Modell
+  (`gemma-4-12B-it-qat-UD-Q4_K_XL`) und `-b 2048 -ub 1024`. Die
+  Prompt-Aenderung dort bleibt bis dahin ungeprueft.
+
+## Work State
+- **Completed:** `.github/dependabot.yml`, `.github/workflows/ci.yml`,
+  `PLANUNG.md`, `CHANGELOG.md`.
+- **Active:** Commit.
+- **Blocked:** keiner.
+
+## Next Move
+1. Commit.
+2. Stufe 3 (vier Achsen) mit eigener Messung und Schwellenkalibrierung.
+3. Danach Deny-Limits (zurueckgestellt).
+
+
+=============== Compaction 20.11.2026 / 17:20 ================
+## Objective
+- **Current:** Stufe 3 (vier Achsen) umgesetzt, gemessen und dokumentiert;
+  Commit steht aus.
+- **Next:** Commit, dann Deny-Limits (zurueckgestellt).
+
+## Important Details
+- **Entscheidung:** ADR-0002, Offene Frage 1, Option B - drei weitere
+  `noul`-Fragen im selben Request: `sensitive`, `untrusted`, `obscured`.
+  Schwellen je 0,5 (Band ueber 0 bis 0,5, wie `secrets`).
+- **Kalibrierung `shellThreshold` 0,7 -> 0,65:** Mit fuenf Fragen sank der
+  `effect`-Wert bei Schreibzielen im Temp-Ordner. Verteilung: hoechster
+  ask-Wert 0,616 (kube-config 0,688, dort greift `secrets` 0,913), niedrigster
+  allow-Wert 0,664. Ueber fuenf Laeufe exakt identisch - das Modell ist bei
+  gleichem Prompt deterministisch.
+- **Beleg, dass die Achsen trennen:** `untrusted` 0,973 (heruntergeladenes
+  Skript), `obscured` 0,955 (`-enc`), `sensitive` 0,443 neben `secrets` 0,955
+  (privater Schluessel). Harmlose Befehle: alle Achsen unter 0,15.
+- **Modellabhaengigkeit (Nutzerhinweis, nachgelesen):** llama.cpp kennt sieben
+  Decision-Typen (`openjev`, `lev`, `kev`, `nimble`, `laya`, `clef`,
+  `pplx-decider`; `common/common.h`). Nur **clef** legt alle Fragen in einen
+  Prompt. Die anderen bauen einen Prompt je Frage, sofern die Fragen nicht mit
+  demselben Text beginnen (`can_share_prompt()`); unsere tun das nicht.
+  `noul` kommt dort von einer Ratingskala. Schlussfolgerung aus dem Code, nicht
+  gemessen; gemessen ist nur Clef-Flash.
+- **GGUF-Metadaten geprueft (20.11.2026):** Von vier lokalen Decision-Modellen
+  traegt nur `ggml-org/Clef-Flash-GGUF/Clef-Flash-Q4_K_M.gguf` ein
+  `decision`-Metadatum (`general.architecture = clef`, `clef.decision.type =
+  clef`). `Jev-Omni-Q3_K_M` (`gemma4`), `Jeff-1.1-Qwen-4B` (`qwen35`) und
+  `clef-flash-IQ3_XS` von NANI-Nithin (`qwen35`) haben keines; llama.cpp
+  wuerde sie abweisen. Dateiname und Katalogspalte sind kein Beleg.
+- **Vorbehalt des Nutzers (20.11.2026):** Mradermacher, NANI-Nithin und
+  ngquocvinh sind Quantisierer, nicht Original-Hersteller; GGUF-Header koennen
+  beim Quantisieren beschaedigt werden, und die Originale liegen teils nur als
+  FP16 oder in einem anderen Format vor. Ein fehlendes `decision.type` ist
+  also kein Beweis, dass das Modell keines ist. Fuer Jev-Omni und Jeff belegt
+  die Original-Karte, dass der Decision-Head eine eigene Datei ist
+  (`head.safetensors`, eigener Serving-Code); NANI schreibt selbst, dass der
+  Joint-Schema-Head fehlt. Ein GGUF des Backbones kann ihn nicht enthalten.
+- **Parallelitaet:** Unser Server laeuft mit `-np 1`; mehrere Prompts laufen
+  nacheinander. `-np N` waere parallel moeglich, kostet KV-Cache je Slot.
+  Nicht gemessen.
+- **Eigener Fehler, korrigiert:** Ein `/systemone`-Probeaufruf gegen
+  `localhost:8080/systemone` ergab 404; der Pfad ist `/v1/systemone`, weil
+  `baseUrl` auf `/v1` endet. Danach HTTP 200.
+- **Testkorrektur:** Ein Test suchte `/sensibel/`, der Grund heisst aber
+  "sensible Daten". Test auf `/sensible/` geaendert, nicht den Grund.
+
+## Work State
+- **Completed:** `reviewer.js` (drei Fragen, `SHELL_AXES`, vier Schwellen),
+  `shell-reviewer.config.example.json`, `test.mjs` (962/962, sieben neue
+  Faelle), beide READMEs, ADR-0002 (Nachtrag Stufe 3), `PLANUNG.md`,
+  `CHANGELOG.md`.
+- **Active:** Commit.
+- **Blocked:** keiner.
+
+## Next Move
+1. Commit der Stufe 3.
+2. Deny-Limits (ADR, Offene Frage 2): Option B, 3 in Folge / 10 in letzten 50,
+   je Turn; nur Reviewer-`ask` zaehlt.
+3. Danach G0/G1 (Grenz-Markierung fuer MCP-Ergebnisse).
+
+## Nachtrag 20.11.2026 / 17:26: Kev-4B und Parallelitaet gemessen
+- **Kev-4B Q4_K_M (2,83 GB):** 23/23 bei `shellThreshold` 0,50; 20/23 bei 0,65.
+  Q8_0 (4,18 GB): 22/23 bei 0,50 (`write-git-add` 0,495). Die Schwellen sind
+  modellabhaengig - Clef braucht 0,65, Kev 0,50.
+- **Parallelitaet:** `-np 5 --kv-unified` gegen `-np 1`, fuenf kurze Befehle:
+  Faktor 1,01-1,03, kein Gewinn. Jeweils nur ein Modell geladen; mit Clef und
+  Kev gleichzeitig war der erste Lauf verfaelscht (Nutzerhinweis).
+- **Wichtig fuer weitere Laeufe:** nur ein Modell im VRAM, sonst sind die
+  Latenzzahlen nicht belastbar.
+- **Vormerk in PLANUNG.md:** die 16 Modelle der ggml-Collection nach dem Umbau
+  auf ihre Schwellen messen; kleine Kandidaten sind vllm-d3-edge (0,7B),
+  vllm-d3-lite (1B), vllm-d3-nano (2B), Julia-1 (0,1B), Laya (0,4B).
+- **Zustand:** Clef-Flash laeuft wieder auf 8080 (direkt gestartet, weil
+  `start-reviewer.ps1` im Timeout haengen blieb); der Watchdog wurde fuer die
+  Tests beendet und ist nicht neu gestartet.
+
+## Relevant Files
+- `reviewer.js`: `SENSITIVE_QUESTION`, `UNTRUSTED_QUESTION`,
+  `OBSCURED_QUESTION`, `SHELL_AXES`, `shellThreshold: 0.65`.
+- `staging/probe-axis-table.mjs`, `staging/probe-spread.mjs`,
+  `staging/probe-four-axes.mjs`: Messhilfen, nicht versioniert.

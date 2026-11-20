@@ -691,6 +691,31 @@ function run(cases, opts, title) {
   console.log(`-- ${title}\n`)
 }
 
+// pdftotext und pandoc (Vormerk 19.11.2026, gemessen mit Pandoc 3.14 und
+// Poppler 26.09.0): lesend nur ohne Ausgabedatei und ohne fremden Code.
+// `pdftotext X Y` schreibt Y; bei pandoc schreiben oder starten `-o`, `-L`,
+// `-F`, `-d`, `--pdf-engine` und `--extract-media` fremden Code. `--sandbox`
+// ist keine Freigabe: gemessen verhindert es nichts.
+const docTools = [
+  ["pdftotext report.pdf", "allow"],
+  ["pdftotext -layout -enc UTF-8 report.pdf -", "allow"],
+  ["pdftotext -f 1 -l 2 report.pdf -", "allow"],
+  ["pdftotext report.pdf out.txt", "ask"],
+  ["pdftotext -layout report.pdf out.txt", "ask"],
+  ["pandoc notes.md -t gfm", "allow"],
+  ["pandoc notes.md --sandbox -t gfm", "allow"],
+  ["pandoc notes.md -o notes.html", "ask"],
+  ["pandoc notes.md -onotes.html", "ask"],
+  ["pandoc notes.md --output=notes.html", "ask"],
+  ["pandoc notes.md -L filter.lua -t gfm", "ask"],
+  ["pandoc notes.md -Lfilter.lua -t gfm", "ask"],
+  ["pandoc notes.md --lua-filter=filter.lua", "ask"],
+  ["pandoc notes.md -F filter.py", "ask"],
+  ["pandoc notes.md -d defaults.yaml", "ask"],
+  ["pandoc notes.md --pdf-engine=xelatex", "ask"],
+  ["pandoc notes.md --extract-media=media", "ask"],
+]
+
 run(base, undefined, "ohne Projektbezug")
 run(scoped, options, "mit Projektbezug")
 run(gitGuardrails, options, "Git-Guardrails: Ist-Stand")
@@ -698,6 +723,7 @@ run(cli, undefined, "CLI-Allowlists")
 run(helpVersion, undefined, "Hilfe und Version")
 run(gitleaks, undefined, "gitleaks")
 run(readOnlyCli, undefined, "sqlite3 und gh")
+run(docTools, undefined, "pdftotext und pandoc")
 run(net, undefined, "Netz-Lesen")
 run(denyForms, undefined, "Verweigerung & Geheimnis-Ersetzung")
 run(py, undefined, "python eng freigegeben")
@@ -1122,10 +1148,15 @@ const mcpLayer1 = [
   ["firecrawl_monitor_delete", { id: "m" }, "ask"],
   ["firecrawl_scrape", {}, "ask"],
   ["github_create_issue", { title: "x", body: "token abc" }, "ask"],
-  ["github_create_issue", { title: "x", body: "y".repeat(40000) }, "ask"],
+  ["github_create_issue", { title: "x", body: "y".repeat(40000) }, "deny"],
+  ["exa_web_search_exa", { query: "y".repeat(40000) }, "allow"],
   ["sync_status", { project: "x" }, "ask"],
   ["sync", { project: "x" }, "ask"],
   ["voellig_unbekannt", { ziel: "irgendwas" }, "model"],
+  // Belegte Lese-Werkzeuge ohne Verb im Namen (20.11.2026). Die Liste ist eine
+  // Namensliste: ein fremdes `exec` bleibt unbekannt.
+  ["open-knowledge_exec", { command: "cat notes/a.md" }, "allow"],
+  ["fremdserver_exec", { command: "cat notes/a.md" }, "model"],
 ]
 const mcpLayer1Checks = mcpLayer1.map(([tool, input, want]) => {
   const got = verdictCase(tool, input)
@@ -1149,7 +1180,7 @@ const mcpLayer2Checks = mcpLayer2.map(([tool, input]) => {
 const brakeVsSize = verdictCase("github_delete_repository", { body: "x".repeat(40000) })
 const brakeVsSecret = verdictCase("github_delete_repository", { body: "token abc" })
 const mcpPriorityChecks = [
-  ["unanalysierbar schlaegt Notbremse", brakeVsSize.decision === "ask" && brakeVsSize.layer === 1],
+  ["unanalysierbar schlaegt Notbremse", brakeVsSize.decision === "deny" && brakeVsSize.layer === 1],
   ["Notbremse schlaegt Geheimnisverdacht", brakeVsSecret.decision === "deny" && brakeVsSecret.layer === 2],
   ["lesend ohne Zusatzfund bleibt Ebene 1", verdictCase("exa_web_search_exa", { query: "x" }).layer === 1],
 ]
@@ -1215,7 +1246,18 @@ globalThis.fetch = async (url, init) => {
     const body = JSON.parse(init?.body ?? "{}")
     const command = String(body?.state?.command ?? "")
     const reads = command.includes("Set-Content") ? 0.1 : 0.95
-    return { ok: true, json: async () => ({ answers: { effect: { probabilities: { reads } } } }) }
+    return {
+      ok: true,
+      json: async () => ({
+        answers: {
+          effect: { probabilities: { reads } },
+          secrets: { noul: 0.01 },
+          sensitive: { noul: 0.01 },
+          untrusted: { noul: 0.01 },
+          obscured: { noul: 0.01 },
+        },
+      }),
+    }
   }
   return { ok: true, json: async () => ({ choices: [{ message: { content: "Ja" } }] }) }
 }
@@ -1262,7 +1304,7 @@ globalThis.fetch = realFetch
 const mcpReviewChecks = [
   ["Ebene 3: deaktiviert bleibt ask", reviewDisabled.decision === "ask" && reviewDisabled.reason.includes("deaktiviert") && callsAfterDisabled === 0],
   ["Ebene 3: Geheimnisverdacht ohne Modellaufruf", reviewsSecret.decision === "ask" && callsAfterSecret === 0],
-  ["Ebene 3: unanalysierbar ohne Modellaufruf", reviewsBig.decision === "ask" && callsAfterBig === 0],
+  ["Ebene 3: unanalysierbar ohne Modellaufruf", reviewsBig.decision === "deny" && callsAfterBig === 0],
   ["Ebene 3: klare Ja-Antwort hebt auf allow", reviewPlain.decision === "allow" && callsAfterPlain === 1],
   ["Ebene 3: gekuerzte Argumente ohne Modellaufruf", reviewsDeep.decision === "ask" && callsAfterDeep === callsAfterPlain],
   ["Ebene 3: gefundene Chat-Kuerzung fragt (systemone)", reviewsWideSystemone.decision === "ask" && callsAfterWideSystemone === callsAfterDeep],
@@ -1627,6 +1669,27 @@ const warmupChecks = []
   warmupChecks.push(["Aufwaermlauf waermt bei gemischtem Backend auch den Chat-Weg", seen.some((u) => u.endsWith("/chat/completions"))])
   await warmup({ enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", warmupTimeoutMs: 1000 })
   warmupChecks.push(["Aufwaermlauf nutzt chat/completions", seen.some((u) => u.endsWith("/chat/completions"))])
+
+  // Der Server startet gerade: ein geschlossener Port wird kurz wiederholt,
+  // andere Fehler nicht (Befund 20.11.2026).
+  const cfgChat = { enabled: true, baseUrl: "http://[IP_ADDRESS]:1/v1", model: "m", mcpBackend: "chat", shellBackend: "chat", warmupTimeoutMs: 1000 }
+  let calls = 0
+  globalThis.fetch = async () => {
+    calls++
+    if (calls === 1) throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } })
+    return { ok: true, arrayBuffer: async () => new ArrayBuffer(0), json: async () => ({}) }
+  }
+  const retried = await warmup(cfgChat)
+  warmupChecks.push(["geschlossener Port wird wiederholt", retried.ok === true && calls === 2])
+
+  calls = 0
+  globalThis.fetch = async () => {
+    calls++
+    throw new TypeError("fetch failed")
+  }
+  const noRetry = await warmup(cfgChat)
+  warmupChecks.push(["anderer Netzfehler wird nicht wiederholt", noRetry.ok === false && calls === 1])
+
   globalThis.fetch = realFetch2
 }
 for (const [name, ok] of warmupChecks) {
@@ -1815,14 +1878,27 @@ console.log("-- Diagnose\n")
 
 // --- Secrets-Achse (14.11.2026): zweite Frage im Shell-systemone-Pfad ------
 // Freigabe braucht reads >= Schwelle UND secrets <= Schwelle. Das Modell
-// antwortet in derselben Anfrage; die Latenz bleibt gleich.
+// antwortet in derselben Anfrage; die Latenz bleibt gleich. Fehlt die
+// Secrets-Antwort ganz, gibt es keine Freigabe (fail closed, 20.11.2026).
 const secretsChecks = []
 {
   const saved = globalThis.fetch
-  const systemone = (reads, secrets) =>
+  const systemone = (reads, secrets, extra = {}) =>
     async (url) => {
       if (String(url).endsWith("/systemone")) {
-        return { ok: true, status: 200, json: async () => ({ answers: { effect: { probabilities: { reads } }, secrets: { noul: secrets } } }) }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            answers: {
+              effect: { probabilities: { reads } },
+              secrets: { noul: secrets },
+              sensitive: { noul: extra.sensitive ?? 0.01 },
+              untrusted: { noul: extra.untrusted ?? 0.01 },
+              obscured: { noul: extra.obscured ?? 0.01 },
+            },
+          }),
+        }
       }
       return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "Ja" } }] }) }
     }
@@ -1837,7 +1913,31 @@ const secretsChecks = []
 
   globalThis.fetch = systemone(0.9, undefined)
   const missing = await review({ commands: ["Get-Content data.txt"], project: "P", temp: "T", config: { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 } })
-  secretsChecks.push(["fehlender Secrets-Wert bleibt bei der Hauptfrage", missing.decision === "allow"])
+  secretsChecks.push(["fehlender Secrets-Wert ergibt Rueckfrage", missing.decision === "ask" && /Geheimnisfrage/.test(String(missing.reason))])
+
+  // Ein Segment mit Antwort darf ein anderes ohne Antwort nicht decken.
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith("/systemone")) {
+      const command = String(JSON.parse(init?.body ?? "{}")?.state?.command ?? "")
+      const secrets = command.includes("Get-ChildItem") ? undefined : 0.01
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          answers: {
+            effect: { probabilities: { reads: 0.9 } },
+            secrets: { noul: secrets },
+            sensitive: { noul: 0.01 },
+            untrusted: { noul: 0.01 },
+            obscured: { noul: 0.01 },
+          },
+        }),
+      }
+    }
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "Ja" } }] }) }
+  }
+  const mixedSegments = await review({ commands: ["Get-ChildItem", "Get-Content data.txt"], project: "P", temp: "T", config: { enabled: true, baseUrl: "http://[IP_ADDRESS]:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 } })
+  secretsChecks.push(["fehlender Wert je Segment ergibt Rueckfrage", mixedSegments.decision === "ask"])
 
   globalThis.fetch = systemone(0.5, 0.1)
   const low = await review({ commands: ["Get-Content data.txt"], project: "P", temp: "T", config: { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 } })
@@ -1850,6 +1950,115 @@ for (const [name, ok] of secretsChecks) {
   console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
 }
 console.log("-- Secrets-Achse\n")
+
+// --- Stufe 3 (20.11.2026): sensitive, untrusted, obscured -------------------
+// Jede Achse kann allein die Freigabe blocken; eine fehlende Antwort ebenso.
+const fourAxesChecks = []
+{
+  const saved = globalThis.fetch
+  const systemone = (extra = {}) =>
+    async (url) => {
+      if (String(url).endsWith("/systemone")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            answers: {
+              effect: { probabilities: { reads: 0.9 } },
+              secrets: { noul: extra.secrets ?? 0.01 },
+              sensitive: { noul: extra.sensitive ?? 0.01 },
+              untrusted: { noul: extra.untrusted ?? 0.01 },
+              obscured: { noul: extra.obscured ?? 0.01 },
+            },
+          }),
+        }
+      }
+      return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "Ja" } }] }) }
+    }
+  const ask = async (extra, more = {}) => {
+    globalThis.fetch = systemone(extra)
+    return review({
+      commands: ["Get-Content data.txt"],
+      project: "P",
+      temp: "T",
+      config: { enabled: true, baseUrl: "http://[IP_ADDRESS]:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500, ...more },
+    })
+  }
+
+  const untrusted = await ask({ untrusted: 0.9 })
+  fourAxesChecks.push(["untrusted ueber Schwelle blockt", untrusted.decision === "ask" && /unvertrauens/.test(String(untrusted.reason))])
+
+  const obscured = await ask({ obscured: 0.9 })
+  fourAxesChecks.push(["obscured ueber Schwelle blockt", obscured.decision === "ask" && /verschleiert/.test(String(obscured.reason))])
+
+  const sensitive = await ask({ sensitive: 0.9 })
+  fourAxesChecks.push(["sensitive ueber Schwelle blockt", sensitive.decision === "ask" && /sensible/.test(String(sensitive.reason))])
+
+  // Eine fehlende Achse ist keine Entwarnung.
+  globalThis.fetch = async (url) => {
+    if (String(url).endsWith("/systemone")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          answers: {
+            effect: { probabilities: { reads: 0.9 } },
+            secrets: { noul: 0.01 },
+            sensitive: { noul: 0.01 },
+            obscured: { noul: 0.01 },
+          },
+        }),
+      }
+    }
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "Ja" } }] }) }
+  }
+  const noUntrusted = await review({ commands: ["Get-Content data.txt"], project: "P", temp: "T", config: { enabled: true, baseUrl: "http://[IP_ADDRESS]:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 } })
+  fourAxesChecks.push(["fehlende Herkunftsantwort ergibt Rueckfrage", noUntrusted.decision === "ask" && /Herkunftsfrage/.test(String(noUntrusted.reason))])
+
+  const clean = await ask({})
+  fourAxesChecks.push(["alle Achsen niedrig ergibt allow", clean.decision === "allow"])
+
+  const strict = await ask({ untrusted: 0.4 })
+  fourAxesChecks.push(["untrusted 0,4 bei Schwelle 0,5 bleibt allow", strict.decision === "allow"])
+
+  const tight = await ask({ untrusted: 0.4 }, { untrustedThreshold: 0.3 })
+  fourAxesChecks.push(["untrusted 0,4 bei Schwelle 0,3 wird Rueckfrage", tight.decision === "ask"])
+
+  globalThis.fetch = saved
+}
+for (const [name, ok] of fourAxesChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- Vier Achsen\n")
+
+// --- Belegtes "zu gross" (20.11.2026) -------------------------------------
+// Der Serverfehler "too large to process" ist ein Beweis, dass niemand die
+// Eingabe pruefen kann: daraus wird deny. Andere Serverfehler bleiben ask.
+{
+  const saved = globalThis.fetch
+  const fail = (status, body) => async () => ({ ok: false, status, text: async () => body })
+  const config = { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 }
+  globalThis.fetch = fail(500, '{"error":{"message":"input (1081 tokens) is too large to process. increase the physical batch size (current batch size: 1024)"}}')
+  const tooLarge = await review({ commands: ["Get-Content data.txt"], project: "P", temp: "T", config })
+  globalThis.fetch = fail(500, '{"error":{"message":"internal error"}}')
+  const other = await review({ commands: ["Get-Content data.txt"], project: "P", temp: "T", config })
+  const mcpConfig = { ...config, mcpBackend: "systemone" }
+  const mcpCriteria = { isMcp: true, action: { tool: "acme_widget", intent: "unknown" }, context: {} }
+  globalThis.fetch = fail(500, '{"error":{"message":"input (5000 tokens) is too large to process. increase the physical batch size (current batch size: 4096)"}}')
+  const mcpTooLarge = await reviewMcp({ criteria: mcpCriteria, input: { a: 1 }, config: mcpConfig })
+  globalThis.fetch = saved
+  const tooLargeChecks = [
+    ["zu grosse Eingabe wird verweigert", tooLarge.decision === "deny" && /zu gross/.test(String(tooLarge.reason))],
+    ["anderer Serverfehler bleibt Rueckfrage", other.decision === "ask"],
+    ["MCP: zu grosse Eingabe wird verweigert", mcpTooLarge.decision === "deny" && /zu gross/.test(String(mcpTooLarge.reason))],
+  ]
+  for (const [name, ok] of tooLargeChecks) {
+    if (!ok) failed++
+    console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+  }
+}
+console.log("-- Belegtes \"zu gross\"\n")
 
 // --- Befunde des Reviews vom 13.11.2026 (Regressionen) ---------------------
 // Jeder Befund hat einen Fall, der den Fehler festhaelt, und einen Kontrollfall,
@@ -2132,6 +2341,7 @@ console.log("-- Edit-Pruefung: Ziele, geschuetzte Pfade, Platzhalter\n")
 const total =
   base.length + scoped.length + gitGuardrails.length + cli.length + helpVersion.length + gitleaks.length +
   readOnlyCli.length +
+  docTools.length +
   net.length + denyForms.length + py.length + interp.length +
   ruffConfigBootstrap.length + sharedChecks.length + messageChecks.length + 3 +
   shadowChecks.length + shadowReportChecks.length + shadowPathChecks.length +
@@ -2140,6 +2350,6 @@ const total =
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
-  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + thresholdChecks.length + warmupChecks.length + abortWarmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + reviewBlock.length + pipelineBlocks.length + blockReasons.length + 1 + secretsChecks.length + editCases.length + 2 + 11 + 3 + 3 + 1
+  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + thresholdChecks.length + warmupChecks.length + abortWarmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + reviewBlock.length + pipelineBlocks.length + blockReasons.length + 1 + secretsChecks.length + fourAxesChecks.length + editCases.length + 2 + 11 + 3 + 3 + 1
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

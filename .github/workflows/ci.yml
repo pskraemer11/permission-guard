@@ -36,6 +36,13 @@ jobs:
       - name: Abhaengigkeiten (npm ci)
         run: npm ci
 
+      # Gegenstueck zu pip_audit: braucht Netz und laeuft deshalb nur in der
+      # CI, nicht im lokalen Gate. Ein Lauf genuegt - geprueft wird das
+      # Lockfile, nicht die Node-Version.
+      - name: Sicherheitspruefung (npm audit)
+        if: runner.os == 'Linux' && matrix.node == '22'
+        run: npm audit --audit-level=high
+
       - name: Klassifizierer-Tests
         run: node test.mjs
 

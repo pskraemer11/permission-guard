@@ -448,7 +448,7 @@ Warum die Enge: Der Aufruf führt das Programm aus; die Freigabe gilt nur, weil
 ein Hilfewort nichts schreibt, sendet oder startet. Bei weiteren Argumenten ist
 diese Annahme nicht mehr belegbar.
 
-### Fremde CLIs: `opencode`, `firecrawl`, `gitleaks`, `sqlite3`, `gh`
+### Fremde CLIs: `opencode`, `firecrawl`, `gitleaks`, `sqlite3`, `gh`, `pdftotext`, `pandoc`
 
 Grundlage sind die Hilfe-Bäume der installierten Fassungen, nicht Annahmen.
 Erlaubt wird nur, was nachweislich liest und nichts speichert, sendet oder
@@ -465,6 +465,8 @@ startet. Unbekannte Unterbefehle bleiben `ask`.
 | `sqlite3`   | nur mit `-readonly`                                                                      | ohne das Flag (öffnet schreibend), `-cmd`, `-init`, `.output`, `.once`, `.save`, `.backup`,     |
 |             |                                                                                          | `.restore`, `.clone`, `.archive`                                                                |
 | `gh`        | `auth status`, `repo view`, `api` (nur nachweislich lesend, siehe unten)                 | alles andere, insbesondere `api` mit Senden-Verdacht, `pr merge`, `release create`              |
+| `pdftotext` | ohne Ausgabedatei oder mit `-` als Ziel (stdout)                                         | `pdftotext X Y` — das zweite freie Argument ist eine Datei und wird geschrieben                 |
+| `pandoc`    | nur nach stdout: kein `-o`, `-L`, `-F`, `-d`, `--pdf-engine`, `--extract-media`          | eine dieser Optionen; `--sandbox` hilft nicht (es verhindert nichts)                            |
 
 Zusätzlich gesperrt, auch bei erlaubtem Unterbefehl: `-o`/`--output`,
 `-k`/`--api-key`, `--api-url`, `--screenshot`, `--full-page-screenshot`,
@@ -736,6 +738,10 @@ Leben, sondern bindet ihn an OpenCode:
   Zeitabbruch startet `scheduleWarmup()` im Hintergrund erneut; die aktuelle
   Entscheidung bleibt ohne Warten `ask`. Start- und Timeout-Aufwärmlauf teilen
   sich denselben laufenden Aufruf und laufen daher nicht doppelt.
+  Ist der Port noch geschlossen (`ECONNREFUSED`), wird die Anfrage bis zu
+  fünfmal im Abstand von 500 ms wiederholt — `ensureRunning` kehrt zurück,
+  bevor der Server lauscht; ohne das scheitert der Aufwärmlauf genau beim
+  Kaltstart (beobachtet 20.11.2026). Andere Netzfehler werden nicht wiederholt.
 - **Ruhepause:** `sleep-idle-seconds` in `%APPDATA%\llama.cpp\config.ini` gibt
   die Gewichte nach Untätigkeit frei (hier 900 s). Der Standardwert `-1`
   deaktiviert das; `load-mode = auto` bedeutet mmap, `--no-mmap` macht den Start
@@ -848,12 +854,21 @@ Der Index dient der Vorauswahl, der eigene 18-Befehl-Satz bleibt maßgeblich.
 .\start-reviewer.ps1                       # llama-server, Clef-Flash, Port 8080
 .\start-reviewer.ps1 -ModelPath "D:\…\anderes.gguf" -Port 8081
 .\start-reviewer.ps1 -Cpu -Server "C:\…\llama-server.exe"   # ohne GPU-Offload
+.\start-reviewer.ps1 -Batch 2048 -Ubatch 2048               # kleinerer Stapel
 node smoke-reviewer.mjs                    # 9 Fälle gegen die laufende Konfiguration
-node test.mjs                              # 932 Unit-Tests
+node test.mjs                              # 934 Unit-Tests
 node test-index.mjs                        # 23 Integrationsfälle (Fake-OpenCode)
 node test-wiring.mjs                       # 13 Verdrahtungstests (Fake-git)
 .\start-reviewer.ps1 -Stop
 ```
+
+Der Starter übergibt `-b 4096 -ub 4096`. Das gilt nur für Entscheidungsmodelle:
+Sie laufen im Embedding-Modus, dort erzwingt llama.cpp `n_batch = n_ubatch`, und
+Frage samt Antwortoptionen muss in **einen** Stapel passen. Die Werte
+übersteuern die chat-taugliche Einstellung in `%APPDATA%\llama.cpp\config.ini`
+(dort `batch-size = 2048`, `ubatch-size = 1024`), die für Chatmodelle richtig
+bleibt. Gemessen am 20.11.2026 mit Clef-Flash-Q4_K_M: 4096 beantwortet
+24000 Zeichen, 1024 nur 5000; die GPU belegt dabei 7054 von 16283 MiB.
 
 Der Standardweg nutzt CUDA mit `-ngl all` und bleibt unverändert. `-Cpu` setzt
 `-ngl 0` und ist für Rechner ohne NVIDIA-Grafikkarte oder einen reinen
@@ -932,7 +947,14 @@ Regeln des Katalogs:
   erst danach aus dem Feldnamen. Verschachtelte Argumente (etwa
   `files: [{ path }]`) werden bis Tiefe 3 mitgezählt.
 - Große Argumente (mehr als 32000 Zeichen als JSON) gelten als `unanalysierbar` — getrennt von
-  „destruktiv", damit ein Größenlimit nie als Fund missverstanden wird.
+  „destruktiv", damit ein Größenlimit nie als Fund missverstanden wird. Eine Rückfrage, die niemand
+  lesen kann, ist aber auch kein Schutz: `read`-Werkzeuge bleiben erlaubt, jede andere Absicht wird
+  `deny`.
+- Eine kurze Namensliste deckt Werkzeuge ab, deren Name kein Verb trägt und deren Lesen Teil ihrer
+  eigenen Schnittstelle ist: `open-knowledge_exec` (Allowlist `cat`, `ls`, `grep`, `find`, `head`,
+  `tail`, `wc`, `sort`, `uniq`, `cut`, kein Schreiben, keine Umleitung) zählt als `read`. Die Liste
+  ist bewusst nach exaktem Namen sortiert: `exec` allein heißt bei anderen Servern „führe Code aus"
+  und gilt nie als Lesen.
 - Argumentwerte verlassen die Funktion nicht; im Log stehen nur Feldnamen,
   Zielarten und Zählungen.
 
@@ -944,16 +966,23 @@ gilt. Beides ist rein und ohne Backend testbar.
 | Schicht                    | Prüft                                                   | Ergebnis                                            |
 | -------------------------- | ------------------------------------------------------- | --------------------------------------------------- |
 | 2 Notbremse (läuft zuerst) | Werkzeugname und Argumente gegen eine kurze, enge Liste | `deny`                                              |
-| 1 feste Regel              | Absicht aus Schritt B                                   | `allow` bei `read`, `ask` bei `write`/`destructive` |
+| 1 feste Regel              | Absicht aus Schritt B                                   | `allow` bei `read`; `deny` bei `write`/`destructive` außerhalb von Projekt und Temp, sonst `ask` |
 | 3 lokales Modell           | nur bei `unknown`, `chat` mit drei Kanälen oder ↵       | `allow` nur bei klarem „Ja" bzw. p ≥                |
 | ↳                          |                                                         | `mcpThreshold`,                                     |
 | ↳                          | `systemone` mit `{tool, arguments}`                     | sonst `ask`                                         |
 
 Reihenfolge und Grenzen:
 
-- **`unanalysierbar` zuerst.** Argumente über 32000 Zeichen (als JSON) ergeben `ask`, auch wenn
-  Werkzeug oder Text destruktiv aussähen — ein Größenlimit ist kein Fund.
+- **`unanalysierbar` zuerst.** Argumente über 32000 Zeichen (als JSON) werden nie als Fund
+  gewertet; sie ergeben aber keine unlesbare Rückfrage mehr: ein `read`-Werkzeug bleibt `allow`,
+  jede andere Absicht wird `deny`. Ein Geheimnisverdacht schlägt die Freigabe.
   Danach Notbremse, dann Geheimnisverdacht, dann leere Argumente.
+- **Schreiben hat eine Grenze.** Ein `write`- oder `destructive`-Aufruf, dessen Zielpfad
+  außerhalb von Projekt und Temp liegt, wird `deny` — dieselbe Grenze wie in der Shell.
+  Innerhalb bleibt es `ask`: ein MCP-Schreibwerkzeug kann mehr tun als eine Datei anzulegen.
+  Geprüft werden die Zielfelder (`path`, `file`, `folder`, `output`, `target`, `cwd`, …),
+  nicht `source` (das ist ein Lesepfad). Relative Ziele gelten gegen das Projekt, `..` wird
+  aufgelöst, `~`/`%VAR%` gelten als außerhalb.
 - **Die Absicht kommt aus dem Werkzeugnamen, die Argumente dürfen sie nur
   verschärfen.** Ein Feldname wie `reset: true` macht aus `read_health` ein
   `destructive` (Quelle `arguments`, im Log `quelle=argumente`); `reset: false`,
@@ -1062,8 +1091,61 @@ Freigabe-Fälle 0,94–0,97, Änderungen 0,02–0,06 — 14/14 bei jeder Schwell
 harmloses Segment darf ein schreibendes nicht überdecken. Der statische
 `neverAutoApprove`-Filter läuft weiterhin davor.
 
+Seit dem 20.11.2026 entscheidet der Shell-Weg über **vier Achsen in derselben
+Anfrage**, nach dem Jevvy-Muster: `secrets` (≤ 0,35) sowie `sensitive`,
+`untrusted` und `obscured` (je ≤ 0,5). Eine Freigabe braucht
+`reads ≥ shellThreshold` **und** jede Achse unter ihrer Grenze; eine fehlende
+Antwort auf irgendeine Frage ist eine Rückfrage, nie eine Freigabe. `sensitive`
+ist breiter als `secrets`: private Dateien und Nachrichten allgemein, nicht nur
+Zugangsdaten. Mit Clef-Flash an den 23 Fällen gemessen: `untrusted` erkennt
+einen heruntergeladenen Skript-Aufruf (0,973), `obscured` erkennt `-enc`
+(0,955), `sensitive` meldet 0,443, während `secrets` bei einem privaten
+Schlüssel 0,955 meldet. `shellThreshold` liegt seither bei 0,65 — höchster
+`ask`-Wert bei `effect` war 0,616, niedrigster `allow`-Wert 0,664, über fünf
+Läufe identisch. Ergebnis: 23/23, einstimmig.
+
+Die Achsen kosten nur mit einem **Clef**-Entscheidungsmodell keine zusätzliche
+Rundreise, weil es alle Fragen in einen Prompt legt. llama.cpp kennt sieben
+Typen (`openjev`, `lev`, `kev`, `nimble`, `laya`, `clef`, `pplx-decider`). Die
+übrigen bauen einen Prompt je Frage, sofern die Fragen nicht mit demselben
+Text beginnen (`can_share_prompt()`); bei unseren ist das nicht der Fall.
+`noul` wird dort von einer Ratingskala statt aus einem Embedding-Score gelesen.
+Gemessen ist hier nur Clef.
+
+**Empfehlung: ein Clef-Entscheidungsmodell verwenden.** Nur dieser Typ hält
+alle fünf Fragen in einem Prompt, und davon gehen die vier Achsen aus. Hier
+gemessen: `ggml-org/Clef-Flash-GGUF`, `Q4_K_M` — 23/23 bei den Shell-Fällen.
+Ein Dateiname ist kein Beleg: Entscheidungsmodell für llama.cpp ist nur, was in
+den GGUF-Metadaten `<arch>.decision.type` trägt; prüfe die Metadaten, nicht den
+Repositoriumstitel. Mit `-np 1` (unsere Einstellung) laufen mehrere Prompts
+nacheinander; parallele Slots wurden am 20.11.2026 gemessen und brachten nichts
+(1,01–1,03x bei fünf kurzen Befehlen mit `-np 5 --kv-unified`).
+
+Nicht jedes Repositorium mit „clef" oder „jev" im Namen funktioniert. Geprüft
+am 20.11.2026:
+
+| Repositorium | GGUF-Metadaten | `/v1/systemone` |
+| --- | --- | --- |
+| `ggml-org/Clef-Flash-GGUF` | `architecture = clef`, `clef.decision.type = clef` | ja, gemessen 23/23 bei 0,65 |
+| `ggml-org/Kev-4B-GGUF` | `architecture = qwen35`, `qwen35.decision.type = kev` | ja — Q4_K_M 23/23 bei 0,50, Q8_0 22/23 |
+| `NANI-Nithin/clef-flash-GGUF` | `architecture = qwen35`, kein Decision-Metadatum | **nein** — nur der Language Tower, der Joint-Schema-Head fehlt in der Datei |
+| `ngquocvinh/Jev-Omni-GGUF` | `architecture = gemma4`, kein Decision-Metadatum | **nein** — braucht einen Python-Adapter für den Decision-Head |
+| `mradermacher/Jeff-1.1-Qwen-4B-GGUF` | `architecture = qwen35`, kein Decision-Metadatum | **nein** — Jev-Format, nicht die llama.cpp-API |
+
+Die Architektur allein sagt nichts: Kev-4B ist ein `qwen35`-Modell und trotzdem
+ein Entscheidungsmodell. Entscheidend ist das `decision.type`-Metadatum.
+
+Ein fehlender Eintrag hat zwei mögliche Ursachen, und die Modellkarte
+unterscheidet sie: Das Modell hat keinen Decision-Head, oder die Konvertierung
+hat ihn nicht mitgenommen. Bei Jev-Omni und Jeff liegt der Head im Original als
+**eigene Datei** (`head.safetensors`, angewendet vom jeweiligen Serving-Code);
+ein GGUF des Backbones kann ihn also nicht enthalten. Quantisierer
+(mradermacher, NANI-Nithin, ngquocvinh) sind nicht die Original-Hersteller;
+lies die Karte des Originals, bevor du eine Datei beurteilst.
+
 Gültig sind `mcpThreshold` und `shellThreshold` ab 0,5 bis unter 1 und
-`secretsThreshold` über 0 bis 0,5. Werte außerhalb dieses Bands verwirft
+`secretsThreshold`, `sensitiveThreshold`, `untrustedThreshold`,
+`obscuredThreshold` über 0 bis 0,5. Werte außerhalb dieses Bands verwirft
 `loadConfig` still und nutzt den Standard; ein `"shellThreshold": 0` gibt
 deshalb nicht mehr jede Wahrscheinlichkeit frei.
 
@@ -1129,6 +1211,17 @@ die Messung „14/14, 75 ms" aus „Zwei Backends für Ebene 3".
   wartet eine Entscheidung in der Warteschlange und kann den Zeitrahmen
   überschreiten.
 
+### Stand 20.11.2026: Größenlimit und Geheimnisfrage
+
+- **Große MCP-Argumente:** über 32000 Zeichen (als JSON) bleibt ein
+  `read`-Werkzeug `allow`; jede andere Absicht wird `deny`. Eine Rückfrage,
+  die niemand lesen kann, ist kein Schutz.
+- **Fehlende Geheimnis-Antwort:** Liefert das Entscheidungsmodell keinen Wert
+  für die Geheimnisfrage, lautet das Shell-Urteil `ask`, statt sich allein auf
+  die Hauptfrage zu verlassen.
+- **Eingabe zu groß für das Modell:** Der Serverfehler „too large to process"
+  ergibt für diesen Befehl `deny`; andere Serverfehler bleiben `ask`.
+
 Installation nach dem Klonen:
 
 ```powershell
@@ -1158,6 +1251,16 @@ Ohne `npm ci` schlägt der Test-Gate beim Commit fehl. Das ist gewollt.
   Funktionen (`Read-Jsonc …`) bleiben `ask`; unlesbare `&`-/Dot-Formen sind
   seit Entscheidung 3 verweigert.
 - **Ein `cd` in ein anderes Laufwerk** macht relative Ziele unklar → `deny`.
+- **Das Entscheidungsmodell hat ein Stapellimit, keine Zeichengrenze.** Im
+  Embedding-Modus erzwingt llama.cpp `n_batch = n_ubatch`, und Frage samt
+  Antwortoptionen muss in einen Stapel passen. Sonst antwortet der Server
+  `input … is too large to process`; der Guard macht daraus für diesen Aufruf
+  `deny` (gemessen 20.11.2026). Mit `ubatch 1024` beginnt das bei etwa 5000
+  Zeichen, mit 4096 bei etwa 24000. Deshalb übergibt `start-reviewer.ps1`
+  `-b 4096 -ub 4096` und übersteuert damit `batch-size`/`ubatch-size` aus
+  `%APPDATA%\llama.cpp\config.ini`, die für Chatmodelle richtig bleiben. Wer
+  `llama-server` selbst startet, muss beide Werte setzen; nur einen zu erhöhen
+  wirkt nicht, weil llama.cpp sie in diesem Modus gleich hält.
 
 ## Messung
 

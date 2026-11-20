@@ -446,7 +446,7 @@ Why so narrow: the call executes the program; the allowance applies only
 because a help word writes, sends or starts nothing. With further arguments
 that assumption can no longer be proven.
 
-### Foreign CLIs: `opencode`, `firecrawl`, `gitleaks`, `sqlite3`, `gh`
+### Foreign CLIs: `opencode`, `firecrawl`, `gitleaks`, `sqlite3`, `gh`, `pdftotext`, `pandoc`
 
 The basis is the help trees of the installed versions, not assumptions. Only
 what demonstrably reads and saves, sends or starts nothing is allowed. Unknown
@@ -463,6 +463,8 @@ subcommands stay `ask`.
 | `sqlite3`   | only with `-readonly`                                                                    | without the flag (opens writable), `-cmd`, `-init`, `.output`, `.once`, `.save`, `.backup`,           |
 |             |                                                                                          | `.restore`, `.clone`, `.archive`                                                                      |
 | `gh`        | `auth status`, `repo view`, `api` (only demonstrably reading, see below)                 | everything else, in particular `api` with a sending suspicion, `pr merge`, `release create`           |
+| `pdftotext` | without an output file, or with `-` as output (stdout)                                   | `pdftotext X Y` — the second free argument is a file and is written                                   |
+| `pandoc`    | only to stdout: no `-o`, `-L`, `-F`, `-d`, `--pdf-engine`, `--extract-media`             | any of those options; `--sandbox` does not help (it prevents nothing)                                 |
 
 Additionally blocked, even for an allowed subcommand: `-o`/`--output`,
 `-k`/`--api-key`, `--api-url`, `--screenshot`, `--full-page-screenshot`,
@@ -729,6 +731,10 @@ permanently; it ties it to OpenCode:
   After an actual timeout `scheduleWarmup()` starts again in the background;
   the current decision remains `ask` without waiting. Startup and timeout
   warm-ups share the same in-flight call and therefore do not run twice.
+  If the port is still closed (`ECONNREFUSED`) the request is repeated up to
+  five times, 500 ms apart — `ensureRunning` returns before the server
+  listens, so without this the warm-up fails exactly at the cold start
+  (observed 20.11.2026). Other network errors are not repeated.
 - **Idle:** `sleep-idle-seconds` in `%APPDATA%\llama.cpp\config.ini` releases
   the weights after inactivity (900 s here). The default `-1` disables that;
   `load-mode = auto` means mmap, `--no-mmap` makes the start **slower**
@@ -842,12 +848,21 @@ The index serves pre-selection; our own 18-command set remains authoritative.
 .\start-reviewer.ps1                       # llama-server, Clef-Flash, port 8080
 .\start-reviewer.ps1 -ModelPath "D:\…\anderes.gguf" -Port 8081
 .\start-reviewer.ps1 -Cpu -Server "C:\…\llama-server.exe"   # no GPU offload
+.\start-reviewer.ps1 -Batch 2048 -Ubatch 2048               # smaller batch
 node smoke-reviewer.mjs                    # 9 cases against the running configuration
-node test.mjs                              # 932 unit tests
+node test.mjs                              # 934 unit tests
 node test-index.mjs                        # 23 integration cases (fake OpenCode)
 node test-wiring.mjs                       # 13 wiring tests (fake git)
 .\start-reviewer.ps1 -Stop
 ```
+
+The starter passes `-b 4096 -ub 4096`. That applies to decision models only:
+they run in embedding mode, where llama.cpp forces `n_batch = n_ubatch`, and the
+question plus its answer options must fit into **one** batch. The values override
+the chat-suitable setting in `%APPDATA%\llama.cpp\config.ini` (`batch-size = 2048`,
+`ubatch-size = 1024`), which stays correct for chat models. Measured on
+20.11.2026 with Clef-Flash-Q4_K_M: 4096 answers 24000 characters, 1024 only 5000;
+the GPU uses 7054 of 16283 MiB.
 
 The default path uses CUDA with `-ngl all` and remains unchanged. `-Cpu` sets
 `-ngl 0` and is intended for machines without an NVIDIA GPU or for a CPU-only
@@ -925,7 +940,12 @@ Catalogue rules:
   and only then from the field name. Nested arguments (e.g.
   `files: [{ path }]`) are counted to depth 3.
 - Large arguments (more than 32000 characters as JSON) count as `unanalysierbar` — separate from
-  "destructive", so that a size limit is never mistaken for a finding.
+  "destructive", so that a size limit is never mistaken for a finding. A prompt nobody can read
+  is no protection either: `read` tools stay allowed, every other intent is `deny`.
+- A short name list covers tools whose name carries no verb and whose read-only nature is part of
+  their own interface: `open-knowledge_exec` (allowlist `cat`, `ls`, `grep`, `find`, `head`, `tail`,
+  `wc`, `sort`, `uniq`, `cut`, no writes, no redirection) counts as `read`. The list is by exact
+  name on purpose: `exec` alone means "run code" at other servers and never counts as reading.
 - Argument values do not leave the function; the log holds only field names,
   target kinds and counts.
 
@@ -937,7 +957,7 @@ applies. Both are pure and testable without a backend.
 | Layer                     | Checks                                               | Result                                            |
 | ------------------------- | ---------------------------------------------------- | ------------------------------------------------- |
 | 2 emergency brake (first) | tool name and arguments against a short, narrow list | `deny`                                            |
-| 1 fixed rule              | intent from step B                                   | `allow` on `read`, `ask` on `write`/`destructive` |
+| 1 fixed rule              | intent from step B                                   | `allow` on `read`; `deny` on `write`/`destructive` outside project and temp, else `ask` |
 | 3 local model             | only on `unknown`, `chat` with three channels or ↵   | `allow` only on a clear "yes" or p ≥              |
 | ↳                         |                                                      | `mcpThreshold`,                                   |
 | ↳                         | `systemone` with `{tool, arguments}`                 | otherwise `ask`                                   |
@@ -958,6 +978,12 @@ Order and limits:
   path in the arguments (`recovery-codes`, `id_rsa`, `.ssh/`, `.npmrc`, …)
   yields `deny`. A mere secret *word* such as "token" remains a prompt;
   otherwise every issue containing it would be hard-blocked.
+- **Writes have a boundary.** A `write` or `destructive` call whose target path
+  lies outside project and temp is `deny` — the same boundary as in the shell.
+  Inside it stays `ask`: an MCP write tool can do more than create a file.
+  Checked are the target fields (`path`, `file`, `folder`, `output`, `target`,
+  `cwd`, …), not `source` (that is a read path). Relative targets count against
+  the project, `..` is resolved, `~`/`%VAR%` count as outside.
 - **Unresolved targets do not reach the model:** if a target field (`target`,
   `path`, `url`, `to`, `attachment`, …) holds only `$NAME`, `${NAME}` or
   `%NAME%`, the target is unknown and stays `ask` (level 1). The live run on
@@ -1055,9 +1081,59 @@ from 0.5 to 0.9. With several segments the **weakest** result counts; a
 harmless segment must not mask a writing one. The static `neverAutoApprove`
 filter still runs before it.
 
+Since 20.11.2026 the shell decision uses **four axes in the same request**,
+after the Jevvy pattern: `secrets` (≤ 0.35) plus `sensitive`, `untrusted` and
+`obscured` (≤ 0.5 each). A release needs `reads ≥ shellThreshold` **and** every
+axis below its limit; a missing answer to any question is a prompt, never a
+release. `sensitive` is broader than `secrets`: private files and messages in
+general, not only credentials. Measured with Clef-Flash on the 23 cases:
+`untrusted` catches a downloaded script (0.973), `obscured` catches `-enc`
+(0.955), `sensitive` reports 0.443 where `secrets` reports 0.955 for a private
+key. `shellThreshold` is 0.65 since then — highest `ask` value at `effect` was
+0.616, lowest `allow` value 0.664, identical across five runs. Result: 23/23,
+unanimous.
+
+The axes cost no extra round trip only with a **Clef** decision model, which
+puts all questions into one prompt. llama.cpp knows seven decision model types
+(`openjev`, `lev`, `kev`, `nimble`, `laya`, `clef`, `pplx-decider`). The others
+build one prompt per question unless the questions share a prefix
+(`can_share_prompt()`); ours do not. `noul` is read from a rating scale there
+instead of an embedding score. Only Clef has been measured here.
+
+**Recommendation: use a Clef decision model.** It is the only type that keeps
+all five questions in one prompt, which is what the four axes assume. Measured
+here: `ggml-org/Clef-Flash-GGUF`, `Q4_K_M` — 23/23 on the shell cases. A file
+name is no proof: only a model whose GGUF metadata carries
+`<arch>.decision.type` is a decision model for llama.cpp; check the metadata,
+not the repository title. With `-np 1` (our setting) several prompts run one
+after another; parallel slots were measured on 20.11.2026 and brought nothing
+(1.01–1.03x on five short commands with `-np 5 --kv-unified`).
+
+Not every repository with "clef" or "jev" in its name works. Checked on
+20.11.2026:
+
+| Repository | GGUF metadata | `/v1/systemone` |
+| --- | --- | --- |
+| `ggml-org/Clef-Flash-GGUF` | `architecture = clef`, `clef.decision.type = clef` | yes, measured 23/23 at 0.65 |
+| `ggml-org/Kev-4B-GGUF` | `architecture = qwen35`, `qwen35.decision.type = kev` | yes — Q4_K_M 23/23 at 0.50, Q8_0 22/23 |
+| `NANI-Nithin/clef-flash-GGUF` | `architecture = qwen35`, no decision metadata | **no** — language tower only, the joint schema head is not in the file |
+| `ngquocvinh/Jev-Omni-GGUF` | `architecture = gemma4`, no decision metadata | **no** — needs a Python adapter that applies the decision head |
+| `mradermacher/Jeff-1.1-Qwen-4B-GGUF` | `architecture = qwen35`, no decision metadata | **no** — Jev-format, not the llama.cpp API |
+
+The architecture alone says nothing: Kev-4B is a `qwen35` model and still a
+decision model. The `decision.type` metadata is what counts.
+
+A missing metadata entry has two possible causes, and the model card tells them
+apart: the model has no decision head, or the conversion did not carry it over.
+For Jev-Omni and Jeff the head is a **separate file** in the original
+(`head.safetensors`, applied by their own serving code), so a GGUF of the
+backbone cannot contain it. Quantizers (mradermacher, NANI-Nithin, ngquocvinh)
+are not the original authors; read the original's card before judging a file.
+
 Valid values are `mcpThreshold` and `shellThreshold` from 0.5 up to but not
-including 1, and `secretsThreshold` above 0 up to 0.5. `loadConfig` silently
-discards values outside that band and uses the default, so
+including 1, and `secretsThreshold`, `sensitiveThreshold`,
+`untrustedThreshold`, `obscuredThreshold` above 0 up to 0.5. `loadConfig`
+silently discards values outside that band and uses the default, so
 `"shellThreshold": 0` no longer approves every probability.
 
 ### Step E: test regime before activation
@@ -1122,6 +1198,17 @@ from "Two backends for level 3" applies.
   served; sending in parallel would gain nothing. During the warm-up a decision
   waits in the queue and can exceed the time frame.
 
+### Status 20.11.2026: size limit and secret question
+
+- **Large MCP arguments:** above 32000 characters (as JSON) a `read` tool stays
+  `allow`; every other intent is `deny`. A prompt nobody can read is no
+  protection.
+- **Missing secret answer:** if the decision model returns no value for the
+  secret question, the shell verdict is `ask` instead of falling back to the
+  main question alone.
+- **Input too large for the model:** the server's own error ("too large to
+  process") yields `deny` for that command; other server errors still `ask`.
+
 Installation after cloning:
 
 ```powershell
@@ -1151,6 +1238,16 @@ Without `npm ci` the test gate fails at commit. That is intended.
   (`Read-Jsonc …`) stay `ask`; unreadable `&`/dot forms are denied since
   decision 3.
 - **A `cd` to another drive** makes relative targets unclear → `deny`.
+- **The decision model has a batch limit, not a character limit.** In embedding
+  mode llama.cpp forces `n_batch = n_ubatch`, and the question plus its answer
+  options must fit into one batch. If they do not, the server answers
+  `input … is too large to process`; the guard turns that into `deny` for the
+  call (measured 20.11.2026). With `ubatch 1024` this starts at about 5000
+  characters, with 4096 at about 24000. `start-reviewer.ps1` therefore passes
+  `-b 4096 -ub 4096` and overrides `batch-size`/`ubatch-size` from
+  `%APPDATA%\llama.cpp\config.ini`, which stays correct for chat models. If you
+  start `llama-server` yourself, pass both values; raising only one has no
+  effect because llama.cpp keeps them equal in this mode.
 
 ## Measurement
 

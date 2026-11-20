@@ -1,4 +1,4 @@
-# Versions- und Sicherheitsupdates für CI-Pins und GitHub-Actions.
+# Versions- und Sicherheitsupdates für CI-Pins, GitHub-Actions und npm.
 #
 # Wirkung nur mit Remote: Dependabot laeuft auf GitHub, nicht lokal. Das ist
 # der Ersatz fuer den nie eingerichteten Task-Scheduler — der Zeitplan steht
@@ -7,9 +7,18 @@
 # Hinweis zur Erkennung: pip nimmt jede .txt im Wurzelverzeichnis, wenn der
 # Dateiname "requirements" enthaelt. requirements-dev.txt trifft das (Quelle:
 # dependabot-core, python/lib/dependabot/python/shared_file_fetcher.rb).
+#
+# npm braucht ein Lockfile; package-lock.json liegt vor. Geprueft werden
+# @opencode/plugin und die transitiven Abhaengigkeiten, die npm ci installiert.
 version: 2
 updates:
   - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
     directory: "/"
     schedule:
       interval: weekly

@@ -20,6 +20,10 @@ guard.log
 # Review reports
 .full-review/
 
+# Arbeitsflaeche fuer Prototypen und Proben (Sandbox-Prototyp, Probe-Skripte).
+# Bleibt lokal: kein "git add -A" erfasst sie, Ruff und Pyright ueberspringen sie.
+staging/
+
 # Lokale Modell- und Serverpfade, falls jemand Skripte kopiert
 *.local.ps1
 

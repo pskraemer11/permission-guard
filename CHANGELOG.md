@@ -8,6 +8,91 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **Vier Achsen in der Shell-Prüfung (20.11.2026):** `reviewer.js` stellt im
+  selben `/v1/systemone`-Request drei weitere `noul`-Fragen — `sensitive`
+  (private Daten allgemein, breiter als `secrets`), `untrusted` (Code oder
+  Inhalt aus fremder Quelle) und `obscured` (verschleiert oder kodiert). Eine
+  Freigabe braucht `reads ≥ shellThreshold` **und** jede Achse unter ihrer
+  Grenze; eine fehlende Antwort ist eine Rückfrage. Neue Schwellen
+  `sensitiveThreshold`, `untrustedThreshold`, `obscuredThreshold` (je 0,5,
+  Band über 0 bis 0,5). `bench-shell` 23/23 einstimmig, `bench-model` 14/14,
+  `test.mjs` 962/962 (sieben neue Fälle). Mit Clef-Flash gemessen: `untrusted`
+  0,973 für einen heruntergeladenen Skript-Aufruf, `obscured` 0,955 für `-enc`,
+  `sensitive` 0,443 neben `secrets` 0,955 beim privaten Schlüssel.
+  **Grenze:** Nur der Decision-Modell-Typ `clef` legt alle Fragen in einen
+  Prompt; llama.cpp kennt sieben Typen, bei den anderen entsteht ein Prompt je
+  Frage. Gemessen ist ausschließlich Clef-Flash. Beide READMEs empfehlen
+  deshalb ein Clef-Modell und nennen die Prüfung über die GGUF-Metadaten
+  (`<arch>.decision.type`), weil ein Dateiname kein Beleg ist. Geprüft am
+  20.11.2026: Nur `ggml-org/Clef-Flash` und `ggml-org/Kev-4B` sind
+  SystemOne-fähig; `NANI-Nithin/clef-flash` (nur Language Tower),
+  `Jev-Omni` (Python-Adapter) und `Jeff-1.1` (Jev-Format) nicht. Ein fehlendes
+  Metadatum kann auch am Quantisierer liegen; bei diesen drei Fällen belegt die
+  Original-Karte, dass der Decision-Head separat liegt oder fehlt.
+- **Kev-4B gemessen (20.11.2026):** Q4_K_M (2,83 GB) trifft mit
+  `shellThreshold` 0,50 alle 23 Shell-Fälle; mit Clef-Schwelle 0,65 nur 20/23.
+  Q8_0 (4,18 GB) trifft 22/23 (`write-git-add` 0,495). Die Schwellen sind
+  modellabhängig. `-np 5 --kv-unified` brachte bei fünf kurzen Anfragen keinen
+  Gewinn (Faktor 1,01–1,03). Weitere Modelle aus der ggml-Collection stehen als
+  Vormerk in `PLANUNG.md`.
+- **`pdftotext` und `pandoc` (20.11.2026):** `guard.js` prüft beide mit eigenen
+  Funktionen statt über `READ_BINARIES`. `pdftotext` gilt als lesend, solange
+  keine Ausgabedatei folgt (oder `-` als Ziel steht); die 14 Optionen mit
+  eigenem Wert werden übersprungen. `pandoc` gilt nur ohne `-o`, `-L`, `-F`,
+  `-d`, `--pdf-engine` und `--extract-media` als lesend — diese Optionen
+  schreiben eine Datei oder starten fremden Code, `--sandbox` verhindert das
+  nicht. Grundlage sind die Hilfetexte von Poppler 26.09.0 und Pandoc 3.14.
+  `test.mjs` 955/955 (17 neue Fälle); `README.md`, `README_de.md` und
+  `PLANUNG.md` nachgezogen.
+- **P2-Beobachtung ausgewertet (20.11.2026):** `PLANUNG.md` hält das Ergebnis
+  des Beobachtungsfensters 13.–19.11.2026 fest (136 Entscheidungen, 17
+  Werkzeuge, vier angewendete `ask` → `allow`, F-Kriterien wegen fehlender
+  schreibender Werkzeuge unentschieden, kein Guard-Fehler).
+- **Lese-Werkzeug ohne Verb (20.11.2026):** `guard.js` führt
+  `MCP_READ_ONLY_TOOLS` mit `open-knowledge_exec`; das Werkzeug gilt damit als
+  `read` und erreicht Ebene 3 nicht mehr. Die Liste ist bewusst nach exaktem
+  Namen sortiert, weil `exec` allein bei anderen Servern Code ausführt.
+- **Aufwärmlauf wiederholt sich (20.11.2026):** `reviewer.js` versucht eine
+  geschlossene Verbindung (`ECONNREFUSED`) bis zu fünfmal im Abstand von
+  500 ms und nennt den Code im Log; andere Netzfehler bleiben einmalig.
+- **Schreibende MCP-Werkzeuge (20.11.2026):** `mcp-cases.jsonl` prüft drei
+  Fälle (`open-knowledge.write` im Projekt, mit `../` daraus ausbrechend, und
+  `open-knowledge.delete`). Ergebnis: der Guard fragt in allen drei Fällen und
+  unterscheidet das Ziel nicht — anders als die Shell-Prüfung, die außerhalb
+  des Projekts verweigert. `bench-mcp.mjs` führt jetzt 36 Fälle (11 Verbote).
+- **Pfadabgleich für MCP (20.11.2026):** `guard.js` führt `mcpOutsidePaths()`;
+  `mcpVerdict(criteria, input, scope)` verweigert `write` und `destructive`,
+  deren Zielpfad außerhalb von Projekt, Temp und vertrauten Ordnern liegt.
+  Geprüft werden die Zielfelder (`path`, `file`, `folder`, `output`, `target`,
+  `cwd`, …), nicht `source`. Innerhalb bleibt es `ask`. `index.js` übergibt
+  Projekt, Temp und Wurzeln aus `guardOptions`. `mcp-cases.jsonl` wächst auf 40
+  Fälle (15 Verbote) mit `open-knowledge`, `xlsx-tools-mcp` und
+  `libreoffice-calc`. Live belegt nach dem Deploy: Ziel außerhalb → `deny`,
+  keine Datei; Ziel im Projekt → `ask`, Rückfrage erschien. Einzelheiten in
+  `COMPACTIONS.md`.
+- **Compaction (20.11.2026):** `COMPACTIONS.md` hält Sitzungsziel,
+  Entscheidungen, die Korrektur der eigenen Fehlaussage zum Audit-Feld
+  `layer`, den Live-Beleg und den nächsten Schritt fest (Compaction
+  20.11.2026 / 15:21).
+
+- **Größenlimit, Geheimnisfrage und Modellstapel (20.11.2026):** `guard.js`
+  verweigert MCP-Argumente über 32000 Zeichen (`deny`), außer der Werkzeugname
+  belegt eine Leseabsicht und es gibt keinen Geheimnisverdacht; `reviewer.js`
+  macht aus einer fehlenden Secrets-Antwort `ask` statt `allow` und aus dem
+  Serverfehler „input … is too large to process" `deny` (andere Serverfehler
+  bleiben `ask`, Shell- und MCP-Pfad). `test.mjs` (934/934), `bench-mcp.mjs`
+  (33/33, 11 Verbote), `mcp-cases.jsonl` und `AGENTS.md` folgen; `README.md`
+  und `README_de.md` beschreiben den Stand, `SECURITY.md` nennt die Ausnahme
+  von der Rückfrage-Zusage, `docs/adr/0002-reviewer-und-sandbox.md` trägt die
+  Begründung als Nachtrag. `start-reviewer.ps1` übergibt für das
+  Entscheidungsmodell `-b 4096 -ub 4096` (neue Parameter `-Batch`/`-Ubatch`,
+  Standard 4096) und übersteuert damit `batch-size`/`ubatch-size` aus
+  `%APPDATA%\llama.cpp\config.ini`, die für Chatmodelle unverändert bleiben;
+  beide READMEs nennen die Stapelgrenze unter „Grenzen/Limits". Gemessen mit
+  `ubatch` 1024/2048/4096: die nutzbare Eingabe liegt zwischen 5000 und 6000,
+  zwischen 12000 und 16000 bzw. zwischen 24000 und 32000 Zeichen; die
+  GPU-Belegung beträgt bei 4096 rund 7,1 GB von 16,3 GB.
+
 - **Zeilenenden und BOM (18.11.2026):** `.gitattributes` setzt den Standard
   `* text=auto eol=lf` und nimmt Binärdateien (`*.png`, `*.jpg`, `*.jpeg`,
   `*.gif`, `*.ico`, `*.gguf`, `*.woff`, `*.woff2`) aus; die bisherigen
@@ -37,6 +122,44 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 - **Skill-Baseline ergänzt (17.11.2026):** `hook-regeln.yml` prüft den Push-/PR-Bereich mit demselben `pre-push`-Hook lokal (gitleaks 8.30.1, `GITHOOKS_TEST_GATE=0`, fail closed bei unlesbaren Revisionen); der Verhaltensproben-Schritt des Eltern-Repositories entfällt, weil `tools/githooks-test/` hier nicht existiert. `scripts/enable-hooks.ps1` setzt `core.hooksPath .githooks` pro Klon. `requirements-dev.txt` pinnt `pip-audit==2.10.1`; `ci.yml` führt `pip_audit --strict` im Python-Job aus. Ruff prüft jetzt die Bandit-`S`-Regeln; `assert` (`S101`) und `subprocess` (`S603`) sind in `tests/*` ignoriert, der Produktivcode war schon sauber.
 
 ### Geändert
+
+- **`shellThreshold` 0,7 → 0,65 (20.11.2026):** Mit fünf Fragen im Prompt lag
+  der höchste `ask`-Wert bei `effect` bei 0,616 (kube-config 0,688, dort greift
+  `secrets` mit 0,913), der niedrigste `allow`-Wert bei 0,664. 0,65 liegt
+  dazwischen; über fünf Läufe sind die Werte exakt identisch.
+  `shell-reviewer.config.example.json` nachgezogen.
+
+- **npm in Dependabot und CI (20.11.2026):** `.github/dependabot.yml` führt
+  jetzt `package-ecosystem: npm` (Lockfile `package-lock.json` liegt vor, also
+  prüft Dependabot `@opencode/plugin` und die transitiven Abhängigkeiten).
+  `.github/workflows/ci.yml` prüft mit `npm audit --audit-level=high` als
+  Gegenstück zu `pip_audit`; der Schritt läuft einmal (Linux, Node 22), weil er
+  das Lockfile prüft und nicht die Node-Version. Lokal: `found 0
+  vulnerabilities`, Exit 0. `actionlint` grün.
+
+- **Prompt-Schärfung der Shell-Prüfung (20.11.2026):** `reviewer.js` fragt nicht
+  mehr „ist das sicher?", sondern „darf das ohne Rückfrage laufen?", und nennt
+  auf der Nein-Seite zusätzlich „uses a credential that appears in the text"
+  sowie „its effect cannot be determined from the text". Beide Wege (Systemone
+  und Chat-Fallback) tragen dieselbe Regel. `bench-shell` 23/23 einstimmig wie
+  vorher, `bench-model` 14/14. Die Ja-Seite blieb bewusst unverändert: Vier
+  Umformulierungen dort drückten Schreibziele im Temp-Ordner unter die Schwelle
+  (0,55–0,70 statt ≥ 0,70). Grenzfälle liegen dicht an 0,7 (0,64–0,81), die
+  Schwelle trennt knapp. Der Chat-Fallback ließ sich mit dem laufenden Server
+  nicht messen (57 von 69 Antworten ohne Modellurteil); jene Änderung ist
+  ungeprüft.
+
+- **ADR-0002 als angenommen markiert (20.11.2026):** Die Statuszeile nennt jetzt
+  „angenommen am 20.11.2026" und die zwei offenen Punkte (Stufe 3 mit vier
+  Achsen, Deny-Limits). Inhalt und Historie darunter bleiben unverändert; der
+  Nachtrag vom 20.11. belegt die drei umgesetzten Entscheidungen.
+
+- **`package.json` mit Repository-Angaben (20.11.2026):** `repository`, `bugs`
+  und `homepage` zeigen auf das GitHub-Repo. Der Handle ist seit der
+  Entscheidung vom 20.11.2026 in Dateien erlaubt — er steht für den
+  Workflow-Aufruf ohnehin in `.github/workflows/guard.yml`; E-Mail-Adressen und
+  Klarnamen bleiben ausgeschlossen. `PLANUNG.md` hält die geänderte S0-Abnahme
+  fest.
 
 - **Ruff 0.17.4 → 0.17.5 (18.11.2026):** `requirements-dev.txt` pinnt
   `ruff==0.17.5`, `pyproject.toml` verlangt im `[tool.ruff]`-Abschnitt

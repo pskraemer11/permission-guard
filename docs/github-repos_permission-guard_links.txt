@@ -1,0 +1,57 @@
+Leite aus den nachfolgenden Quellen weitere Hinweise ab, wie unser `permission-guard` in `~/Python-Projekte/AI+IDE-Hints/tools/permission-guard` 
+  bzw. der enthaltene `Reviewer` (lokales Clef-Flash Decision Modell) noch verbessert werden kann.
+  
+  Sowohl Anthropic/Claude als auch OpenAI/Codex haben ähnliche Ansätze, und bei Github und OpenRouter findet sich weitere Repos in dieser Richtung (nutze ggf. Exa / Firecrawl via MCP):
+
+
+# Permission Guards mit und ohne LLM-Klassifizierer
+https://opencode.ai/docs/permissions (statisch) 
+https://github.com/anomalyco/opencode/tree/v2.0.12, 
+
+https://github.com/aws-samples/aws-iam-permissions-guardrails
+https://github.com/aorizondo/opencode-apex
+https://github.com/opzero1/open-guardian
+https://github.com/preved911/opencode-bash-guard
+https://github.com/WhiteGiverMa/opencode-webfetch-redirect-guard
+https://github.com/koppert/opencode-security-guard
+https://github.com/mossgowild/opencode-guard
+https://github.com/fatihdogmus/opencode-codex-guardian
+https://github.com/helloydh007/opencode-permission-guard
+https://github.com/StuartGa/opencode-permission-guard
+https://www.heise.de/hintergrund/OpenShell-Wie-Nvidia-KI-kontrollieren-und-so-einer-Regulierung-zuvorkommen-will-11498122.html?
+seite=all
+
+# Reviewer/Klassifizierer
+https://openrouter.ai/docs/cookbook/coding-agents/auto-approve-permission-prompts-with-jev
+https://github.com/PanAchy/jevvy
+
+**OpenAI:
+https://learn.chatgpt.com/docs/sandboxing/auto-review
+https://developers.openai.com/codex/hooks#permissionrequest,
+
+** Anthropic:
+https://code.claude.com/docs/de/permission-modes#how-the-classifier-evaluates-actions
+https://code.claude.com/docs/en/hooks#permissionrequest, 
+
+# Spezialthemen
+https://github.com/boxpositron/envsitter-guard
+https://github.com/trufflesecurity/trufflehog
+
+============
+
+
+  
+  
+  
+  - https://openrouter.ai/docs/cookbook/building-agents/gate-tool-calls-with-jev.md 
+      applies the same threshold pattern to tools in an OpenRouter Agent SDK agent, with approve, block, and review outcomes
+  - [OpenCode Integration](https://openrouter.ai/docs/cookbook/coding-agents/opencode-integration.md) 
+      covers pointing OpenCode at OpenRouter and picking models, which the OpenCode section assumes is done
+  - [Add Human-in-the-Loop Controls](https://openrouter.ai/docs/cookbook/building-agents/hitl-tools.md) 
+      is the pause-and-resume pattern that these prompts are a coding-agent version of
+  - [TypeSafe SDK on OpenRouter](https://openrouter.ai/docs/guides/community/typesafe-sdk.md) 
+      shows the Choice, Score, and Noul primitives if you want a three-way approve, ask, deny question instead of two Nouls
+  - [Jev documentation hub](https://openrouter.ai/docs/guides/community/jev.md) for the [Jev tutorial](https://openrouter.ai/docs/guides/community/jev-tutorial.md), 
+      pricing, and the TypeSafe docs on choosing a threshold
+  - [Other decision models on OpenRouter](https://openrouter.ai/models?output_modalities=decisions) 
+    from OpenAI, Microsoft, Perplexity, Cloudflare, and others take the same Decisions API request: change model and re-check your thresholds on a labeled sample
