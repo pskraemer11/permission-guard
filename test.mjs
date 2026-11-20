@@ -691,6 +691,31 @@ function run(cases, opts, title) {
   console.log(`-- ${title}\n`)
 }
 
+// pdftotext und pandoc (Vormerk 19.11.2026, gemessen mit Pandoc 3.14 und
+// Poppler 26.09.0): lesend nur ohne Ausgabedatei und ohne fremden Code.
+// `pdftotext X Y` schreibt Y; bei pandoc schreiben oder starten `-o`, `-L`,
+// `-F`, `-d`, `--pdf-engine` und `--extract-media` fremden Code. `--sandbox`
+// ist keine Freigabe: gemessen verhindert es nichts.
+const docTools = [
+  ["pdftotext report.pdf", "allow"],
+  ["pdftotext -layout -enc UTF-8 report.pdf -", "allow"],
+  ["pdftotext -f 1 -l 2 report.pdf -", "allow"],
+  ["pdftotext report.pdf out.txt", "ask"],
+  ["pdftotext -layout report.pdf out.txt", "ask"],
+  ["pandoc notes.md -t gfm", "allow"],
+  ["pandoc notes.md --sandbox -t gfm", "allow"],
+  ["pandoc notes.md -o notes.html", "ask"],
+  ["pandoc notes.md -onotes.html", "ask"],
+  ["pandoc notes.md --output=notes.html", "ask"],
+  ["pandoc notes.md -L filter.lua -t gfm", "ask"],
+  ["pandoc notes.md -Lfilter.lua -t gfm", "ask"],
+  ["pandoc notes.md --lua-filter=filter.lua", "ask"],
+  ["pandoc notes.md -F filter.py", "ask"],
+  ["pandoc notes.md -d defaults.yaml", "ask"],
+  ["pandoc notes.md --pdf-engine=xelatex", "ask"],
+  ["pandoc notes.md --extract-media=media", "ask"],
+]
+
 run(base, undefined, "ohne Projektbezug")
 run(scoped, options, "mit Projektbezug")
 run(gitGuardrails, options, "Git-Guardrails: Ist-Stand")
@@ -698,6 +723,7 @@ run(cli, undefined, "CLI-Allowlists")
 run(helpVersion, undefined, "Hilfe und Version")
 run(gitleaks, undefined, "gitleaks")
 run(readOnlyCli, undefined, "sqlite3 und gh")
+run(docTools, undefined, "pdftotext und pandoc")
 run(net, undefined, "Netz-Lesen")
 run(denyForms, undefined, "Verweigerung & Geheimnis-Ersetzung")
 run(py, undefined, "python eng freigegeben")
@@ -2199,6 +2225,7 @@ console.log("-- Edit-Pruefung: Ziele, geschuetzte Pfade, Platzhalter\n")
 const total =
   base.length + scoped.length + gitGuardrails.length + cli.length + helpVersion.length + gitleaks.length +
   readOnlyCli.length +
+  docTools.length +
   net.length + denyForms.length + py.length + interp.length +
   ruffConfigBootstrap.length + sharedChecks.length + messageChecks.length + 3 +
   shadowChecks.length + shadowReportChecks.length + shadowPathChecks.length +

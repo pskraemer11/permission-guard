@@ -1,7 +1,9 @@
 # ADR-Entwurf: Reviewer-Prinzip, Pflichtenheft und Sandbox
 
 **Pfad:** `docs/adr/0002-reviewer-und-sandbox.md`
-**Status:** vorgeschlagen, nicht freigegeben.
+**Status:** angenommen am 20.11.2026. Umgesetzt sind Größenlimit, Geheimnisfrage
+und Sandbox-Pfad (Nachtrag unten); offen bleiben Stufe 3 (vier Achsen) und die
+Deny-Limits.
 **Datum:** 18.11.2026
 
 ## Kontext

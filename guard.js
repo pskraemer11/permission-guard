@@ -949,6 +949,8 @@ function classifyCommand(s, lower, ctx) {
   if (base === "gitleaks" || base === "gitleaks.exe") return classifyGitleaks(s)
   if (base === "sqlite3" || base === "sqlite3.exe") return classifySqlite(s)
   if (base === "gh" || base === "gh.exe") return classifyGh(s, ctx)
+  if (base === "pdftotext" || base === "pdftotext.exe") return classifyPdftotext(s)
+  if (base === "pandoc" || base === "pandoc.exe") return classifyPandoc(s)
 
   if (NET_CMD_NAMES.has(base)) return classifyNetwork(s, ctx)
   if (base === "python" || base === "python.exe" || base === "py" || base === "py.exe") return classifyPython(s, ctx)
@@ -2875,6 +2877,61 @@ function classifySqlite(statement) {
     // mit Leerzeichen ("\".output out.txt\""). Deshalb das erste Wort pruefen.
     const head = lowerArg.split(/\s+/)[0]
     if (SQLITE_WRITE_FLAGS.has(head) || lowerArg.startsWith("--output")) return "unknown"
+  }
+  return "read"
+}
+
+// pdftotext (Vormerk 19.11.2026, Poppler 26.09.0): liest ein PDF und schreibt
+// den Text nach stdout, solange kein Ausgabeargument folgt. `pdftotext X Y`
+// schreibt Y und ist damit keine Leseabsicht - der Grund, warum das Werkzeug
+// nicht einfach in READ_BINARIES steht. Die Optionen mit eigenem Wert muessen
+// uebersprungen werden, sonst zaehlt etwa `-enc UTF-8` als Dateiname.
+const PDFTOTEXT_VALUE_OPTIONS = new Set([
+  "-f", "-l", "-r", "-x", "-y", "-W", "-H", "-fixed", "-remove-hyphens", "-enc", "-eol",
+  "-colspacing", "-opw", "-upw",
+])
+
+function classifyPdftotext(statement) {
+  const args = tokenizeCli(statement).slice(1)
+  const free = []
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index]
+    // "-" steht fuer stdin/stdout und ist kein Dateiname.
+    if (arg === "-") {
+      free.push(arg)
+      continue
+    }
+    if (arg.startsWith("-")) {
+      if (PDFTOTEXT_VALUE_OPTIONS.has(arg)) index++
+      continue
+    }
+    free.push(arg)
+  }
+  if (free.length === 0) return "unknown"
+  if (free.length === 1) return "read"
+  if (free.length === 2 && free[1] === "-") return "read"
+  return "unknown"
+}
+
+// pandoc (Vormerk 19.11.2026, Pandoc 3.14): liest Quellen und schreibt nach
+// stdout, solange keine Option eine Datei schreibt oder fremden Code
+// ausfuehrt. `--sandbox` schuetzt dabei nicht (gemessen: es verhindert nichts),
+// deshalb zaehlt allein die Abwesenheit dieser Optionen. Kurzoptionen werden
+// gross-/kleinschreibungssensitiv geprueft: `-f` ist --from, `-F` ist --filter.
+const PANDOC_WRITE_LONG = [
+  /^--output(?:=|$)/,
+  /^--lua-filter(?:=|$)/,
+  /^--filter(?:=|$)/,
+  /^--defaults(?:=|$)/,
+  /^--pdf-engine(?:=|$)/,
+  /^--extract-media(?:=|$)/,
+]
+const PANDOC_WRITE_SHORT = /^-[oLFd]/
+
+function classifyPandoc(statement) {
+  for (const arg of tokenizeCli(statement).slice(1)) {
+    if (PANDOC_WRITE_SHORT.test(arg)) return "unknown"
+    if (PANDOC_WRITE_LONG.some((rx) => rx.test(arg.toLowerCase()))) return "unknown"
   }
   return "read"
 }

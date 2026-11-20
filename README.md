@@ -446,7 +446,7 @@ Why so narrow: the call executes the program; the allowance applies only
 because a help word writes, sends or starts nothing. With further arguments
 that assumption can no longer be proven.
 
-### Foreign CLIs: `opencode`, `firecrawl`, `gitleaks`, `sqlite3`, `gh`
+### Foreign CLIs: `opencode`, `firecrawl`, `gitleaks`, `sqlite3`, `gh`, `pdftotext`, `pandoc`
 
 The basis is the help trees of the installed versions, not assumptions. Only
 what demonstrably reads and saves, sends or starts nothing is allowed. Unknown
@@ -463,6 +463,8 @@ subcommands stay `ask`.
 | `sqlite3`   | only with `-readonly`                                                                    | without the flag (opens writable), `-cmd`, `-init`, `.output`, `.once`, `.save`, `.backup`,           |
 |             |                                                                                          | `.restore`, `.clone`, `.archive`                                                                      |
 | `gh`        | `auth status`, `repo view`, `api` (only demonstrably reading, see below)                 | everything else, in particular `api` with a sending suspicion, `pr merge`, `release create`           |
+| `pdftotext` | without an output file, or with `-` as output (stdout)                                   | `pdftotext X Y` — the second free argument is a file and is written                                   |
+| `pandoc`    | only to stdout: no `-o`, `-L`, `-F`, `-d`, `--pdf-engine`, `--extract-media`             | any of those options; `--sandbox` does not help (it prevents nothing)                                 |
 
 Additionally blocked, even for an allowed subcommand: `-o`/`--output`,
 `-k`/`--api-key`, `--api-url`, `--screenshot`, `--full-page-screenshot`,

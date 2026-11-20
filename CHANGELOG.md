@@ -8,6 +8,15 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **`pdftotext` und `pandoc` (20.11.2026):** `guard.js` prüft beide mit eigenen
+  Funktionen statt über `READ_BINARIES`. `pdftotext` gilt als lesend, solange
+  keine Ausgabedatei folgt (oder `-` als Ziel steht); die 14 Optionen mit
+  eigenem Wert werden übersprungen. `pandoc` gilt nur ohne `-o`, `-L`, `-F`,
+  `-d`, `--pdf-engine` und `--extract-media` als lesend — diese Optionen
+  schreiben eine Datei oder starten fremden Code, `--sandbox` verhindert das
+  nicht. Grundlage sind die Hilfetexte von Poppler 26.09.0 und Pandoc 3.14.
+  `test.mjs` 955/955 (17 neue Fälle); `README.md`, `README_de.md` und
+  `PLANUNG.md` nachgezogen.
 - **P2-Beobachtung ausgewertet (20.11.2026):** `PLANUNG.md` hält das Ergebnis
   des Beobachtungsfensters 13.–19.11.2026 fest (136 Entscheidungen, 17
   Werkzeuge, vier angewendete `ask` → `allow`, F-Kriterien wegen fehlender
@@ -86,6 +95,16 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 - **Skill-Baseline ergänzt (17.11.2026):** `hook-regeln.yml` prüft den Push-/PR-Bereich mit demselben `pre-push`-Hook lokal (gitleaks 8.30.1, `GITHOOKS_TEST_GATE=0`, fail closed bei unlesbaren Revisionen); der Verhaltensproben-Schritt des Eltern-Repositories entfällt, weil `tools/githooks-test/` hier nicht existiert. `scripts/enable-hooks.ps1` setzt `core.hooksPath .githooks` pro Klon. `requirements-dev.txt` pinnt `pip-audit==2.10.1`; `ci.yml` führt `pip_audit --strict` im Python-Job aus. Ruff prüft jetzt die Bandit-`S`-Regeln; `assert` (`S101`) und `subprocess` (`S603`) sind in `tests/*` ignoriert, der Produktivcode war schon sauber.
 
 ### Geändert
+
+- **ADR-0002 als angenommen markiert (20.11.2026):** Die Statuszeile nennt jetzt
+  „angenommen am 20.11.2026" und die zwei offenen Punkte (Stufe 3 mit vier
+  Achsen, Deny-Limits). Inhalt und Historie darunter bleiben unverändert; der
+  Nachtrag vom 20.11. belegt die drei umgesetzten Entscheidungen.
+
+- **`package.json` ohne Repository-Angaben (20.11.2026):** `repository`, `bugs`
+  und `homepage` bleiben leer. Alle drei enthalten eine Web-Adresse mit dem
+  GitHub-Login, und der soll nach der S0-Regel in keiner Datei stehen. Der Punkt
+  steht in `PLANUNG.md` jetzt auf „zurückgestellt bis öffentlicher Umzug".
 
 - **Ruff 0.17.4 → 0.17.5 (18.11.2026):** `requirements-dev.txt` pinnt
   `ruff==0.17.5`, `pyproject.toml` verlangt im `[tool.ruff]`-Abschnitt

@@ -46,7 +46,7 @@ Ablageort.
 | P3   | Dreiweg-Antwort „Unbestimmt" entscheiden                                                  | S       | Messung                       |
 | P3   | Warmup-`TypeError` diagnostizieren                                                        | S       | —                             |
 | P3   | Suchmuster mit Befehlsnamen (`iex`) löst Verweigerung aus                                 | S       | —                             |
-| P3   | `repository`/`bugs`/`homepage` in `package.json`                                          | S       | Nutzerentscheid               |
+| P3   | `repository`/`bugs`/`homepage` — zurückgestellt: Login darf in keiner Datei stehen        | S       | öffentlicher Umzug            |
 | P3   | Smoke braucht Warmup (Lessons learned 16.11.2026)                                         | S       | —                             |
 
 ## Plan 1: Eigenständiges Repository
@@ -960,8 +960,27 @@ Zwei getrennte Aufgaben:
    - kein `--pdf-engine=`/`--extract-media=`
    Alles andere: `ask`.
 
-Beides ist nicht umgesetzt. Bis dahin bleibt `pandoc` im Agenten bei `ask`,
-und `pdftotext` ist nur in der stdout-Form freigegeben.
+Beides ist **umgesetzt am 20.11.2026** — mit einer Abweichung vom Vorschlag
+oben: `pdftotext` steht **nicht** in `READ_BINARIES`, sondern hat eine eigene
+Funktion `classifyPdftotext()`. In `READ_BINARIES` müsste die
+Zwei-Argument-Form über eine Ausnahme davor wieder eingefangen werden; eine
+Stelle ist besser als zwei.
+
+Belegt gegen die Hilfetexte der installierten Fassungen, nicht geschätzt:
+
+- Poppler 26.09.0 nennt 14 Optionen mit eigenem Wert (`-f`, `-l`, `-r`, `-x`,
+  `-y`, `-W`, `-H`, `-fixed`, `-remove-hyphens`, `-enc`, `-eol`, `-colspacing`,
+  `-opw`, `-upw`). Ohne diese Liste zählte etwa `-enc UTF-8` als Dateiname.
+  Fehlende Einträge erzeugen nur zusätzliche Rückfragen, nie eine Fehlfreigabe.
+- Pandoc 3.14 nennt `-o`/`--output`, `-d`/`--defaults`, `-F`/`--filter`,
+  `-L`/`--lua-filter` als die schreibenden oder Code startenden Kurzoptionen.
+  `-f`/`-r` sind `--from`/`--read` und bleiben lesend; deshalb wird bei
+  Kurzoptionen die Groß-/Kleinschreibung unterschieden.
+
+17 Testfälle in `test.mjs` (Abschnitt „pdftotext und pandoc"), zusammen
+955/955. `bench-shell` bleibt unberührt: Die Fälle dort messen Ebene 1 und
+brechen ab, sobald eine statische Regel greift — `pdftotext`/`pandoc` kommen
+dort also nicht mehr an.
 
 ## Nachtrag 20.11.2026: P2-Beobachtung ausgewertet
 

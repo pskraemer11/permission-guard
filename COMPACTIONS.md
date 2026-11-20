@@ -2539,3 +2539,53 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
   untracked. Vor `git add -A` auf `main` beachten.
 - Deployt ist `9587e99`; `1e1046a` ist reine Doku.
 - Push und Merge bleiben beim Nutzer.
+
+
+=============== Compaction 20.11.2026 / 16:01 ================
+## Objective
+- **Current:** `pdftotext`/`pandoc` im Guard umgesetzt, ADR-0002 als
+  angenommen markiert; `package.json` bleibt ohne Repository-Angaben.
+- **Next:** P0-5 (Prompt-Schaerfung) planen, nicht umsetzen.
+
+## Important Details
+- **Entscheidung (Nutzer):** Der GitHub-Login soll in **keiner** Datei stehen.
+  Damit sind `repository`, `bugs` und `homepage` in `package.json` nicht
+  fuellbar - alle drei enthalten die Web-Adresse mit dem Login. Der Punkt ist
+  in `PLANUNG.md` auf "zurueckgestellt bis oeffentlicher Umzug" gesetzt.
+  Hintergrund ist die S0-Regel: Weder Dateien noch Commit-Metadaten verraten
+  den Eigentuemer.
+- **Abweichung vom Vormerk:** `pdftotext` steht nicht in `READ_BINARIES`,
+  sondern hat `classifyPdftotext()`. In `READ_BINARIES` muesste die
+  Zwei-Argument-Form ueber eine Ausnahme davor wieder eingefangen werden.
+- **Belegt statt geschaetzt:** Poppler 26.09.0 nennt 14 Optionen mit eigenem
+  Wert (auch `-opw`/`-upw`, `-colspacing`, `-fixed`); Pandoc 3.14 nennt `-o`,
+  `-d`, `-F`, `-L` als schreibend. `-f`/`-r` sind `--from`/`--read`, deshalb
+  wird bei Kurzoptionen die Gross-/Kleinschreibung unterschieden.
+- **Grenze der Umsetzung:** `pandoc --sandbox` ist keine Freigabe; gemessen
+  verhindert es nichts. Lesend bleibt nur, was gar keine schreibende Option
+  traegt.
+- **`codex_guard.py` unberuehrt:** Er hat keine Allowlist fuer Shell-Binaries
+  (reine Deny-Liste), `shared-cases.jsonl` enthaelt nur gemeinsame Faelle.
+
+## Work State
+- **Completed:** `guard.js` (`classifyPdftotext`, `classifyPandoc`),
+  `test.mjs` 955/955 (17 neue Faelle), beide READMEs (Tabelle + Ueberschrift),
+  `PLANUNG.md` (Vormerk umgestellt, P3-Zeile), `CHANGELOG.md`,
+  ADR-Statuszeile. Gate: `test-wiring` 13/13, `bench-mcp` 40/40,
+  `test-index` 23/23, `pytest` 149/1, Ruff/Format/Pyright gruen.
+- **Active:** Commit dieser Aenderungen.
+- **Blocked:** keiner.
+
+## Next Move
+1. Commit (Doku und Code zusammen).
+2. P0-5 planen: Kriterien statt "harmlos?", zwei Negativbeispiele,
+   Messauftrag `bench-shell --repeat 3` und `bench-model --repeat 3`
+   vorher/nachher.
+3. Danach Stufe 3 (vier Achsen), zuletzt Deny-Limits.
+
+## Relevant Files
+- `guard.js`: `classifyPdftotext`, `classifyPandoc`, `PDFTOTEXT_VALUE_OPTIONS`,
+  `PANDOC_WRITE_LONG`/`PANDOC_WRITE_SHORT`.
+- `test.mjs`: Block `docTools`, in der Summe als `docTools.length`.
+- `staging/table-insert.mjs`, `staging/row-replace.mjs`: Einmalhelfer zum
+  Ausrichten der Tabellen, nicht versioniert.

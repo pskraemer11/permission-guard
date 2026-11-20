@@ -448,7 +448,7 @@ Warum die Enge: Der Aufruf führt das Programm aus; die Freigabe gilt nur, weil
 ein Hilfewort nichts schreibt, sendet oder startet. Bei weiteren Argumenten ist
 diese Annahme nicht mehr belegbar.
 
-### Fremde CLIs: `opencode`, `firecrawl`, `gitleaks`, `sqlite3`, `gh`
+### Fremde CLIs: `opencode`, `firecrawl`, `gitleaks`, `sqlite3`, `gh`, `pdftotext`, `pandoc`
 
 Grundlage sind die Hilfe-Bäume der installierten Fassungen, nicht Annahmen.
 Erlaubt wird nur, was nachweislich liest und nichts speichert, sendet oder
@@ -465,6 +465,8 @@ startet. Unbekannte Unterbefehle bleiben `ask`.
 | `sqlite3`   | nur mit `-readonly`                                                                      | ohne das Flag (öffnet schreibend), `-cmd`, `-init`, `.output`, `.once`, `.save`, `.backup`,     |
 |             |                                                                                          | `.restore`, `.clone`, `.archive`                                                                |
 | `gh`        | `auth status`, `repo view`, `api` (nur nachweislich lesend, siehe unten)                 | alles andere, insbesondere `api` mit Senden-Verdacht, `pr merge`, `release create`              |
+| `pdftotext` | ohne Ausgabedatei oder mit `-` als Ziel (stdout)                                         | `pdftotext X Y` — das zweite freie Argument ist eine Datei und wird geschrieben                 |
+| `pandoc`    | nur nach stdout: kein `-o`, `-L`, `-F`, `-d`, `--pdf-engine`, `--extract-media`          | eine dieser Optionen; `--sandbox` hilft nicht (es verhindert nichts)                            |
 
 Zusätzlich gesperrt, auch bei erlaubtem Unterbefehl: `-o`/`--output`,
 `-k`/`--api-key`, `--api-url`, `--screenshot`, `--full-page-screenshot`,
