@@ -2444,3 +2444,35 @@ aussen vor; ein Upload einer privaten Datei aus dem Home ergibt weiterhin
 **Gate (20.11.2026, nach dem Pfadabgleich):** `test.mjs` 938/938,
 `test-wiring.mjs` 13/13, `bench-mcp.mjs` 40/40 (15 Verbote), `test-index.mjs`
 23/23, `pytest` 149/1, Ruff, Ruff-Format, Pyright gruen.
+
+## Nachtrag 20.11.2026 (dritte Fortsetzung): Live-Beleg am laufenden System
+
+Deployt am 20.11.2026 ueber `deploy.ps1` (alle Dateien "identisch",
+`guard.js` SHA256 `E7EF18DF…` in Quelle und Ziel gleich). Danach zwei echte
+MCP-Aufrufe von `xlsx-tools-mcp.create_workbook`:
+
+| Fall | Ziel | Ergebnis |
+| --- | --- | --- |
+| ausserhalb | `~/pg-probe.xlsx` | `deny`, Aufruf abgewiesen, **keine Datei** entstanden |
+| innerhalb | `staging/pg-probe.xlsx` | `ask`, Rueckfrage erschien, nach Freigabe geschrieben |
+
+Belege:
+
+- `guard.log`: `mcp ask xlsx-tools-mcp_create_workbook agent=general
+  args=2 felder=path,sheets absicht=write/create ziel=path urteil=deny/1`,
+  danach `mcp deny (aktiv) schreibend ausserhalb des Projekts (1)`.
+  Beim zweiten Aufruf `urteil=ask/1` und
+  `mcp ask (aktiv) schreibend oder oeffentlich (create)`.
+- `audit.jsonl`: erster Aufruf `decision: deny`, `effect: ask`, `layer: 1`,
+  `intent: write`, `applied: true`, `seq: 363`.
+- Dateisystem: `Test-Path ~/pg-probe.xlsx` → `False`; die Probe im Projekt
+  wurde nach dem Nachweis geloescht.
+
+**Was damit belegt ist:** Der Pfadabgleich greift vor der Ausfuehrung, die
+Begruendung nennt keinen Pfad (nur die Anzahl), und der Aufruf steht
+vollstaendig in der Audit-Kette. Innerhalb des Projekts bleibt es bei der
+Rueckfrage — keine stille Freigabe.
+
+**Nicht belegt:** Ein Schreibziel innerhalb des Projekts, das ein Versand-
+oder Veroeffentlichungswerkzeug ist (etwa `mail_send` mit Anhang im Projekt).
+Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.

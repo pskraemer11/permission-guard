@@ -31,7 +31,9 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   `cwd`, …), nicht `source`. Innerhalb bleibt es `ask`. `index.js` übergibt
   Projekt, Temp und Wurzeln aus `guardOptions`. `mcp-cases.jsonl` wächst auf 40
   Fälle (15 Verbote) mit `open-knowledge`, `xlsx-tools-mcp` und
-  `libreoffice-calc`.
+  `libreoffice-calc`. Live belegt nach dem Deploy: Ziel außerhalb → `deny`,
+  keine Datei; Ziel im Projekt → `ask`, Rückfrage erschien. Einzelheiten in
+  `COMPACTIONS.md`.
 
 - **Größenlimit, Geheimnisfrage und Modellstapel (20.11.2026):** `guard.js`
   verweigert MCP-Argumente über 32000 Zeichen (`deny`), außer der Werkzeugname
