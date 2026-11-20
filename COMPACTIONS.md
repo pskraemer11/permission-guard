@@ -3125,3 +3125,48 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
 - Nur ein Modell im VRAM; während der Messung waren Reviewer und Watchdog-Tasks
   deaktiviert, danach wieder aktiv.
 - Untracked bleiben: zwei Screenshots, ein JPG und `review/`.
+
+
+================ Compaction 20.11.2026 / 23:55 ================
+## Objective
+- **Current:** Stufe 1 des Aufräumens ist umgesetzt (Skripte unter `scripts/`,
+  Tasks neu registriert), aber noch nicht committet. Stufe 2 (`src/`, `test/`)
+  steht aus.
+- **Completed:** `git mv` der sechs Betriebsskripte, Deploy-Abbildung,
+  `scripts/ship.ps1`, Task-Pfade korrigiert, README-Pfade, Deploy verifiziert
+  (0 Abweichungen).
+
+## Important Details
+- **Der Task `permission-guard reviewer` war seit unbekannter Zeit wirkungslos:**
+  Er zeigte auf `~/.config/opencode/plugin/…` (Einzahl). Jetzt `plugins/…`.
+- **Deploy bleibt flach:** `deploy.ps1`/`deploy.sh` lesen die Quelle unter
+  `scripts/` und schreiben den Dateinamen ins Ziel, weil der Plugin-Lader
+  `index.js` auf oberster Zielebene erwartet.
+- **`reviewer.js`** findet `start-reviewer.ps1` über `HERE` — das ist das
+  Laufzeitverzeichnis, dort liegt die Datei flach. Keine Änderung nötig.
+- **`scripts/ship.ps1`** ersetzt die sechs Schritte von Hand; `-DryRun` zeigt
+  sie nur an.
+
+## Work State
+- Geändert: sechs Skripte verschoben, `deploy.ps1`, `deploy.sh`,
+  `scripts/ship.ps1`, `.githooks/test-gate.conf`, `README.md`, `README_de.md`,
+  `CHANGELOG.md`, `PLANUNG.md`.
+- Deployt und geprüft: `deploy.ps1 -Check` meldet 0 Abweichungen.
+- Nicht gemacht: Prüfläufe nach der Verschiebung, Commit.
+
+## Next Move
+1. Sechs Prüfungen laufen lassen (`node test.mjs` usw.), dann committen.
+2. Stufe 2: `src/` für die Module, `test/` für Tests und Fixtures; Importe,
+   Deploy-Liste, CI und Doku nachziehen.
+
+## Relevant Files
+- `scripts/`: `deploy.ps1`, `deploy.sh`, `start-reviewer.ps1`,
+  `watchdog-reviewer.ps1`, `bench-reviewer.ps1`, `bench-quality.ps1`,
+  `ship.ps1`, `enable-hooks.ps1`.
+- `.githooks/test-gate.conf`: Präfixliste, jetzt mit `scripts/`.
+- `.github/workflows/`: unverändert, weil die CI nur `bench-mcp.mjs` aufruft.
+
+## Important Context
+- Die Laufzeitdatei `shell-reviewer.config.json` liegt weiterhin außerhalb des
+  Repos; nur `scripts/deploy.ps1` ändert sie.
+- Untracked bleiben: drei Screenshots, ein JPG und `review/`.

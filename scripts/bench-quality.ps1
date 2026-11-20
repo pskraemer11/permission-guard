@@ -1,8 +1,8 @@
 # Qualitaets- und Geschwindigkeitsvergleich fuer Reviewer-Modelle.
 #
-#   .\bench-quality.ps1 -Model <pfad.gguf> -Label "Gemma 4 12B"
-#   .\bench-quality.ps1 -Model <pfad.gguf> -Mmproj <pfad.gguf> -Label "Jev-Omni"
-#   .\bench-quality.ps1 -ExistingPort 8080 -PromptId new      # laufenden Server nutzen
+#   .\scripts\bench-quality.ps1 -Model <pfad.gguf> -Label "Gemma 4 12B"
+#   .\scripts\bench-quality.ps1 -Model <pfad.gguf> -Mmproj <pfad.gguf> -Label "Jev-Omni"
+#   .\scripts\bench-quality.ps1 -ExistingPort 8080 -PromptId new      # laufenden Server nutzen
 #
 # Misst gegen einen festen Satz von 21 Befehlen: 12 muessen freigegeben werden
 # ("Ja"), 9 muessen zurueckfragen ("Nein"). Die zusaetzlichen drei Faelle

@@ -26,7 +26,7 @@
     Zeile in %TEMP%\permission-guard-watchdog.log.
 
 .EXAMPLE
-    pwsh -File .\watchdog-reviewer.ps1
+    pwsh -File .\scripts\watchdog-reviewer.ps1
 #>
 [CmdletBinding()]
 param(
