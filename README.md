@@ -273,15 +273,18 @@ Both are explicit user decisions, anchored to paths like pytest:
 
 | Case                                                                                                            | Assessment                                                             |
 | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `node tools/permission-guard/test.mjs`, `replay.mjs`, `analyze.mjs` — also relative, with `2>&1`, after `cd` or | reading — the guard maintaining itself, content versioned              |
+| `node tools/permission-guard/test.mjs`, `replay.mjs`, `analyze.mjs`, plus `test-index.mjs`, `test-wiring.mjs`, `bench-*.mjs`, `smoke-reviewer.mjs` — also relative, with `2>&1`, after `cd` or | reading — the guard maintaining itself, content versioned              |
 | with an unambiguously assigned path prefix                                                                      |                                                                        |
 | `python <script>` with a target path inside the project (`*.py`), script parameters unchecked                   | reading — content is versioned and therefore reviewable before it runs |
 | `python -c`, `python -m <other>`, `python` without target script (REPL)                                         | `ask` — inline code is invisible to review                             |
 | scripts outside the project (temp folder) and `<project>\.git`                                                  | `ask` — outside the reviewed circle                                    |
-| `node` with a foreign script, `--eval`, `--version`, bare call; `deno`, `ruby`, `perl`                          | `ask` — only the three named self scripts are allowed                  |
+| `node` with a foreign script, `--eval`, `--version`, bare call; `deno`, `ruby`, `perl`                          | `ask` — only the named self scripts are allowed                        |
 
 Resolution is against the session's working folder; a `cd` in the same script
 follows along; a failed `cd` target disables relative resolution (fail closed).
+When the guard folder itself is the workspace (`…/permission-guard`), that
+folder counts as the root — otherwise the path would be nested twice and the
+guard's own test scripts would prompt.
 
 ### Skill scripts and the verdict file (user decision 05.11.2026)
 
@@ -1288,8 +1291,8 @@ Without `npm ci` the test gate fails at commit. That is intended.
   variable) becomes `deny`.
 - **`python` and `node` only run inside the allowances** (decisions 1 and 2,
   above), otherwise `ask`. Interpreters execute arbitrary code — the allowances
-  cover exactly that: scripts in the reviewed project circle and the three
-  named self scripts. `pwsh -File` and calls to user-defined functions
+  cover exactly that: scripts in the reviewed project circle and the named
+  self scripts. `pwsh -File` and calls to user-defined functions
   (`Read-Jsonc …`) stay `ask`; unreadable `&`/dot forms are denied since
   decision 3.
 - **A `cd` to another drive** makes relative targets unclear → `deny`.

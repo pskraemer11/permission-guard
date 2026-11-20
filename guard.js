@@ -2871,13 +2871,24 @@ function skillVerdict(abs, opts) {
   }
 }
 
-// Entscheidung 1 (22.10.2026): node nur fuer die drei Selbst-Skripte dieses
-// Guards (test.mjs, replay.mjs, analyze.mjs), pfadverankert unter
-// <projekt>\tools\permission-guard\ und aufloesbar gegen den (per cd
-// verfolgten) Arbeitsordner. Alles andere - fremde Skripte, --eval,
-// --version, der nackte node-Aufruf - bleibt Rueckfrage. deno, ruby und
-// perl sind nicht bereitgestellt und bleiben Rueckfrage.
-const NODE_SELF_SCRIPTS = new Set(["test.mjs", "replay.mjs", "analyze.mjs", "stats.mjs"])
+// Entscheidung 1 (22.10.2026): node nur fuer die Selbst-Skripte dieses Guards
+// (Tests und Messreihen), pfadverankert unter <projekt>\tools\permission-guard\
+// und aufloesbar gegen den (per cd verfolgten) Arbeitsordner. Wird direkt im
+// Guard-Ordner gearbeitet, ist der Workspace selbst die Wurzel. Alles andere -
+// fremde Skripte, --eval, --version, der nackte node-Aufruf - bleibt
+// Rueckfrage. deno, ruby und perl sind nicht bereitgestellt.
+const NODE_SELF_SCRIPTS = new Set([
+  "test.mjs",
+  "test-index.mjs",
+  "test-wiring.mjs",
+  "bench-mcp.mjs",
+  "bench-model.mjs",
+  "bench-shell.mjs",
+  "smoke-reviewer.mjs",
+  "replay.mjs",
+  "analyze.mjs",
+  "stats.mjs",
+])
 
 // Ersetzt einen fuehrenden Variablenbezug ($dir bzw. ${dir}) durch den
 // eindeutig zugewiesenen Literalwert, falls vorhanden. Ohne Zuweisung
@@ -2900,10 +2911,19 @@ function classifyNode(s, ctx) {
   const abs = resolveTarget(arg, opts, ctx?.cwd ?? null, ctx?.vars)
   if (!abs && ctx && /\$\{?\w/.test(rawArg)) ctx.varUnclear = true
   if (!abs) return "unknown"
-  const root = normPath(`${opts.base}\\tools\\permission-guard`)
-  if (!isUnder(abs, root)) return "unknown"
-  const tail = abs.slice(root.length + 1)
-  return NODE_SELF_SCRIPTS.has(tail) ? "read" : "unknown"
+  const base = normPath(opts.base)
+  // Zwei Wurzeln: der Regelfall (Projekt mit tools/permission-guard darin) und
+  // der Fall, dass der Workspace selbst der Guard-Ordner ist. Ohne die zweite
+  // Wurzel entstuende <workspace>\tools\permission-guard\tools\permission-guard
+  // und die eigenen Testskripte waeren Rueckfragen.
+  const roots = [normPath(`${base}\\tools\\permission-guard`)]
+  if (/(^|[\\/])permission-guard$/i.test(base)) roots.push(base)
+  for (const root of roots) {
+    if (!isUnder(abs, root)) continue
+    const tail = abs.slice(root.length + 1)
+    if (NODE_SELF_SCRIPTS.has(tail)) return "read"
+  }
+  return "unknown"
 }
 
 function classifyOpencode(statement) {

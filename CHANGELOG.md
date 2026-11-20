@@ -141,6 +141,15 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Eigene Prüfskripte auch im Guard-Ordner erlaubt (21.11.2026):** Die
+  `node`-Allow-Regel war auf `<workspace>\tools\permission-guard` verankert.
+  Wurde direkt in diesem Ordner gearbeitet, entstand der doppelt verschachtelte
+  Pfad; die eigenen Tests waren `ask`, und drei davon in Folge lösten das
+  Deny-Limit aus. `classifyNode` prüft jetzt zwei Wurzeln — die bisherige und
+  den Workspace selbst, wenn sein Name auf `permission-guard` endet.
+  `NODE_SELF_SCRIPTS` enthält zusätzlich `test-index.mjs`, `test-wiring.mjs`,
+  `bench-mcp.mjs`, `bench-model.mjs`, `bench-shell.mjs` und
+  `smoke-reviewer.mjs`. `test.mjs` 985/985 (vier neue Fälle).
 - **Skripte nach `scripts/` (20.11.2026):** `deploy.ps1`, `deploy.sh`,
   `start-reviewer.ps1`, `watchdog-reviewer.ps1`, `bench-reviewer.ps1` und
   `bench-quality.ps1` liegen jetzt unter `scripts/`. `deploy.ps1` und

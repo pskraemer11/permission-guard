@@ -271,16 +271,18 @@ Beides ausdrückliche Nutzerentscheidungen, pfadverankert wie pytest:
 
 | Fall                                                                                                           | Bewertung                                                             |
 | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `node tools/permission-guard/test.mjs`, `replay.mjs`, `analyze.mjs` — auch relativ, mit `2>&1`, nach `cd` oder | Lesen — Selbstpflege des Guards, Inhalt versioniert                   |
+| `node tools/permission-guard/test.mjs`, `replay.mjs`, `analyze.mjs`, dazu `test-index.mjs`, `test-wiring.mjs`, `bench-*.mjs`, `smoke-reviewer.mjs` — auch relativ, mit `2>&1`, nach `cd` oder | Lesen — Selbstpflege des Guards, Inhalt versioniert                   |
 | mit eindeutig zugewiesenem Pfad-Präfix                                                                         |                                                                       |
 | `python <skript>` mit Zielpfad innerhalb des Projekts (`*.py`), Parameter des Skripts ungeprüft                | Lesen — Inhalt ist versioniert und damit vor der Ausführung reviewbar |
 | `python -c`, `python -m <anderes>`, `python` ohne Zielskript (REPL)                                            | `ask` — Inline-Code ist für das Review unsichtbar                     |
 | Skripte außerhalb des Projekts (Temp-Ordner) und `<Projekt>\.git`                                              | `ask` — außerhalb des reviewten Umkreises                             |
-| `node` mit fremdem Skript, `--eval`, `--version`, nackter Aufruf; `deno`, `ruby`, `perl`                       | `ask` — nur die drei benannten Selbst-Skripte sind freigegeben        |
+| `node` mit fremdem Skript, `--eval`, `--version`, nackter Aufruf; `deno`, `ruby`, `perl`                       | `ask` — nur die benannten Selbst-Skripte sind freigegeben             |
 
 Aufgelöst wird gegen den Arbeitsordner der Sitzung, ein `cd` im selben Skript
 folgt mit; Misslingen eines `cd`-Ziels stellt relative Auflösung ab (fail
-closed).
+closed). Wird direkt im Guard-Ordner gearbeitet (Workspace =
+`…/permission-guard`), gilt dieser Ordner selbst als Wurzel — sonst entstünde
+der doppelt verschachtelte Pfad und die eigenen Testskripte wären Rückfragen.
 
 ### Skill-Skripte und Urteilsdatei (Nutzerentscheid 05.11.2026)
 
@@ -1305,7 +1307,7 @@ Ohne `npm ci` schlägt der Test-Gate beim Commit fehl. Das ist gewollt.
 - **`python` und `node` laufen nur innerhalb der Freigaben** (Entscheidung 1
   und 2, oben), sonst `ask`. Interpreter führen beliebigen Code aus — die
   Freigaben decken genau das ab: Skripte im reviewten Projektkreis und die
-  drei benannten Selbst-Skripte. `pwsh -File` und Aufrufe nutzerdefinierter
+  benannten Selbst-Skripte. `pwsh -File` und Aufrufe nutzerdefinierter
   Funktionen (`Read-Jsonc …`) bleiben `ask`; unlesbare `&`-/Dot-Formen sind
   seit Entscheidung 3 verweigert.
 - **Ein `cd` in ein anderes Laufwerk** macht relative Ziele unklar → `deny`.

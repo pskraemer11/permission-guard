@@ -3170,3 +3170,47 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
 - Die Laufzeitdatei `shell-reviewer.config.json` liegt weiterhin außerhalb des
   Repos; nur `scripts/deploy.ps1` ändert sie.
 - Untracked bleiben: drei Screenshots, ein JPG und `review/`.
+
+
+================ Compaction 21.11.2026 / 00:13 ================
+## Objective
+- **Current:** Der Guard erlaubt seine eigenen Prüfskripte auch dann, wenn der
+  Workspace der Guard-Ordner selbst ist. Umgesetzt, aber noch nicht deployt und
+  nicht committet.
+- **Completed:** `classifyNode` mit zwei Wurzeln, erweiterte
+  `NODE_SELF_SCRIPTS`, vier neue Testfälle, Doku.
+
+## Important Details
+- **Ursache der Deny-Sperren:** Die Allow-Regel verankerte auf
+  `<workspace>\tools\permission-guard`; im Guard-Ordner als Workspace entstand
+  daraus ein doppelt verschachtelter Pfad. Drei `ask` in Folge sperrten die
+  Sitzung — zweimal an diesem Tag.
+- **Lösung:** Zweite Wurzel nur, wenn der Ordnername auf `permission-guard`
+  endet. Ein fremdes `test.mjs` in einem anderen Ordner bleibt `ask`
+  (Gegenprobe im Test).
+- **Neu in der Liste:** `test-index.mjs`, `test-wiring.mjs`, `bench-mcp.mjs`,
+  `bench-model.mjs`, `bench-shell.mjs`, `smoke-reviewer.mjs`.
+
+## Work State
+- Geändert: `guard.js`, `test.mjs`, `README.md`, `README_de.md`,
+  `CHANGELOG.md`, `PLANUNG.md`, `COMPACTIONS.md`.
+- Grün: `test.mjs` 985/985.
+- Nicht gemacht: übrige Prüfläufe, Deploy, Commit.
+
+## Next Move
+1. `test-index.mjs`, `test-wiring.mjs`, `bench-mcp.mjs`, `pytest`, `ruff`,
+   `pyright` prüfen (oder an einen Agenten geben, wenn der Zähler voll ist).
+2. `scripts/deploy.ps1`, dann live prüfen: `node test.mjs` im Guard-Ordner muss
+   ohne Rückfrage laufen.
+3. Committen, `scripts/ship.ps1` durch den Nutzer.
+
+## Relevant Files
+- `guard.js`: `classifyNode`, `NODE_SELF_SCRIPTS`.
+- `test.mjs`: `nodeBaseChecks`, `guardBaseOptions`.
+- `README.md`/`README_de.md`: Abschnitt „Interpreter“.
+
+## Important Context
+- Das Deny-Limit zählt jede `ask`; ein `allow` setzt nur die Folge zurück, nicht
+  das Fenster. Deshalb sperrt eine Reihe von Rückfragen die Sitzung, bis genug
+  Einträge aus dem Fenster fallen.
+- Untracked bleiben: drei Screenshots, ein JPG und `review/`.
