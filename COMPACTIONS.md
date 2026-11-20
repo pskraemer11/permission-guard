@@ -2612,3 +2612,55 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
   damit die Doku nicht mehr behauptet, S0 sei woertlich erfuellt.
 - **Nicht angefasst:** Historie, `guard.yml`, Commit-Identitaeten - auf Wunsch
   des Nutzers.
+
+
+=============== Compaction 20.11.2026 / 16:27 ================
+## Objective
+- **Current:** P0-5 (Prompt-Schaerfung der Shell-Pruefung) umgesetzt und
+  gemessen; Commit steht aus.
+- **Next:** Dependabot-Frage (npm) entscheiden, danach Stufe 3.
+
+## Important Details
+- **Ziel des Nutzers (20.11.2026):** Die Rueckfragenzahl ist das eigentliche
+  Ziel, nicht nur die Trennschaerfe. P0-5 ist ein Baustein davon; die Rate
+  misst man im Betrieb (`stats.mjs`, `replay.mjs`), nicht im Bench.
+- **Umgesetzt:** `shellDecisionQuestion` (Systemone) und `SYSTEM_PROMPT`
+  (Chat-Fallback) fragen jetzt "May this command run without asking the user?"
+  statt "Is this command safe to run...". Nein-Seite um zwei Gruende ergaenzt.
+  Schwellen (0,7 / 0,35), Secrets-Frage und Risikoliste unveraendert.
+- **Vier Zwischenfassungen verworfen:** Jede Umformulierung der Ja-Seite
+  ("nothing suggests a different effect", Ordner als Liste, "a path that begins
+  with one of them") drueckte `Set-Content C:/tmp/notiz.md` unter 0,7. Die
+  bewaehrte Ja-Formulierung blieb stehen.
+- **Messung:** `bench-shell --repeat 3` 23/23 einstimmig (vorher und nachher),
+  `bench-model --repeat 3` 14/14. Grenzfaelle: `C:/proj` 0,706-0,814,
+  `C:/tmp` 0,640-0,723, echter Windows-Temp-Pfad 0,750. Die Schwelle trennt
+  knapp.
+- **Befund Chat-Fallback:** 57 von 69 Antworten ohne Modellurteil
+  (`bench-shell: 57 Antworten ohne Modellurteil`). Mit diesem Server nicht
+  messbar; die Prompt-Aenderung dort ist ungeprueft.
+- **Befund Testbestand:** `C:/tmp` ist kein Windows-Temp-Pfad. Der Bench-Fall
+  `write-temp-file` ist grenzwertig gebaut, nicht falsch. Ein realistischer
+  Pfad waere eine eigene Entscheidung.
+- **Eigener Fehler, korrigiert:** Ein Health-Check gegen `[IP_ADDRESS]:8080`
+  schlug fehl; die Adresse war die maskierte Darstellung, nicht der echte Wert.
+  Mit `localhost:8080` antwortet der Reviewer in 36 ms. Der Server lief die
+  ganze Zeit.
+
+## Work State
+- **Completed:** `reviewer.js` (beide Prompts), `PLANUNG.md` (Nachtrag mit
+  Messung und Befunden), `CHANGELOG.md`.
+- **Active:** Commit; Dependabot-Frage beantworten.
+- **Blocked:** keiner.
+
+## Next Move
+1. Commit der Prompt-Schaerfung.
+2. Dependabot: `package-ecosystem: npm` aufnehmen (Lockfile vorhanden) und
+   `npm audit` in die CI als Gegenstueck zu `pip_audit`.
+3. Danach Stufe 3 (vier Achsen), zuletzt Deny-Limits.
+
+## Relevant Files
+- `reviewer.js`: `shellDecisionQuestion`, `SYSTEM_PROMPT`.
+- `bench-shell.mjs`: 23 Faelle, `shellBackend: "systemone"` fest.
+- `staging/bench-shell-chat.mjs`, `staging/probe-shell-prompt.mjs`,
+  `staging/probe-temp-path.mjs`: Messhilfen, nicht versioniert.

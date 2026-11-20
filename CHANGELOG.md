@@ -96,6 +96,18 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Prompt-Schärfung der Shell-Prüfung (20.11.2026):** `reviewer.js` fragt nicht
+  mehr „ist das sicher?", sondern „darf das ohne Rückfrage laufen?", und nennt
+  auf der Nein-Seite zusätzlich „uses a credential that appears in the text"
+  sowie „its effect cannot be determined from the text". Beide Wege (Systemone
+  und Chat-Fallback) tragen dieselbe Regel. `bench-shell` 23/23 einstimmig wie
+  vorher, `bench-model` 14/14. Die Ja-Seite blieb bewusst unverändert: Vier
+  Umformulierungen dort drückten Schreibziele im Temp-Ordner unter die Schwelle
+  (0,55–0,70 statt ≥ 0,70). Grenzfälle liegen dicht an 0,7 (0,64–0,81), die
+  Schwelle trennt knapp. Der Chat-Fallback ließ sich mit dem laufenden Server
+  nicht messen (57 von 69 Antworten ohne Modellurteil); jene Änderung ist
+  ungeprüft.
+
 - **ADR-0002 als angenommen markiert (20.11.2026):** Die Statuszeile nennt jetzt
   „angenommen am 20.11.2026" und die zwei offenen Punkte (Stufe 3 mit vier
   Achsen, Deny-Limits). Inhalt und Historie darunter bleiben unverändert; der
