@@ -1,4 +1,4 @@
-# Claude & Codex mit Sandboxing versus OpenCode mit Berechtigungsprüfungen
+# Claude & Codex mit Sandboxing versus OpenCode mit Berechtigungsprüfungen; Pflichtenheft für OpenCode-Sandbox
 
 **BraveAI, 15.11.2026
 
@@ -12,13 +12,21 @@ Frage: Warum hat man sich bei der Entwicklung von OpenCode als Softwarearchitekt
 *BraveAI:
 Die Entscheidung gegen eine OS-Sandbox bei OpenCode folgt aus dessen zentralem Designprinzip: **maximale Portabilität und Modellneutralität bei minimaler Abhängigkeit**. Konkret:
 
-1. **Reine TypeScript/Node.js-Architektur ohne Native-Abhängigkeiten.** Eine Kernel-Sandbox erfordert plattformspezifischen Code (Seatbelt auf macOS, bubblewrap + seccomp auf Linux, eine eigene Implementierung auf Windows – wie Codex zeigen muss). OpenCode läuft als reines Node.js-Paket überall, ohne solche Bindings.
+1. **Reine TypeScript/Node.js-Architektur ohne Native-Abhängigkeiten.** 
+  Eine Kernel-Sandbox erfordert plattformspezifischen Code (Seatbelt auf macOS, bubblewrap + seccomp auf Linux, eine eigene Implementierung auf Windows – wie Codex zeigen muss). 
+  OpenCode läuft als reines Node.js-Paket überall, ohne solche Bindings.
 
-2. **Modell- und Provider-Neutralität.** OpenCode priorisiert „kann ich jedes Modell überall ausführen, ohne jemanden um Erlaubnis zu bitten". Eine vorgebaute Sandbox-Policy wäre eine Meinungsäußerung über den Betriebskontext – genau das, was das Projekt bewusst vermeidet.
+2. **Modell- und Provider-Neutralität.** 
+  OpenCode priorisiert „kann ich jedes Modell überall ausführen, ohne jemanden um Erlaubnis zu bitten". 
+  Eine vorgebaute Sandbox-Policy wäre eine Meinungsäußerung über den Betriebskontext – genau das, was das Projekt bewusst vermeidet.
 
-3. **Unix-Philosophie: Kontrolle beim Nutzer.** Statt einer voreingestellten Sandbox setzt OpenCode auf **in-process-Berechtigungsprüfungen** (AST-Parsing von Shell-Befehlen via tree-sitter, last-matching-rule-wins, Default: ask). Der Nutzer entscheidet, welche Berechtigungen gelten – ohne opinionated Pre-Loaded Policies.
+3. **Unix-Philosophie: Kontrolle beim Nutzer.** 
+  Statt einer voreingestellten Sandbox setzt OpenCode auf **in-process-Berechtigungsprüfungen** (AST-Parsing von Shell-Befehlen via tree-sitter, last-matching-rule-wins, Default: ask). 
+  Der Nutzer entscheidet, welche Berechtigungen gelten – ohne opinionated Pre-Loaded Policies.
 
-4. **Komplementär, nicht ersetzend.** Das Berechtigungssystem an der Tool-Call-Grenze ist explizit *ergänzend* zu OS-Sandboxes gedacht. Wer Kernel-Isolation braucht, kann OpenCode selbst in Docker, Firecracker oder bubblewrap ausführen – das Harness erzwingt keine bestimmte Laufzeitumgebung.
+4. **Komplementär, nicht ersetzend.** 
+  Das Berechtigungssystem an der Tool-Call-Grenze ist explizit *ergänzend* zu OS-Sandboxes gedacht. 
+  Wer Kernel-Isolation braucht, kann OpenCode selbst in Docker, Firecracker oder bubblewrap ausführen – das Harness erzwingt keine bestimmte Laufzeitumgebung.
 
 Kurz: Die Sandbox würde die Plattformunabhängigkeit und Nutzerkontrolle, die OpenCode als Kernversprechen hat, mit plattformspezifischem Overhead und vorgefassten Policies eintauschen.
 
@@ -29,7 +37,7 @@ https://github.com/anomalyco/opencode/issues/2242
 
 ----
 *User:
-Ganz überzeugt mich das nicht. Antropic/Claude Coder und OpenAI/Codex haben ja auch Lösungen für das Sandboxing in verschiedenen Umgebungen gefunden. Es ist natürlich aufwendig, aber geht. 
+Ganz überzeugt mich das nicht. *Antropic/Claude Code* und *OpenAI/Codex* haben ja auch Lösungen für das Sandboxing in verschiedenen Umgebungen gefunden. Es ist natürlich aufwendig, aber geht. 
 
 Erzähle mir mehr über die Sicherheitskonzepte und Umsetzung bei OpenCode: "in-process-Berechtigungsprüfungen (AST-Parsing von Shell-Befehlen via tree-sitter, last-matching-rule-wins)"
 
@@ -51,7 +59,9 @@ export function evaluate(permission: string, pattern: string, ...rulesets: Rule[
 }
 ```
 
-**Keine Specificity-Regel.** Nicht „die spezifischere Regel gewinnt" – sondern schlicht: die *letzte* Regel in der zusammengeführten Liste, die auf `permission` **und** `pattern` beide matcht. Das ist bewusst so gewählt (Analogie zu Apache/Nginx), hat aber Konsequenzen:
+**Keine Specificity-Regel.** 
+Nicht „die spezifischere Regel gewinnt" – sondern schlicht: die *letzte* Regel in der zusammengeführten Liste, 
+die auf `permission` **und** `pattern` beide matcht. Das ist bewusst so gewählt (Analogie zu Apache/Nginx), hat aber Konsequenzen:
 
 - Regeln werden in dieser Reihenfolge gemergt: **Built-in Defaults → Agent-Defaults → User-Config → Per-Agent → Per-Session (runtime „always"-Approvals)**
 - Eine später hinzugefügte `allow`-Regel kann eine früher deklarierte `deny`-Regel überstimmen – und umgekehrt.
@@ -86,7 +96,8 @@ Motive:
 - 8 Parsing-Edge-Cases gefixt (Heredocs über `&&`/`|`, Here-Strings, ANSI-C-Escapes, Zsh-Glob-Qualifier, arithmetische Taint-Propagation)
 - Portabilität: läuft jetzt auch auf Cloudflare workerd, wo WASM nicht verfügbar ist
 
-Der neue Scanner ist **kein Fallback** – er ist der einzige Weg. Ein Command, das der Scanner nicht sicher analysieren kann, liefert einen **Scanner-Error** (nicht automatisch Deny).
+Der neue Scanner ist **kein Fallback** – er ist der einzige Weg. 
+Ein Command, das der Scanner nicht sicher analysieren kann, liefert einen **Scanner-Error** (nicht automatisch Deny).
 
 https://github.com/anomalyco/opencode/pull/60332
 
@@ -148,9 +159,11 @@ Ihre Prämisse stimmt also nicht mehr ganz: OpenCode hatte zwar lange keine Sand
 
 ### Das Designverständnis von OpenCode
 
-In der Sicherheitsdokumentation des Projekts heißt es sinngemäß, OpenCode sandboxe den Agenten nicht. Das Berechtigungssystem sei eine UX-Funktion, damit Nutzer nachvollziehen, welche Aktionen der Agent ausführt. Es sei ausdrücklich nicht für Sicherheitsisolation gedacht, und wer echte Isolation brauche, solle OpenCode in einem Docker-Container oder einer VM betreiben. <citation src="1"></citation>
+In der Sicherheitsdokumentation des Projekts heißt es sinngemäß, OpenCode sandboxe den Agenten nicht. 
+Das Berechtigungssystem sei eine UX-Funktion, damit Nutzer nachvollziehen, welche Aktionen der Agent ausführt. 
+Es sei ausdrücklich nicht für Sicherheitsisolation gedacht, und wer echte Isolation brauche, solle OpenCode in einem Docker-Container oder einer VM betreiben. 
 
-https://github.com/DEVtheOPS/opencode/Security-Viewpoint
+  https://github.com/DEVtheOPS/opencode/Security-Viewpoint
 
 Eine offizielle Begründung im Sinne eines Architekturentscheids habe ich nicht gefunden. 
 Aus dem Design und den Dokumenten lassen sich aber mehrere plausible Gründe ableiten, die ich als meine Einschätzung und nicht als Projektaussage verstehe:
@@ -172,23 +185,22 @@ Aus dem Design und den Dokumenten lassen sich aber mehrere plausible Gründe abl
 ### Die Schwächen dieses Ansatzes
 
 Das Modell hat reale Nachteile. Die meisten Werkzeuge sind standardmäßig erlaubt, und die Regel `*` auf `allow` ist die Grundlage der Standardrichtlinie. 
-<citation src="2"></citation> Freigaben im Modus „always“ gelten für die laufende Sitzung und werden nirgends zur Prüfung festgehalten. 
-<citation src="4"></citation> Außerdem lassen sich Befehlsmuster leicht umgehen, weil eine Zeichenfolge viele Schreibweisen hat. 
+Freigaben im Modus „always“ gelten für die laufende Sitzung und werden nirgends zur Prüfung festgehalten. 
+Außerdem lassen sich Befehlsmuster leicht umgehen, weil eine Zeichenfolge viele Schreibweisen hat. 
 Ein Berechtigungsdialog schützt daher nur, solange man tatsächlich mitliest.
 
-https://opencode.ai/docs/permissions/
-https://agenticcontrolplane.com/controls/opencode
+  https://opencode.ai/docs/permissions/
+  https://agenticcontrolplane.com/controls/opencode
 
 ### Was sich seit April 2026 geändert hat
 
 Die experimentelle Sandbox isoliert Bash-Befehle über Seatbelt, ist aber bisher nur unter macOS verfügbar. MCP-Server sind nicht erfasst, 
-und Befehle in einer bereits laufenden interaktiven Shell auch nicht. Über die Option `bash:unsandboxed` darf ein abgelehnter Befehl außerhalb der Sandbox erneut laufen, 
-wenn der Nutzer das freigibt. <citation src="5"></citation>
+und Befehle in einer bereits laufenden interaktiven Shell auch nicht. 
+Über die Option `bash:unsandboxed` darf ein abgelehnter Befehl außerhalb der Sandbox erneut laufen, wenn der Nutzer das freigibt. 
 
-https://terminal.space/ai/permissions-sandboxing-and-undo/
+  https://terminal.space/ai/permissions-sandboxing-and-undo/
 
-Die Quellen zur Sandbox stammen überwiegend aus Blogbeiträgen. 
-Die Entscheidungsgeschichte lässt sich am zuverlässigsten in den Issues und Diskussionen des GitHub-Repositorys nachvollziehen, 
+Die Quellen zur Sandbox stammen überwiegend aus Blogbeiträgen. Die Entscheidungsgeschichte lässt sich am zuverlässigsten in den Issues und Diskussionen des GitHub-Repositorys nachvollziehen, 
 da dort die Designargumente stehen. 
 Wofür setzt du den Agenten ein: eher am eigenen Rechner mit Freigaben oder für unbeaufsichtigte Läufe? Davon hängt ab, welcher Ansatz für dich mehr bringt.
 
@@ -206,13 +218,13 @@ Wofür setzt du den Agenten ein: eher am eigenen Rechner mit Freigaben oder für
 
 *Duck.ai
 **Nein, die Sandbox von Claude Code ist standardmäßig nicht aktiviert.** 
-Der Schalter `enabled` steht auf false und wird über `/sandbox` eingeschaltet. <citation src="1"></citation> 
+Der Schalter `enabled` steht auf false und wird über `/sandbox` eingeschaltet. 
 Meine frühere Formulierung war missverständlich, weil ich „aktivierbar“ nicht klar von „standardmäßig aktiv“ getrennt habe. 
 Auch wenn die Sandbox aktiv ist, gibt es Ausweichwege: Startet sie nicht, läuft Claude Code standardmäßig ohne Sandbox weiter und zeigt nur eine Warnung. 
 Erst `failIfUnavailable: true` macht daraus einen harten Abbruch. 
-Außerdem darf Claude standardmäßig Befehle, die an der Sandbox scheitern, außerhalb ausführen (`allowUnsandboxedCommands` steht auf true). <citation src="1"></citation>
+Außerdem darf Claude standardmäßig Befehle, die an der Sandbox scheitern, außerhalb ausführen (`allowUnsandboxedCommands` steht auf true).
 
-https://github.com/anthropics/claude-code/issues/38557
+  https://github.com/anthropics/claude-code/issues/38557
 
 ---
 
@@ -223,7 +235,7 @@ https://github.com/anthropics/claude-code/issues/38557
 Du hast recht. Ständige Rückfragen führen dazu, dass man reflexartig bestätigt, und dann ist das Human-in-the-loop-Prinzip wertlos. 
 Die bessere Lösung ist, die Prüfung an die Grenze zu verlegen. 
 Claude Code macht das mit `autoAllowBashIfSandboxed`, das standardmäßig true ist: Bash-Befehle innerhalb der Sandbox laufen ohne Rückfrage, 
-und Freigaben sind nur für Ausbrüche und Grenzfälle nötig. <citation src="1"></citation> 
+und Freigaben sind nur für Ausbrüche und Grenzfälle nötig. 
 Der Nutzer legt also einmal fest, welche Pfade und Domains erlaubt sind, und wird nur noch bei tatsächlichen Grenzüberschreitungen gefragt. 
 Diese Richtung würde ich auch für OpenCode empfehlen: Policy statt Dialog.
 
@@ -232,13 +244,14 @@ Diese Richtung würde ich auch für OpenCode empfehlen: Policy statt Dialog.
 
 Hier stimme ich dir zu, und meine frühere Darstellung war zu knapp. Sandbox und Container begrenzen, worauf ein Prozess zugreifen kann. 
 Sie prüfen aber nicht, welche Inhalte über MCP hinausgehen oder hereinkommen, etwa bei Prompt-Injection über Webseiten oder Dateiinhalte. 
-Die Sandbox der Shell erfasst MCP-Server nicht. <citation src="5"></citation> 
-Claude Code bietet mit dem Sandbox-Runtime-Paket (Beta) eine Umhüllung, die auch MCP-Server einschließt, doch auch dort wird der Inhalt nicht geprüft. 
-Für MCP braucht es deshalb eigene Kontrollen: eine Allowlist für Server, ein Gateway mit Protokollprüfung, Egress-Regeln und Credentials, die nicht im Agentenprozess liegen.
+Die Sandbox der Shell erfasst MCP-Server nicht.
+Claude Code bietet mit dem *Sandbox-Runtime-Paket (Beta)* eine Umhüllung, die auch MCP-Server einschließt, doch auch dort wird der Inhalt nicht geprüft. 
+
+Für `MCP` braucht es deshalb **eigene Kontrollen: eine Allowlist für Server, ein Gateway mit Protokollprüfung, Egress-Regeln und Credentials, die nicht im Agentenprozess liegen**.
 
 https://www.beam.cloud/blog/claude-code-sandbox
 
----
+================================================
 
 ## Machbarkeit: Codex-Sandbox in OpenCode
 
@@ -251,9 +264,9 @@ Zum Dateinamen: In Fehlerberichten taucht `codex-windows-sandbox-setup.exe` auf,
 Die Dateinamen solltest du direkt im Repository prüfen.
 
 Codex unterscheidet inzwischen drei Windows-Modi: `mxc` (empfohlen, ohne Administratorfreigabe), `elevated` (Admin-Setup, eigene lokale Benutzer) und 
-`unelevated` (Legacy mit schwächerer Netzwerkisolation). <citation src="10"></citation> 
+`unelevated` (Legacy mit schwächerer Netzwerkisolation).  
 Der elevated-Modus legt die lokalen Benutzer `CodexSandboxOffline` und `CodexSandboxOnline` an, führt Befehle mit eingeschränkten Tokens aus 
-und steuert das Netzwerk über Firewallregeln. <citation src="9"></citation>
+und steuert das Netzwerk über Firewallregeln. 
 
 https://learn.chatgpt.com/docs/windows/windows-sandbox
 

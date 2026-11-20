@@ -1,6 +1,6 @@
 # PLANUNG — permission-guard
 
-Stand: 18.11.2026
+Stand: 20.11.2026
 
 ## Wozu dieses Dokument
 
@@ -920,3 +920,45 @@ Entscheidungsauftrag. Ziel: weniger `ask` bei gleicher fail-closed-
 Härte. Messung vorher/nachher: Rate der Rückfragen
 (`replay.mjs --all`, `stats.mjs`) und Gate 7/7 gruen. Erst nach
 ARC-Auftrag umsetzen; die P0-Fixes bleiben davon unberuehrt.
+
+
+## Vormerk 19.11.2026: `pdftotext` und `pandoc` im Guard (saubere Variante)
+
+Anlass: Der Leser-Agent (`researcher`) braucht `pdftotext` und `pandoc`, um
+lokale PDF- und Bürodateien zu lesen. Die Agentenregeln können das nur
+pauschal freigeben, weil OpenCode Muster nur als ganze Werte mit `*`/`?`
+abgleicht und die Shell-Prüfung des Guards bei einer statischen `allow`-Regel
+übersprungen wird (`index.js`: `if (effect !== "ask") return`).
+
+Gemessen am 19.11.2026 (Pandoc 3.14, Poppler 26.09.0), jeweils Exit 0:
+
+| Aufruf                              | Wirkung                        |
+| ----------------------------------- | ------------------------------ |
+| `pdftotext -layout -enc UTF-8 X -`  | Text nach stdout               |
+| `pdftotext -layout -enc UTF-8 X Y`  | schreibt Datei `Y`             |
+| `pandoc X -t gfm`                   | Markdown nach stdout           |
+| `pandoc X -o Y`                     | schreibt Datei `Y`             |
+| `pandoc X -L filter.lua -t gfm`     | führt Lua aus, schreibt Dateien |
+| `pandoc X -Lfilter.lua -t gfm`      | dasselbe ohne Leerzeichen      |
+| `pandoc X --lua-filter=filter.lua`  | dasselbe in langer Form        |
+| `pandoc X -d defaults.yaml`         | schreibt `output-file` aus YAML |
+| `pandoc X --sandbox -L filter.lua`  | Sandbox verhindert nichts      |
+
+Zwei getrennte Aufgaben:
+
+1. **`pdftotext` in `READ_BINARIES` aufnehmen** (Zeile 184 in `guard.js`).
+   Das genügt nicht: `pdftotext X Y` schreibt dann als „lesend" eingestuft.
+   Zusätzlich muss die Zwei-Argument-Form als Schreiben gelten — das zweite
+   Argument ist ein Dateipfad, wenn es nicht `-` ist.
+
+2. **`pandoc` braucht eine eigene Prüfung**, kein Eintrag in
+   `READ_BINARIES`. Als lesend darf nur gelten:
+   - kein `-o`/`--output=`
+   - kein `-L`/`--lua-filter=`
+   - kein `--filter=`/`-F`
+   - kein `-d`/`--defaults`
+   - kein `--pdf-engine=`/`--extract-media=`
+   Alles andere: `ask`.
+
+Beides ist nicht umgesetzt. Bis dahin bleibt `pandoc` im Agenten bei `ask`,
+und `pdftotext` ist nur in der stdout-Form freigegeben.

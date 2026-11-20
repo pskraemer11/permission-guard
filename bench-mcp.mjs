@@ -75,7 +75,7 @@ if (!cases.length) {
 
 // Der Bestand ist Teil des Regimes: verschwindet ein Fall, muss das auffallen,
 // nicht stillschweigend als "bestanden" durchgehen.
-const EXPECTED = { allow: 8, ask: 14, deny: 9, model: 2 }
+const EXPECTED = { allow: 8, ask: 12, deny: 11, model: 2 }
 const counts = { allow: 0, ask: 0, deny: 0, model: 0 }
 const ids = new Set()
 for (const item of cases) {

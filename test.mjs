@@ -1122,7 +1122,8 @@ const mcpLayer1 = [
   ["firecrawl_monitor_delete", { id: "m" }, "ask"],
   ["firecrawl_scrape", {}, "ask"],
   ["github_create_issue", { title: "x", body: "token abc" }, "ask"],
-  ["github_create_issue", { title: "x", body: "y".repeat(40000) }, "ask"],
+  ["github_create_issue", { title: "x", body: "y".repeat(40000) }, "deny"],
+  ["exa_web_search_exa", { query: "y".repeat(40000) }, "allow"],
   ["sync_status", { project: "x" }, "ask"],
   ["sync", { project: "x" }, "ask"],
   ["voellig_unbekannt", { ziel: "irgendwas" }, "model"],
@@ -1149,7 +1150,7 @@ const mcpLayer2Checks = mcpLayer2.map(([tool, input]) => {
 const brakeVsSize = verdictCase("github_delete_repository", { body: "x".repeat(40000) })
 const brakeVsSecret = verdictCase("github_delete_repository", { body: "token abc" })
 const mcpPriorityChecks = [
-  ["unanalysierbar schlaegt Notbremse", brakeVsSize.decision === "ask" && brakeVsSize.layer === 1],
+  ["unanalysierbar schlaegt Notbremse", brakeVsSize.decision === "deny" && brakeVsSize.layer === 1],
   ["Notbremse schlaegt Geheimnisverdacht", brakeVsSecret.decision === "deny" && brakeVsSecret.layer === 2],
   ["lesend ohne Zusatzfund bleibt Ebene 1", verdictCase("exa_web_search_exa", { query: "x" }).layer === 1],
 ]
@@ -1215,7 +1216,7 @@ globalThis.fetch = async (url, init) => {
     const body = JSON.parse(init?.body ?? "{}")
     const command = String(body?.state?.command ?? "")
     const reads = command.includes("Set-Content") ? 0.1 : 0.95
-    return { ok: true, json: async () => ({ answers: { effect: { probabilities: { reads } } } }) }
+    return { ok: true, json: async () => ({ answers: { effect: { probabilities: { reads } }, secrets: { noul: 0.01 } } }) }
   }
   return { ok: true, json: async () => ({ choices: [{ message: { content: "Ja" } }] }) }
 }
@@ -1262,7 +1263,7 @@ globalThis.fetch = realFetch
 const mcpReviewChecks = [
   ["Ebene 3: deaktiviert bleibt ask", reviewDisabled.decision === "ask" && reviewDisabled.reason.includes("deaktiviert") && callsAfterDisabled === 0],
   ["Ebene 3: Geheimnisverdacht ohne Modellaufruf", reviewsSecret.decision === "ask" && callsAfterSecret === 0],
-  ["Ebene 3: unanalysierbar ohne Modellaufruf", reviewsBig.decision === "ask" && callsAfterBig === 0],
+  ["Ebene 3: unanalysierbar ohne Modellaufruf", reviewsBig.decision === "deny" && callsAfterBig === 0],
   ["Ebene 3: klare Ja-Antwort hebt auf allow", reviewPlain.decision === "allow" && callsAfterPlain === 1],
   ["Ebene 3: gekuerzte Argumente ohne Modellaufruf", reviewsDeep.decision === "ask" && callsAfterDeep === callsAfterPlain],
   ["Ebene 3: gefundene Chat-Kuerzung fragt (systemone)", reviewsWideSystemone.decision === "ask" && callsAfterWideSystemone === callsAfterDeep],
@@ -1815,7 +1816,8 @@ console.log("-- Diagnose\n")
 
 // --- Secrets-Achse (14.11.2026): zweite Frage im Shell-systemone-Pfad ------
 // Freigabe braucht reads >= Schwelle UND secrets <= Schwelle. Das Modell
-// antwortet in derselben Anfrage; die Latenz bleibt gleich.
+// antwortet in derselben Anfrage; die Latenz bleibt gleich. Fehlt die
+// Secrets-Antwort ganz, gibt es keine Freigabe (fail closed, 20.11.2026).
 const secretsChecks = []
 {
   const saved = globalThis.fetch
@@ -1837,7 +1839,19 @@ const secretsChecks = []
 
   globalThis.fetch = systemone(0.9, undefined)
   const missing = await review({ commands: ["Get-Content data.txt"], project: "P", temp: "T", config: { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 } })
-  secretsChecks.push(["fehlender Secrets-Wert bleibt bei der Hauptfrage", missing.decision === "allow"])
+  secretsChecks.push(["fehlender Secrets-Wert ergibt Rueckfrage", missing.decision === "ask" && /Geheimnisfrage/.test(String(missing.reason))])
+
+  // Ein Segment mit Antwort darf ein anderes ohne Antwort nicht decken.
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith("/systemone")) {
+      const command = String(JSON.parse(init?.body ?? "{}")?.state?.command ?? "")
+      const secrets = command.includes("Get-ChildItem") ? undefined : 0.01
+      return { ok: true, status: 200, json: async () => ({ answers: { effect: { probabilities: { reads: 0.9 } }, secrets: { noul: secrets } } }) }
+    }
+    return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: "Ja" } }] }) }
+  }
+  const mixedSegments = await review({ commands: ["Get-ChildItem", "Get-Content data.txt"], project: "P", temp: "T", config: { enabled: true, baseUrl: "http://[IP_ADDRESS]:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 } })
+  secretsChecks.push(["fehlender Wert je Segment ergibt Rueckfrage", mixedSegments.decision === "ask"])
 
   globalThis.fetch = systemone(0.5, 0.1)
   const low = await review({ commands: ["Get-Content data.txt"], project: "P", temp: "T", config: { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 } })
@@ -1850,6 +1864,34 @@ for (const [name, ok] of secretsChecks) {
   console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
 }
 console.log("-- Secrets-Achse\n")
+
+// --- Belegtes "zu gross" (20.11.2026) -------------------------------------
+// Der Serverfehler "too large to process" ist ein Beweis, dass niemand die
+// Eingabe pruefen kann: daraus wird deny. Andere Serverfehler bleiben ask.
+{
+  const saved = globalThis.fetch
+  const fail = (status, body) => async () => ({ ok: false, status, text: async () => body })
+  const config = { enabled: true, baseUrl: "http://127.0.0.1:1/v1", model: "m", shellBackend: "systemone", timeoutMs: 500 }
+  globalThis.fetch = fail(500, '{"error":{"message":"input (1081 tokens) is too large to process. increase the physical batch size (current batch size: 1024)"}}')
+  const tooLarge = await review({ commands: ["Get-Content data.txt"], project: "P", temp: "T", config })
+  globalThis.fetch = fail(500, '{"error":{"message":"internal error"}}')
+  const other = await review({ commands: ["Get-Content data.txt"], project: "P", temp: "T", config })
+  const mcpConfig = { ...config, mcpBackend: "systemone" }
+  const mcpCriteria = { isMcp: true, action: { tool: "acme_widget", intent: "unknown" }, context: {} }
+  globalThis.fetch = fail(500, '{"error":{"message":"input (5000 tokens) is too large to process. increase the physical batch size (current batch size: 4096)"}}')
+  const mcpTooLarge = await reviewMcp({ criteria: mcpCriteria, input: { a: 1 }, config: mcpConfig })
+  globalThis.fetch = saved
+  const tooLargeChecks = [
+    ["zu grosse Eingabe wird verweigert", tooLarge.decision === "deny" && /zu gross/.test(String(tooLarge.reason))],
+    ["anderer Serverfehler bleibt Rueckfrage", other.decision === "ask"],
+    ["MCP: zu grosse Eingabe wird verweigert", mcpTooLarge.decision === "deny" && /zu gross/.test(String(mcpTooLarge.reason))],
+  ]
+  for (const [name, ok] of tooLargeChecks) {
+    if (!ok) failed++
+    console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+  }
+}
+console.log("-- Belegtes \"zu gross\"\n")
 
 // --- Befunde des Reviews vom 13.11.2026 (Regressionen) ---------------------
 // Jeder Befund hat einen Fall, der den Fehler festhaelt, und einen Kontrollfall,

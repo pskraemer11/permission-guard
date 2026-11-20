@@ -90,7 +90,10 @@ Der nächste Schritt wäre, prüfen zu lassen, ob der Auto-Modus bei  deinem Ope
 
 Alle drei Test-Agenten sind zurück: OK-HAIKU, OK-SONNET, OK-OPUS. Alles klar — du meinst den Auto-Mode-Eintrag im Glossar. Den schaue ich mir an.
 
-Alles getestet. Eine Korrektur an meiner früheren Tabelle: Ich hatte den Klassifizierer dem haiku-Alias (z-ai/glm-5.3-flash) zugeschrieben. Das war falsch — die [PERSON_NAME] des Test-Agenten war ein normaler Modellaufruf, keine Klassifizierer-Anfrage. Die tatsächliche Zuordnung sieht so aus:
+Alles getestet. Eine Korrektur an meiner früheren Tabelle: Ich hatte den Klassifizierer dem haiku-Alias (z-ai/glm-5.3-flash) zugeschrieben. 
+Das war falsch — die [PERSON_NAME] des Test-Agenten war ein normaler Modellaufruf, keine Klassifizierer-Anfrage. 
+
+Die tatsächliche Zuordnung sieht so aus:
 
 ** 1. Permission-Klassifizierer (Auto-Mode) **
 
@@ -114,7 +117,10 @@ Was in deiner [PERSON_NAME] belegt ist:
 │ CLAUDE_CODE_AUTO_MODE_MODEL                   │                           │                                                         │
 └───────────────────────────────────────────────┴───────────────────────────┴─────────────────────────────────────────────────────────┘
 
-Das heißt: Die Klassifizierung funktioniert, aber sie läuft auf Anthropics Server — also weder über deine OpenRouter-Base-URL noch über z-ai/glm-5.3-flash. Welches Modell der Server genau nimmt, ist lokal nicht sichtbar (serverseitig, kein Modellfeld im Transkript). Die Modellwahl über ANTHROPIC_DEFAULT_SONNET_MODEL greift nur, wenn die Serverprüfung aus ist (CLAUDE_CODE_AUTO_MODE_SERVER=0); dann ginge sie an anthropic/[PERSON_NAME] über OpenRouter.
+Das heißt: Die Klassifizierung funktioniert, aber sie läuft auf Anthropics Server — also weder über deine OpenRouter-Base-URL noch über z-ai/glm-5.3-flash. 
+Welches Modell der Server genau nimmt, ist lokal nicht sichtbar (serverseitig, kein Modellfeld im Transkript). 
+Die Modellwahl über ANTHROPIC_DEFAULT_SONNET_MODEL greift nur, wenn die Serverprüfung aus ist (CLAUDE_CODE_AUTO_MODE_SERVER=0); 
+dann ginge sie an anthropic/[PERSON_NAME] über OpenRouter.
 
 ** 2. Modell-Aliase (getestet per Subagent) **
 
@@ -138,7 +144,8 @@ Das heißt: Die Klassifizierung funktioniert, aber sie läuft auf Anthropics Ser
       "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1", ... },```  
   => auch das Anthropic Modell läuft über OpenRouter as Third Party Provider)
 
-Alle drei Alias-Ziele antworten über OpenRouter. Die Provider wählt OpenRouter dynamisch (Relace, PrimeIntellect, Google, Wafer) — identische Modell-ID bedeutet also nicht identischer Backend-Provider.
+Alle drei Alias-Ziele antworten über OpenRouter. Die Provider wählt OpenRouter dynamisch (Relace, PrimeIntellect, Google, Wafer) — 
+identische Modell-ID bedeutet also nicht identischer Backend-Provider.
 
 ** 3. Prompt-Cache **
 
@@ -150,18 +157,22 @@ Alle drei Alias-Ziele antworten über OpenRouter. Die Provider wählt OpenRouter
 
 ----
 *User:
- Ich muss meine Frage noch konkreter stellen. Läuft der Permissionmodus 'Auto' auch, wenn ich in settings.json als Standardprovider OpenRouter.ai ausgewählt habe, und nicht Anthropic? Weder Server noch Modelle von Anthropic sind dabei involviert.
+ Ich muss meine Frage noch konkreter stellen. Läuft der Permissionmodus 'Auto' auch, wenn ich in settings.json als Standardprovider OpenRouter.ai ausgewählt habe, 
+ und nicht Anthropic? Weder Server noch Modelle von Anthropic sind dabei involviert.
  p.s. vergleiche auch: https://code.claude.com/docs/de/permission-modes
  
 *Claude/OpenRouter/deepseek-V4.1.-Flash-1017
 Nein — so einfach lässt sich Anthropic nicht heraushalten. Der Auto-Modus funktioniert bei dir nachweislich (siehe Denials unten), aber die Prüfung ist **nicht** rein lokal. 
-Mit `ANTHROPIC_BASE_URL` auf einen Gateway/Proxy befragt Claude Code laut Doku den Anthropic-Server; erst wenn der nicht antwortet, klassifiziert es selbst — und dann mit einem Anthropic-Modell über deinen OpenRouter-Kanal.
+Mit `ANTHROPIC_BASE_URL` auf einen Gateway/Proxy befragt Claude Code laut Doku den Anthropic-Server; erst wenn der nicht antwortet, klassifiziert es selbst — 
+und dann mit einem Anthropic-Modell über deinen OpenRouter-Kanal.
 
 ** Was die Doku sagt (permission-modes) **
 
-- **„Ein Cloud-Anbieter oder ein LLM-Gateway oder Proxy:** wann immer Sie `ANTHROPIC_BASE_URL` auf ein LLM-Gateway oder einen Proxy setzen, unabhängig von Ihrem Plan. Das standardmäßige Anfragen erfordert Claude Code v2.1.278 oder später.“ — Du hast v2.1.323, also greift das.
+- **„Ein Cloud-Anbieter oder ein LLM-Gateway oder Proxy:** wann immer Sie `ANTHROPIC_BASE_URL` auf ein LLM-Gateway oder einen Proxy setzen, unabhängig von Ihrem Plan. 
+Das standardmäßige Anfragen erfordert Claude Code v2.1.278 oder später.“ — Du hast v2.1.323, also greift das.
 - „Wenn der Server die Aktionen überprüft, entscheiden seine Urteile über sie.“
-- Fallback: „Der Server überprüft die Sitzung nicht […] Die häufigsten Ursachen sind ein LLM-Gateway oder Proxy, das die Anfrage zur Überprüfung oder die Ergebnisse verwirft […] Claude Code fällt auf seine eigenen Klassifikatoranfragen zurück.“
+- Fallback: „Der Server überprüft die Sitzung nicht […] Die häufigsten Ursachen sind ein LLM-Gateway oder Proxy, das die Anfrage zur Überprüfung oder die Ergebnisse verwirft […] 
+  Claude Code fällt auf seine eigenen Klassifikatoranfragen zurück.“
 - Abschalten: `CLAUDE_CODE_AUTO_MODE_SERVER=0` — „immer die eigenen Klassifikatoranfragen von Claude Code zu verwenden“.
 - Lokales Klassifizierermodell: „Standardmäßig gehen Klassifikatoranfragen an Claude Sonnet 5.“ Über `ANTHROPIC_DEFAULT_SONNET_MODEL` aside, bei dir anthropic/[PERSON_NAME].
 
@@ -173,12 +184,14 @@ Was deine Installation zeigt
    - [Code from External]
    - [Traffic Redirection] — und dieser betraf deinen eigenen Wechsel: 
    „The Write sets `ANTHROPIC_BASE_URL` in `.claude/settings.json` to the third-party host https://openrouter.ai/api …“
-3. Der Prozess spricht auch außerhalb des OpenRouter-Pfads: In 14 Sekunden Mitschau hielt `claude.exe` eine dauerhafte Verbindung zu 2607:6bc0::10 (nur vorbeugend) neben Cloudflare-Adressen. Eine sichere Hostzuordnung geht daraus nicht hervor.
+3. Der Prozess spricht auch außerhalb des OpenRouter-Pfads: In 14 Sekunden Mitschau hielt `claude.exe` eine dauerhafte Verbindung zu 2607:6bc0::10 (nur vorbeugend) neben Cloudflare-Adressen. 
+    Eine sichere Hostzuordnung geht daraus nicht hervor.
 4. OpenRouter-Pfad: Hauptmodell, Sonnet- und Haiku-Alias laufen über `openrouter.ai/api`; provider-Felder (Google, Relace, Wafer, Particle AI) variieren.
 
 ** Antwort auf deine Frage **
 
-- **Serverseitige Prüfung** ([ADDRESS]): Bei OpenRouter als Gateway fragt Claude Code den Anthropic-Server. Ob dieser deine Sitzung tatsächlich prüft oder die Anfrage verwirft, siehst du mit /status → Zeile „Auto mode server: Enabled/Disabled“.
+- **Serverseitige Prüfung** ([ADDRESS]): Bei OpenRouter als Gateway fragt Claude Code den Anthropic-Server. Ob dieser deine Sitzung tatsächlich prüft oder die Anfrage verwirft, 
+    siehst du mit /status → Zeile „Auto mode server: Enabled/Disabled“.
 - Lokale Klassifizierung: Nur wenn der Server nicht prüft. Dann gehen die Anfragen an den Sonnet-Alias — also anthropic/[PERSON_NAME] über OpenRouter, nicht an einen anderen Provider.
 - Deine Annahme „weder Server noch Modelle von Anthropic beteiligt“ trifft also nicht zu — mindestens einer der beiden Pfade ist immer aktiv.
 
@@ -188,17 +201,25 @@ In `settings.json` unter `env`:
 
 `"CLAUDE_CODE_AUTO_MODE_SERVER": "0"`
 
-Dann übernimmt der lokale Klassifizierer. Damit wirklich kein Anthropic-Modell klassifiziert, zusätzlich `CLAUDE_CODE_AUTO_MODE_MODEL` auf ein `OpenRouter-Modell` setzen, z. B. deepseek/deepseek-v4.1-flash-1017. Achtung: Laut Doku werden Aktionen verweigert, wenn das Klassifizierermodell nicht bereitsteht („Klassifikatorprüfungen schlagen fehl, daher verweigert Claude Code jede Aktion“). Ich habe die Datei nicht geändert — sag Bescheid, wenn ich das eintragen soll.
+Dann übernimmt der lokale Klassifizierer. Damit wirklich kein Anthropic-Modell klassifiziert, zusätzlich `CLAUDE_CODE_AUTO_MODE_MODEL` auf ein `OpenRouter-Modell` setzen, 
+z. B. deepseek/deepseek-v4.1-flash-1017. Achtung: Laut Doku werden Aktionen verweigert, wenn das Klassifizierermodell nicht bereitsteht („Klassifikatorprüfungen schlagen fehl, 
+daher verweigert Claude Code jede Aktion“). 
+Ich habe die Datei nicht geändert — sag Bescheid, wenn ich das eintragen soll.
 
 ----
 *User:
- In OpenCode habe ich einen permission-guard mit Klassifizierer programmiert,  siehe  "$HOME\Python-Projekte\AI+IDE-Hints\tools\permission-guard". Dieser nutzt eine lokale Interferenz über llama als Backend (Modell: D:/LLM-Modelle/Llama-GGUF/ggml-org/Clef-Flash-GGUF/Clef-Flash-Q4_K_M.gguf). Ist es auch mit Claude möglich, dass ich für den Chat weiter ein OpenRouter-Modell nutze wie jetzt gerade und ein lokales Modell als Klassifizierer? Wie kann ich die Regeln von Anthropic/Claude auf die lokale Ebene übertragen?
+ In OpenCode habe ich einen permission-guard mit Klassifizierer programmiert,  siehe  "$HOME\Python-Projekte\AI+IDE-Hints\tools\permission-guard". 
+ Dieser nutzt eine lokale Interferenz über llama als Backend (Modell: D:/LLM-Modelle/Llama-GGUF/ggml-org/Clef-Flash-GGUF/Clef-Flash-Q4_K_M.gguf). 
+ Ist es auch mit Claude möglich, dass ich für den Chat weiter ein OpenRouter-Modell nutze wie jetzt gerade und ein lokales Modell als Klassifizierer? 
+ Wie kann ich die Regeln von Anthropic/Claude auf die lokale Ebene übertragen?
  
 *Claude:
 # Kurzfassung
 
-Ja — mit dem Chat über OpenRouter und einem lokal klassifizierenden Hook. Nur nicht mit dem eingebauten Auto-Modus-Klassifizierer: Der hat keine eigene Basis-URL. `ANTHROPIC_BASE_URL` steuert beides (Chat und Klassifikator), `CLAUDE_CODE_AUTO_MODE_MODEL` ändert nur die Modell-ID auf demselben Endpunkt. 
-Einen separaten Endpunkt „nur für den Klassifizierer“ gibt es laut env-vars-Doku nicht. Der eingebaute Klassifizierer geht daher zwangsläufig an OpenRouter — oder als Serverprüfung an Anthropic.
+Ja — mit dem Chat über OpenRouter und einem lokal klassifizierenden Hook. Nur nicht mit dem eingebauten Auto-Modus-Klassifizierer: Der hat keine eigene Basis-URL. 
+`ANTHROPIC_BASE_URL` steuert beides (Chat und Klassifikator), `CLAUDE_CODE_AUTO_MODE_MODEL` ändert nur die Modell-ID auf demselben Endpunkt. 
+Einen separaten Endpunkt „nur für den Klassifizierer“ gibt es laut env-vars-Doku nicht. 
+Der eingebaute Klassifizierer geht daher zwangsläufig an OpenRouter — oder als Serverprüfung an Anthropic.
 
 Der realistische Weg ist derselbe, den dein OpenCode-Guard schon geht: `PreToolUse-Hook` als eigener Klassifizierer, mit `reviewer.js` gegen http://127.0.0.1:8080/v1 (Clef-Flash, `systemone`-API).
 
@@ -206,7 +227,8 @@ Der realistische Weg ist derselbe, den dein OpenCode-Guard schon geht: `PreToolU
 
 Laut `permission-guard`-Doku:
 
-▎ „Wenn Claude Code einen Werkzeugaufruf tätigt, werden `PreToolUse`-Hooks vor dem Berechtigungssystem ausgeführt […] Die Hook-Ausgabe kann den Werkzeugaufruf verweigern, eine Aufforderung erzwingen oder die Aufforderung überspringen, um den Aufruf fortzufahren.“
+▎ „Wenn Claude Code einen Werkzeugaufruf tätigt, werden `PreToolUse`-Hooks vor dem Berechtigungssystem ausgeführt […] Die Hook-Ausgabe kann den Werkzeugaufruf verweigern, 
+  eine Aufforderung erzwingen oder die Aufforderung überspringen, um den Aufruf fortzufahren.“
 
 Der Hook bekommt über stdin JSON: tool_name, tool_input (inkl. vollständigem command), cwd, permission_mode. Er gibt aus:
 ```
@@ -216,7 +238,8 @@ Der Hook bekommt über stdin JSON: tool_name, tool_input (inkl. vollständigem c
     "permissionDecisionReason": "…"
 }}
 ```
-Das passt fast 1:1 auf deine Guard-Logik: statische Prüfung → riskante Muster → lokales Modell → `allow/deny/ask`, fail closed (Fehler und Timeout → `ask`, also keine Ausgabe bzw. `ask`). Der Hook kann nur heben, wenn deine statischen Regeln es zulassen — genau wie index.js in OpenCode.
+Das passt fast 1:1 auf deine Guard-Logik: statische Prüfung → riskante Muster → lokales Modell → `allow/deny/ask`, fail closed (Fehler und Timeout → `ask`, 
+also keine Ausgabe bzw. `ask`). Der Hook kann nur heben, wenn deine statischen Regeln es zulassen — genau wie index.js in OpenCode.
 
 Grenzen, die bleiben
 
@@ -258,11 +281,14 @@ Ein Teil davon liegt in deinem `guard.js` schon vor (`neverAutoApprove, RISKY`).
 
 * 2. Lokales Modell (Clef-Flash) — für den Rest:
 
-Dein `SHELL_DECISION_QUESTION` in `reviewer.js` ist der richtige Ort. Ergänze die Kategorien aus der Doku als Kriterien: Scope-Erweiterung, nicht vertrauenswürdige Infrastruktur, Prompt-Injection, Datenexfiltration, Traffic-Umleitung. Genau diese Kategorien hat dein Anthropic-Klassifizierer bei dir schon ausgelöst ([Traffic Redirection], [Code from External], [Unauthorized Persistence]) — gute Validierungsfälle für bench-model.mjs.
+Dein `SHELL_DECISION_QUESTION` in `reviewer.js` ist der richtige Ort. Ergänze die Kategorien aus der Doku als Kriterien: Scope-Erweiterung, nicht vertrauenswürdige Infrastruktur, 
+Prompt-Injection, Datenexfiltration, Traffic-Umleitung. 
+Genau diese Kategorien hat dein Anthropic-Klassifizierer bei dir schon ausgelöst ([Traffic Redirection], [Code from External], [Unauthorized Persistence]) — gute Validierungsfälle für bench-model.mjs.
 
 
 * 3. Kontextregeln: „nicht pushen“ o. Ä. aus der Konversation kann ein Hook nicht sehen. 
-Der Hook bekommt nur tool_input und cwd. Optionen: `transcript_path` auswerten (dokumentiert, aber asynchron und verspätet) oder akzeptieren, dass solche Direktiven eine `deny`-Regel brauchen. Anthropic macht das genauso: „Für eine feste Garantie fügen Sie stattdessen eine Deny-Regel hinzu.“
+Der Hook bekommt nur tool_input und cwd. Optionen: `transcript_path` auswerten (dokumentiert, aber asynchron und verspätet) oder akzeptieren, dass solche Direktiven eine `deny`-Regel brauchen. 
+Anthropic macht das genauso: „Für eine feste Garantie fügen Sie stattdessen eine Deny-Regel hinzu.“
 
 Betriebsarten
 
@@ -278,7 +304,9 @@ Betriebsarten
 │ C: Routing-Proxy         │ OpenRouter │ Clef-Flash                                                     │ hoch, fragil    │
 └──────────────────────────┴────────────┴────────────────────────────────────────────────────────────────┴─────────────────┘
 
-C wäre: Ein LiteLLM-/Router-Proxy als `ANTHROPIC_BASE_URL`, der nach Modell-ID routet — `CLAUDE_CODE_AUTO_MODE_MODEL`=clef → llama.cpp, alles andere → OpenRouter. Es gibt keine separate Basis-URL, also muss der Proxy den Anthropic-Messages-Format auf OpenAI-Format übersetzen. Doku-Warnung: „Klassifikatorprüfungen schlagen fehl, daher verweigert Claude Code jede Aktion, die es prüft“ — dieser Pfad ist fehleranfällig und nicht zu empfehlen.
+C wäre: Ein LiteLLM-/Router-Proxy als `ANTHROPIC_BASE_URL`, der nach Modell-ID routet — `CLAUDE_CODE_AUTO_MODE_MODEL`=clef → llama.cpp, alles andere → OpenRouter. 
+Es gibt keine separate Basis-URL, also muss der Proxy den Anthropic-Messages-Format auf OpenAI-Format übersetzen. 
+Doku-Warnung: „Klassifikatorprüfungen schlagen fehl, daher verweigert Claude Code jede Aktion, die es prüft“ — dieser Pfad ist fehleranfällig und nicht zu empfehlen.
 
 A ist die saubere Variante:
 ```
@@ -319,14 +347,17 @@ const verdict = await review({ commands: [cmd], project: input.cwd, temp: 0.2, c
 3. In /status prüfen, ob der Modus wirklich default ist, nicht auto.
 4. Testlauf gegen `mcp-model-cases.jsonl` über deinen `replay.mjs`-Ansatz, bevor der Hook global in `settings.json` landet.
 
-Soll ich dir den Adapter `claude-guard.js` samt Testskript in `~/.claude/hooks/` anlegen und `settings.json` entsprechend umstellen? Die `settings.json` würde ich vorher sichern.
+Soll ich dir den Adapter `claude-guard.js` samt Testskript in `~/.claude/hooks/` anlegen und `settings.json` entsprechend umstellen? 
+Die `settings.json` würde ich vorher sichern.
 
-*※ recap: Goal: run OpenRouter for chat while classifying permissions locally. Established that Claude Code's built-in classifier can't point at llama.cpp, so a PreToolUse hook reusing your guard's reviewer is the way. Next: say whether I should create claude-guard.js and update settings.json. (disable recaps in /config)
+*※ recap: Goal: run OpenRouter for chat while classifying permissions locally. Established that Claude Code's built-in classifier can't point at llama.cpp, 
+*  so a PreToolUse hook reusing your guard's reviewer is the way. Next: say whether I should create claude-guard.js and update settings.json. (disable recaps in /config)
 
 *User: > Lass uns schrittweise vorgehen.
 
 *Claude:
-Gut. Ich mache zuerst nur Bestandsaufnahme — keine Änderung. Ich brauche genau drei Fakten für den Adapter: welche Funktionen `guard.js` exportiert, wo `reviewer.js` seine Konfiguration liest, und ob dein llama.cpp-Reviewer gerade läuft.
+Gut. Ich mache zuerst nur Bestandsaufnahme — keine Änderung. Ich brauche genau drei Fakten für den Adapter: welche Funktionen `guard.js` exportiert, wo `reviewer.js` 
+seine Konfiguration liest, und ob dein llama.cpp-Reviewer gerade läuft.
 
 **Schritt 1 — Ergebnis, und das ist ein wichtiger Befund:
 
@@ -374,7 +405,8 @@ Drei Erkenntnisse:
 
 1. Latenz ist unkritisch: 100 ms pro Modellurteil — der Hook kann das vertragen.
 2. Die interne Vorgabe ist falsch für dich: Ohne `shell-reviewer.config.json` gilt `shellBackend: "chat"` → HTTP 501. Beim Adapter muss `systemone` gesetzt werden.
-3. Die statische Ebene liefert `ask`, nicht `deny`. Für OpenCode war das richtig (Rückfrage an den Nutzer). Für den Claude-Hook müssen die harten Anthropic-Kategorien zu `deny` werden — sonst fragt Claude Code nur, statt zu blockieren. Das gehört zu Schritt 3.
+3. Die statische Ebene liefert `ask`, nicht `deny`. Für OpenCode war das richtig (Rückfrage an den Nutzer). 
+    Für den Claude-Hook müssen die harten Anthropic-Kategorien zu `deny` werden — sonst fragt Claude Code nur, statt zu blockieren. Das gehört zu Schritt 3.
 
 ---
 
@@ -491,7 +523,8 @@ Für unbeaufsichtigte Läufe also bewusst entscheiden.
 
 Als Konfiguration würde ich nicht `loadConfig()` mit Defaults nehmen (die setzen chat → 501), sondern explizit `shellBackend`: `systemone` übergeben.
 
-Die Grenze ist die gleiche wie bei Jev: „treat the risk list, not the `threshold`, as the security boundary“ — die statische Liste bleibt die harte Kante, deny braucht sie nicht, weil der Hook nie etwas verbietet. 
+Die Grenze ist die gleiche wie bei Jev: „treat the risk list, not the `threshold`, as the security boundary“ — die statische Liste bleibt die harte Kante, 
+deny braucht sie nicht, weil der Hook nie etwas verbietet. 
 Deine bestehenden `PreToolUse`-Hooks (`block-dangerous-git.sh`) greifen weiterhin davor.
 
 Soll ich den Adapter in Schritt 2 anlegen — erst nur als Datei, ohne `settings.json`-Eintrag, testbar per `echo … | node`?
@@ -529,19 +562,35 @@ Was noch offen ist
 - Commit (ohne Push), inklusive Entscheidung zu den zwei untracked docs/-Dateien.
 
 
-=======================
+==================== ab hier agnostische Fallprüfung ============
+
 
 ** 13./14.11.2026
 *User:
 
-> Kannst Du aus diesen Quellen weitere Hinweise ableiten, wie unser permission-guard bzw. Reviewer noch verbessert werden kann? Sowohl Anthropic/Claude als auch OpenAI/Codex haben ähnliche Ansätze, und bei Github findet sich auch einiges in unserer Richtung (nutze ggf. Exa / Firecrawl via MCP):
-  https://openrouter.ai/docs/cookbook/coding-agents/auto-approve-permission-prompts-with-jev, https://github.com/PanAchy/jevvy, https://opencode.ai/docs/permissions, https://github.com/anomalyco/opencode/tree/v2.0.12, https://code.claude.com/docs/en/hooks#permissionrequest, https://developers.openai.com/codex/hooks#permissionrequest,
-  [Gate Agent Tool Calls with Jev](https://openrouter.ai/docs/cookbook/building-agents/gate-tool-calls-with-jev.md) applies the same threshold pattern to tools in an OpenRouter Agent SDK agent, with approve, block, and review outcomes
-  - [OpenCode Integration](https://openrouter.ai/docs/cookbook/coding-agents/opencode-integration.md) covers pointing OpenCode at OpenRouter and picking models, which the OpenCode section assumes is done
-  - [Add Human-in-the-Loop Controls](https://openrouter.ai/docs/cookbook/building-agents/hitl-tools.md) is the pause-and-resume pattern that these prompts are a coding-agent version of
-  - [TypeSafe SDK on OpenRouter](https://openrouter.ai/docs/guides/community/typesafe-sdk.md) shows the Choice, Score, and Noul primitives if you want a three-way approve, ask, deny question instead of two Nouls
-  - [Jev documentation hub](https://openrouter.ai/docs/guides/community/jev.md) for the [Jev tutorial](https://openrouter.ai/docs/guides/community/jev-tutorial.md), pricing, and the TypeSafe docs on choosing a threshold
-  - [Other decision models on OpenRouter](https://openrouter.ai/models?output_modalities=decisions) from OpenAI, Microsoft, Perplexity, Cloudflare, and others take the same Decisions API request: change model and re-check your thresholds on a labeled sample
+> Leite aus den nachfolgenden Quellen weitere Hinweise ab, wie unser `permission-guard` in `C:/outside/permission-guard` 
+  bzw. der enthaltene `Reviewer` (lokales Clef-Flash Decision Modell) noch verbessert werden kann.
+  
+  Sowohl Anthropic/Claude als auch OpenAI/Codex haben ähnliche Ansätze, und bei Github und OpenRouter findet sich weitere Repos in dieser Richtung (nutze ggf. Exa / Firecrawl via MCP):
+  https://openrouter.ai/docs/cookbook/coding-agents/auto-approve-permission-prompts-with-jev, 
+  https://github.com/PanAchy/jevvy, 
+  https://opencode.ai/docs/permissions, 
+  https://github.com/anomalyco/opencode/tree/v2.0.12, 
+  https://code.claude.com/docs/en/hooks#permissionrequest, 
+  https://developers.openai.com/codex/hooks#permissionrequest,
+  
+  - https://openrouter.ai/docs/cookbook/building-agents/gate-tool-calls-with-jev.md 
+      applies the same threshold pattern to tools in an OpenRouter Agent SDK agent, with approve, block, and review outcomes
+  - [OpenCode Integration](https://openrouter.ai/docs/cookbook/coding-agents/opencode-integration.md) 
+      covers pointing OpenCode at OpenRouter and picking models, which the OpenCode section assumes is done
+  - [Add Human-in-the-Loop Controls](https://openrouter.ai/docs/cookbook/building-agents/hitl-tools.md) 
+      is the pause-and-resume pattern that these prompts are a coding-agent version of
+  - [TypeSafe SDK on OpenRouter](https://openrouter.ai/docs/guides/community/typesafe-sdk.md) 
+      shows the Choice, Score, and Noul primitives if you want a three-way approve, ask, deny question instead of two Nouls
+  - [Jev documentation hub](https://openrouter.ai/docs/guides/community/jev.md) for the [Jev tutorial](https://openrouter.ai/docs/guides/community/jev-tutorial.md), 
+      pricing, and the TypeSafe docs on choosing a threshold
+  - [Other decision models on OpenRouter](https://openrouter.ai/models?output_modalities=decisions) 
+    from OpenAI, Microsoft, Perplexity, Cloudflare, and others take the same Decisions API request: change model and re-check your thresholds on a labeled sample
   
 *Claude/Haiku-5.5
 

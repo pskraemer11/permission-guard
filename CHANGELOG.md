@@ -8,6 +8,24 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **Größenlimit, Geheimnisfrage und Modellstapel (20.11.2026):** `guard.js`
+  verweigert MCP-Argumente über 32000 Zeichen (`deny`), außer der Werkzeugname
+  belegt eine Leseabsicht und es gibt keinen Geheimnisverdacht; `reviewer.js`
+  macht aus einer fehlenden Secrets-Antwort `ask` statt `allow` und aus dem
+  Serverfehler „input … is too large to process" `deny` (andere Serverfehler
+  bleiben `ask`, Shell- und MCP-Pfad). `test.mjs` (934/934), `bench-mcp.mjs`
+  (33/33, 11 Verbote), `mcp-cases.jsonl` und `AGENTS.md` folgen; `README.md`
+  und `README_de.md` beschreiben den Stand, `SECURITY.md` nennt die Ausnahme
+  von der Rückfrage-Zusage, `docs/adr/0002-reviewer-und-sandbox.md` trägt die
+  Begründung als Nachtrag. `start-reviewer.ps1` übergibt für das
+  Entscheidungsmodell `-b 4096 -ub 4096` (neue Parameter `-Batch`/`-Ubatch`,
+  Standard 4096) und übersteuert damit `batch-size`/`ubatch-size` aus
+  `%APPDATA%\llama.cpp\config.ini`, die für Chatmodelle unverändert bleiben;
+  beide READMEs nennen die Stapelgrenze unter „Grenzen/Limits". Gemessen mit
+  `ubatch` 1024/2048/4096: die nutzbare Eingabe liegt zwischen 5000 und 6000,
+  zwischen 12000 und 16000 bzw. zwischen 24000 und 32000 Zeichen; die
+  GPU-Belegung beträgt bei 4096 rund 7,1 GB von 16,3 GB.
+
 - **Zeilenenden und BOM (18.11.2026):** `.gitattributes` setzt den Standard
   `* text=auto eol=lf` und nimmt Binärdateien (`*.png`, `*.jpg`, `*.jpeg`,
   `*.gif`, `*.ico`, `*.gguf`, `*.woff`, `*.woff2`) aus; die bisherigen

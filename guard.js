@@ -1433,8 +1433,14 @@ export function mcpVerdict(criteria, input) {
 
   // Unanalysierbar zuerst: die Notbremse darf aus einem Groessenlimit keinen
   // "destruktiven" Fund machen (Trennung wie in der Recherche gefordert).
+  // Ein Groessenlimit ist kein Fund, aber eine Rueckfrage, die niemand lesen
+  // kann, ist kein Schutz: Nur eine aus dem Werkzeugnamen belegte Leseabsicht
+  // bleibt erlaubt, alles andere wird verweigert (Entscheidung 20.11.2026).
   if (context.oversized) {
-    return { decision: "ask", layer: 1, reason: "unanalysierbar (zu grosse Argumente)" }
+    if (intent === "read" && !context.secret) {
+      return { decision: "allow", layer: 1, reason: "nur lesend (grosse Argumente)" }
+    }
+    return { decision: "deny", layer: 1, reason: "unpruefbar (zu grosse Argumente)" }
   }
 
   const brake = mcpBrake(criteria, input)

@@ -2322,3 +2322,66 @@ beide READMEs nennen 32000 Zeichen (JSON).
 gruen; `bench-model` 14/14 einstimmig (Reviewer lief). Details je Blocker in
 `.full-review/fix-log.md`. Nichts committet; der ubatch-Stand aus dem
 Vornachtrag gilt unveraendert (Messung nicht ausgefuehrt).
+
+
+=============== Compaction 20.11.2026 / Groesse, Geheimnisfrage, Modellstapel ================
+## Objective
+- **Current:** Weniger falsche Rueckfragen, mehr Schutz. Drei kleine, belegte
+  Schritte: Groessenlimit (Option C), fehlende Geheimnis-Antwort, belegter
+  Serverfehler "zu gross". Danach Stufe 3 (vier Achsen).
+
+## Decisions
+- **Groessenlimit Option C:** MCP-Argumente ueber 32000 Zeichen (JSON) bleiben
+  `allow` nur bei belegter Leseabsicht ohne Geheimnisverdacht; sonst `deny`
+  mit Grund `unpruefbar`. Ein Groessenlimit ist weiter **kein Fund**.
+- **Fehlende Geheimnis-Antwort:** `ask` mit eigenem Grund statt Rueckfall auf
+  die Hauptfrage. Der alte Testfall ist umgedreht.
+- **Belegter Serverfehler:** "input ... is too large to process" (HTTP 500)
+  ergibt `deny`; andere Fehler bleiben `ask`.
+- **Stapelgroesse:** `config.ini` bleibt bei `batch-size = 2048`,
+  `ubatch-size = 1024` — das ist die richtige Einstellung fuer **Chatmodelle**.
+  Fuer das Entscheidungsmodell uebergibt `start-reviewer.ps1` die Werte im
+  Aufruf (`-b 4096 -ub 4096`, Parameter `-Batch`/`-Ubatch`), weil
+  Kommandozeilenargumente die Datei uebersteuern. Watchdog und Plugin starten
+  ueber dieses Skript; eine zweite Stelle gibt es nicht.
+- **Zurueckgestellt:** Deny-Limits, Ausweitung Skriptblock/`$(…)` auf den
+  Reviewer (nur mit rotem Fall).
+
+## Work State
+- **Completed:** `guard.js` (`mcpVerdict`), `reviewer.js` (`requestSystemone`
+  wertet Body bei 500 aus, `shellBySystemone`, `reviewMcp`), `test.mjs`
+  (933/933, drei neue Faelle), `mcp-cases.jsonl` (zwei Faelle auf `deny`),
+  `bench-mcp.mjs` (`EXPECTED` 12 ask/11 deny), `AGENTS.md` (11 Verbote),
+  `README.md`, `README_de.md`, `SECURITY.md` (Ausnahme von der
+  Rueckfrage-Zusage), `CHANGELOG.md`, ADR-Nachtrag, `PLANUNG.md` (Stand).
+- **Gate (20.11.2026):** `test.mjs` 934/934, `test-wiring.mjs` 13/13,
+  `bench-mcp.mjs` 33/33 (11 Verbote), `bench-shell` 23/23 einstimmig,
+  `bench-model` 14/14 einstimmig, `pytest` 149 bestanden/1 uebersprungen,
+  Ruff, Ruff-Format, Pyright gruen.
+- **Starter geprueft:** `start-reviewer.ps1` startet llama-server mit
+  `-b 4096 -ub 4096` (Prozesszeile belegt), Parser-Pruefung 0 Fehler.
+- **Endlauf gegen den echten Server** (`-b 4096 -ub 4096`): 24000 und 28000
+  Zeichen `allow`, 31000 und 33000 `deny` mit
+  `unpruefbar: Eingabe zu gross fuer den Modellstapel`.
+
+## Important Details
+- **Fruehere Aussage korrigiert:** Die Grenze lag nicht bei "~4000 Zeichen",
+  sondern bei `ubatch 1024` (5000 ok, 6000 HTTP 500). Mit 2048: 12000 ok,
+  16000 500. Mit 4096: 24000 ok, 31000 500. GPU bei 4096: 7054 von 16283 MiB.
+- **Quelle der Grenze:** llama.cpp im Embedding-Modus erzwingt
+  `n_batch = n_ubatch`; der Serverfehler nennt den Stapel im Klartext.
+- **Sandbox:** `codex sandbox` startet den Windows-Dienst
+  `CodexSandboxService.OpenAI.Codex` nicht (waehrend des Laufs Stopped,
+  Prozessbaum `codex.exe` -> `codex.exe` -> `cmd.exe`, Exit 0). Der Screenshot
+  vom 18.11. zeigt den Dienst als Kindprozess der ChatGPT-GUI.
+- **Fehler im Vorbild:** `:tmpdir` deckt `%TEMP%`/`%TMP%` nicht ab; ohne
+  explizite Deny-Eintraege schreibt die Sandbox dorthin.
+- **Korpusgrenze:** `bench-shell` ruft den Reviewer direkt; im Produktionspfad
+  erreichen nur 2 von 23 Faellen den Reviewer. 0,5 und 0,7 liefern dasselbe
+  Ergebnis (Luecke zwischen 0,26 und 0,74). Als Referenz fuer "1-2 Fragen vs.
+  4 Achsen" ist der Korpus untauglich.
+
+## Next Move
+1. Stufe 3 (vier Achsen) mit eigenen Graubereich-Faellen messen.
+2. Danach: Commit auf Freigabe, dann Deploy (nur `deploy.ps1`, damit die
+   deployte Kopie von `start-reviewer.ps1` die Stapelwerte mitbringt).

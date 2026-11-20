@@ -17,6 +17,13 @@ param(
   [string]$ModelPath = "D:\LLM-Modelle\Llama-GGUF\ggml-org\Clef-Flash-GGUF\Clef-Flash-Q4_K_M.gguf",
   [string]$Server = "C:\Program Files\llama.cpp\llama-server.exe",
   [string]$DraftPath = "",
+  # Stapelgroesse fuer den Prompt. Entscheidungsmodelle laufen im
+  # Embedding-Modus; dort erzwingt llama.cpp n_batch = n_ubatch, und Frage samt
+  # Antwortoptionen muss in EINEN Stapel passen. 4096 deckt gemessen 24000
+  # Zeichen (bei 1024 waren es 5000); die Werte hier uebersteuern die
+  # chat-taugliche Einstellung in %APPDATA%\llama.cpp\config.ini.
+  [int]$Batch = 4096,
+  [int]$Ubatch = 4096,
   [switch]$Cpu,
   [switch]$Stop
 )
@@ -72,7 +79,7 @@ $log = Join-Path $env:TEMP "permission-guard-reviewer-$Port.log"
 # gedacht. --no-op-offload gehoert nicht dazu: Er bremst auch den reinen
 # CPU-Build (Smoke 17.11.2026, zwei Aufrufe ueber 6000 ms).
 $gpuLayers = $Cpu ? '0' : 'all'
-$serverArgs = @('-m', $ModelPath, '-c', '32768', '-np', '1', '--port', "$Port", '--no-webui', '-ngl', $gpuLayers, '--jinja')
+$serverArgs = @('-m', $ModelPath, '-c', '32768', '-np', '1', '-b', "$Batch", '-ub', "$Ubatch", '--port', "$Port", '--no-webui', '-ngl', $gpuLayers, '--jinja')
 if ($DraftPath) { $serverArgs += @('--model-draft', $DraftPath) }
 $proc = Start-Process -FilePath $Server -WindowStyle Hidden -ArgumentList $serverArgs `
   -PassThru -RedirectStandardOutput $log -RedirectStandardError "$log.err"

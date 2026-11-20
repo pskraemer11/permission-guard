@@ -842,12 +842,21 @@ The index serves pre-selection; our own 18-command set remains authoritative.
 .\start-reviewer.ps1                       # llama-server, Clef-Flash, port 8080
 .\start-reviewer.ps1 -ModelPath "D:\…\anderes.gguf" -Port 8081
 .\start-reviewer.ps1 -Cpu -Server "C:\…\llama-server.exe"   # no GPU offload
+.\start-reviewer.ps1 -Batch 2048 -Ubatch 2048               # smaller batch
 node smoke-reviewer.mjs                    # 9 cases against the running configuration
-node test.mjs                              # 932 unit tests
+node test.mjs                              # 934 unit tests
 node test-index.mjs                        # 23 integration cases (fake OpenCode)
 node test-wiring.mjs                       # 13 wiring tests (fake git)
 .\start-reviewer.ps1 -Stop
 ```
+
+The starter passes `-b 4096 -ub 4096`. That applies to decision models only:
+they run in embedding mode, where llama.cpp forces `n_batch = n_ubatch`, and the
+question plus its answer options must fit into **one** batch. The values override
+the chat-suitable setting in `%APPDATA%\llama.cpp\config.ini` (`batch-size = 2048`,
+`ubatch-size = 1024`), which stays correct for chat models. Measured on
+20.11.2026 with Clef-Flash-Q4_K_M: 4096 answers 24000 characters, 1024 only 5000;
+the GPU uses 7054 of 16283 MiB.
 
 The default path uses CUDA with `-ngl all` and remains unchanged. `-Cpu` sets
 `-ngl 0` and is intended for machines without an NVIDIA GPU or for a CPU-only
@@ -925,7 +934,8 @@ Catalogue rules:
   and only then from the field name. Nested arguments (e.g.
   `files: [{ path }]`) are counted to depth 3.
 - Large arguments (more than 32000 characters as JSON) count as `unanalysierbar` — separate from
-  "destructive", so that a size limit is never mistaken for a finding.
+  "destructive", so that a size limit is never mistaken for a finding. A prompt nobody can read
+  is no protection either: `read` tools stay allowed, every other intent is `deny`.
 - Argument values do not leave the function; the log holds only field names,
   target kinds and counts.
 
@@ -1122,6 +1132,17 @@ from "Two backends for level 3" applies.
   served; sending in parallel would gain nothing. During the warm-up a decision
   waits in the queue and can exceed the time frame.
 
+### Status 20.11.2026: size limit and secret question
+
+- **Large MCP arguments:** above 32000 characters (as JSON) a `read` tool stays
+  `allow`; every other intent is `deny`. A prompt nobody can read is no
+  protection.
+- **Missing secret answer:** if the decision model returns no value for the
+  secret question, the shell verdict is `ask` instead of falling back to the
+  main question alone.
+- **Input too large for the model:** the server's own error ("too large to
+  process") yields `deny` for that command; other server errors still `ask`.
+
 Installation after cloning:
 
 ```powershell
@@ -1151,6 +1172,16 @@ Without `npm ci` the test gate fails at commit. That is intended.
   (`Read-Jsonc …`) stay `ask`; unreadable `&`/dot forms are denied since
   decision 3.
 - **A `cd` to another drive** makes relative targets unclear → `deny`.
+- **The decision model has a batch limit, not a character limit.** In embedding
+  mode llama.cpp forces `n_batch = n_ubatch`, and the question plus its answer
+  options must fit into one batch. If they do not, the server answers
+  `input … is too large to process`; the guard turns that into `deny` for the
+  call (measured 20.11.2026). With `ubatch 1024` this starts at about 5000
+  characters, with 4096 at about 24000. `start-reviewer.ps1` therefore passes
+  `-b 4096 -ub 4096` and overrides `batch-size`/`ubatch-size` from
+  `%APPDATA%\llama.cpp\config.ini`, which stays correct for chat models. If you
+  start `llama-server` yourself, pass both values; raising only one has no
+  effect because llama.cpp keeps them equal in this mode.
 
 ## Measurement
 

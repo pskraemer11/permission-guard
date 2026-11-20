@@ -22,6 +22,20 @@ schützt **nicht** gegen:
 Fehler führen bewusst zur Rückfrage, nicht zur Freigabe (`fail closed`). Ein
 `deny` der statischen Regeln wird nie überschrieben.
 
+**Ausnahme seit 20.11.2026:** Was niemand prüfen kann, wird verweigert statt
+gefragt. Zwei Fälle sind belegt:
+
+- MCP-Argumente über 32000 Zeichen (als JSON) ergeben `deny`, außer der
+  Werkzeugname belegt eine Leseabsicht und es gibt keinen Geheimnisverdacht.
+- Meldet der Modellserver „input … is too large to process", ergibt das für
+  genau diesen Aufruf `deny`.
+
+Eine Rückfrage mit 30000 Zeichen Text ist kein Schutz: Sie ist im
+Freigabefenster nicht lesbar und wird reflexhaft bestätigt. Ein
+Größenlimit ist weiterhin **kein Fund**; die Begründung im Protokoll lautet
+`unpruefbar`, nicht `destruktiv`. Andere Fehler (Zeitüberschreitung, anderer
+HTTP-Fehler) bleiben `ask`.
+
 ## Grenzen der Audit-Kette
 
 `audit.js` schreibt eine SHA256-Kette über MCP-Entscheidungen. Sie erkennt

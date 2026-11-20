@@ -848,12 +848,21 @@ Der Index dient der Vorauswahl, der eigene 18-Befehl-Satz bleibt maßgeblich.
 .\start-reviewer.ps1                       # llama-server, Clef-Flash, Port 8080
 .\start-reviewer.ps1 -ModelPath "D:\…\anderes.gguf" -Port 8081
 .\start-reviewer.ps1 -Cpu -Server "C:\…\llama-server.exe"   # ohne GPU-Offload
+.\start-reviewer.ps1 -Batch 2048 -Ubatch 2048               # kleinerer Stapel
 node smoke-reviewer.mjs                    # 9 Fälle gegen die laufende Konfiguration
-node test.mjs                              # 932 Unit-Tests
+node test.mjs                              # 934 Unit-Tests
 node test-index.mjs                        # 23 Integrationsfälle (Fake-OpenCode)
 node test-wiring.mjs                       # 13 Verdrahtungstests (Fake-git)
 .\start-reviewer.ps1 -Stop
 ```
+
+Der Starter übergibt `-b 4096 -ub 4096`. Das gilt nur für Entscheidungsmodelle:
+Sie laufen im Embedding-Modus, dort erzwingt llama.cpp `n_batch = n_ubatch`, und
+Frage samt Antwortoptionen muss in **einen** Stapel passen. Die Werte
+übersteuern die chat-taugliche Einstellung in `%APPDATA%\llama.cpp\config.ini`
+(dort `batch-size = 2048`, `ubatch-size = 1024`), die für Chatmodelle richtig
+bleibt. Gemessen am 20.11.2026 mit Clef-Flash-Q4_K_M: 4096 beantwortet
+24000 Zeichen, 1024 nur 5000; die GPU belegt dabei 7054 von 16283 MiB.
 
 Der Standardweg nutzt CUDA mit `-ngl all` und bleibt unverändert. `-Cpu` setzt
 `-ngl 0` und ist für Rechner ohne NVIDIA-Grafikkarte oder einen reinen
@@ -932,7 +941,9 @@ Regeln des Katalogs:
   erst danach aus dem Feldnamen. Verschachtelte Argumente (etwa
   `files: [{ path }]`) werden bis Tiefe 3 mitgezählt.
 - Große Argumente (mehr als 32000 Zeichen als JSON) gelten als `unanalysierbar` — getrennt von
-  „destruktiv", damit ein Größenlimit nie als Fund missverstanden wird.
+  „destruktiv", damit ein Größenlimit nie als Fund missverstanden wird. Eine Rückfrage, die niemand
+  lesen kann, ist aber auch kein Schutz: `read`-Werkzeuge bleiben erlaubt, jede andere Absicht wird
+  `deny`.
 - Argumentwerte verlassen die Funktion nicht; im Log stehen nur Feldnamen,
   Zielarten und Zählungen.
 
@@ -951,8 +962,9 @@ gilt. Beides ist rein und ohne Backend testbar.
 
 Reihenfolge und Grenzen:
 
-- **`unanalysierbar` zuerst.** Argumente über 32000 Zeichen (als JSON) ergeben `ask`, auch wenn
-  Werkzeug oder Text destruktiv aussähen — ein Größenlimit ist kein Fund.
+- **`unanalysierbar` zuerst.** Argumente über 32000 Zeichen (als JSON) werden nie als Fund
+  gewertet; sie ergeben aber keine unlesbare Rückfrage mehr: ein `read`-Werkzeug bleibt `allow`,
+  jede andere Absicht wird `deny`. Ein Geheimnisverdacht schlägt die Freigabe.
   Danach Notbremse, dann Geheimnisverdacht, dann leere Argumente.
 - **Die Absicht kommt aus dem Werkzeugnamen, die Argumente dürfen sie nur
   verschärfen.** Ein Feldname wie `reset: true` macht aus `read_health` ein
@@ -1129,6 +1141,17 @@ die Messung „14/14, 75 ms" aus „Zwei Backends für Ebene 3".
   wartet eine Entscheidung in der Warteschlange und kann den Zeitrahmen
   überschreiten.
 
+### Stand 20.11.2026: Größenlimit und Geheimnisfrage
+
+- **Große MCP-Argumente:** über 32000 Zeichen (als JSON) bleibt ein
+  `read`-Werkzeug `allow`; jede andere Absicht wird `deny`. Eine Rückfrage,
+  die niemand lesen kann, ist kein Schutz.
+- **Fehlende Geheimnis-Antwort:** Liefert das Entscheidungsmodell keinen Wert
+  für die Geheimnisfrage, lautet das Shell-Urteil `ask`, statt sich allein auf
+  die Hauptfrage zu verlassen.
+- **Eingabe zu groß für das Modell:** Der Serverfehler „too large to process"
+  ergibt für diesen Befehl `deny`; andere Serverfehler bleiben `ask`.
+
 Installation nach dem Klonen:
 
 ```powershell
@@ -1158,6 +1181,16 @@ Ohne `npm ci` schlägt der Test-Gate beim Commit fehl. Das ist gewollt.
   Funktionen (`Read-Jsonc …`) bleiben `ask`; unlesbare `&`-/Dot-Formen sind
   seit Entscheidung 3 verweigert.
 - **Ein `cd` in ein anderes Laufwerk** macht relative Ziele unklar → `deny`.
+- **Das Entscheidungsmodell hat ein Stapellimit, keine Zeichengrenze.** Im
+  Embedding-Modus erzwingt llama.cpp `n_batch = n_ubatch`, und Frage samt
+  Antwortoptionen muss in einen Stapel passen. Sonst antwortet der Server
+  `input … is too large to process`; der Guard macht daraus für diesen Aufruf
+  `deny` (gemessen 20.11.2026). Mit `ubatch 1024` beginnt das bei etwa 5000
+  Zeichen, mit 4096 bei etwa 24000. Deshalb übergibt `start-reviewer.ps1`
+  `-b 4096 -ub 4096` und übersteuert damit `batch-size`/`ubatch-size` aus
+  `%APPDATA%\llama.cpp\config.ini`, die für Chatmodelle richtig bleiben. Wer
+  `llama-server` selbst startet, muss beide Werte setzen; nur einen zu erhöhen
+  wirkt nicht, weil llama.cpp sie in diesem Modus gleich hält.
 
 ## Messung
 

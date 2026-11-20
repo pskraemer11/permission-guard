@@ -667,7 +667,27 @@ async function requestSystemone(payload, cfg, timeoutMs = cfg.timeoutMs || 2000)
     })
     // 404: das Backend kennt /systemone nicht (LM Studio, Chat-GGUF). Der Aufrufer
     // faellt dann auf den Chat-Weg zurueck, statt jede Frage in "ask" enden zu lassen.
-    if (!response.ok) return { ok: false, unsupported: response.status === 404, reason: `HTTP ${response.status}` }
+    if (!response.ok) {
+      // 500 mit "too large to process": die Eingabe passt nicht in den
+      // Modellstapel. Das ist kein Serverfehler, sondern ein belegtes
+      // "unpruefbar" und wird von der Naechstentscheidung verweigert
+      // (Entscheidung 20.11.2026). Andere Fehler bleiben Rueckfrage.
+      let detail = ""
+      if (response.status === 500) {
+        try {
+          detail = await response.text()
+        } catch {
+          // Mock oder leerer Body: kein Beleg fuer "zu gross".
+        }
+      }
+      const tooLarge = response.status === 500 && /too large to process/i.test(detail)
+      return {
+        ok: false,
+        unsupported: response.status === 404,
+        unanalysable: tooLarge,
+        reason: tooLarge ? "unpruefbar: Eingabe zu gross fuer den Modellstapel" : `HTTP ${response.status}`,
+      }
+    }
     const data = await response.json()
     const probability = data?.answers?.effect?.probabilities?.reads
     if (typeof probability !== "number") return { ok: false, reason: "keine Wahrscheinlichkeit" }
@@ -889,16 +909,28 @@ async function shellBySystemone(commands, where, cfg) {
   const deadline = Date.now() + Math.max(250, cfg.timeoutMs || 2000)
   let lowest = 1
   let highestSecrets = 0
+  let missingSecrets = false
   for (const command of segments) {
     const left = deadline - Date.now()
     if (left <= 0) return { decision: "ask", reason: "Zeitbudget ueberschritten" }
     const result = await requestSystemone(buildShellSystemoneRequest({ command, model: cfg.model, ...where }), cfg, left)
     if (result.unsupported) return { unsupported: true }
-    if (!result.ok) return askAfterAbort(result, cfg)
+    if (!result.ok) {
+      // Belegtes "zu gross fuer den Stapel": niemand kann die Rueckfrage lesen,
+      // also verweigern statt fragen (Entscheidung 20.11.2026).
+      if (result.unanalysable) return { decision: "deny", reason: result.reason, probability: null }
+      return askAfterAbort(result, cfg)
+    }
     lowest = Math.min(lowest, result.probability)
-    // Jede Antwort mit hohem Exponierungsrisiko ist Rueckfrage. Fehlt der Wert
-    // (Backend ohne zweite Frage), bleibt es bei der Hauptfrage allein.
-    if (result.secrets !== null) highestSecrets = Math.max(highestSecrets, result.secrets)
+    // Jede Antwort mit hohem Exponierungsrisiko ist Rueckfrage. Eine fehlende
+    // Antwort ist keine Entwarnung: Wer die Geheimnisfrage nicht beantwortet,
+    // bekommt keine Freigabe (fail closed, Entscheidung 20.11.2026). Das gilt
+    // je Segment, damit eine Antwort nicht fuer eine andere einspringt.
+    if (result.secrets === null) missingSecrets = true
+    else highestSecrets = Math.max(highestSecrets, result.secrets)
+  }
+  if (missingSecrets) {
+    return { decision: "ask", reason: "Modell: keine Antwort auf die Geheimnisfrage", probability: lowest }
   }
   if (highestSecrets > (cfg.secretsThreshold ?? 0.35)) {
     return { decision: "ask", reason: `Modell: exponiert Daten (s=${highestSecrets.toFixed(3)})`, probability: lowest, secrets: highestSecrets }
@@ -933,8 +965,15 @@ export async function reviewMcp({ criteria, input, project, recent, config }) {
   const cfg = config ?? loadConfig()
   if (!cfg.enabled) return { decision: "ask", reason: "Reviewer deaktiviert" }
   if (!criteria?.isMcp) return { decision: "ask", reason: "kein MCP-Aufruf" }
+  // Groesse zuerst: eine Rueckfrage, die niemand lesen kann, ist kein Schutz.
+  // Nur eine aus dem Werkzeugnamen belegte Leseabsicht bleibt erlaubt
+  // (Entscheidung 20.11.2026, gleiche Regel wie mcpVerdict).
+  if (criteria.context?.oversized) {
+    const intent = criteria.action?.intent ?? "unknown"
+    if (intent === "read" && !criteria.context?.secret) return { decision: "allow", reason: "nur lesend: grosse Argumente" }
+    return { decision: "deny", reason: "unpruefbar: zu grosse Argumente" }
+  }
   if (criteria.context?.secret) return { decision: "ask", reason: "Geheimnisverdacht: kein Modellaufruf" }
-  if (criteria.context?.oversized) return { decision: "ask", reason: "unanalysierbar: kein Modellaufruf" }
   // Jede Kuerzung, Tiefenbegrenzung oder ausgelassene Feldgruppe fragt ohne
   // Modell nach (fail closed, Systemone- und Chat-Pfad). Die Chat-Darstellung
   // wird zusaetzlich geprueft, weil sie formatiert versandt und am Limit
@@ -946,6 +985,9 @@ export async function reviewMcp({ criteria, input, project, recent, config }) {
   if (cfg.mcpBackend === "systemone") {
     const result = await requestSystemone(buildSystemoneRequest({ criteria, input, model: cfg.model }), cfg)
     if (!result.unsupported) {
+      // "too large to process" ist der belegte Fall, den niemand pruefen kann:
+      // verweigern statt fragen (Entscheidung 20.11.2026).
+      if (result.unanalysable) return { decision: "deny", reason: result.reason }
       if (!result.ok) return askAfterAbort(result, cfg)
       return systemoneVerdict(result.probability, cfg.mcpThreshold)
     }
