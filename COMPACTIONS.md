@@ -3542,3 +3542,49 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
 - `METHODOLOGY*` und die kurzen READMEs sind seit `add47fd` versioniert; die
   neuen Abschnitte kommen als Nachtrag dazu.
 - Untracked bleiben: Screenshots, ein JPG und `review/`.
+
+
+================ Compaction 21.11.2026 / 12:55 ================
+## Objective
+- **Current:** Auslieferung abgeschlossen. `main` == `origin/main` (Merge-Commit
+  `e5e3575`, PR #20), lokaler Wellen-Branch gelöscht. Kein offener Punkt im
+  Repo.
+- **Completed:** README-Aufteilung committet (`728d1bd`), CI-Fehler behoben
+  (`b8b2e51`), gemergt, aufgeräumt.
+
+## Important Details
+- **`ship.ps1` war nicht kaputt.** Es lief bis `gh pr create`, dann brachen die
+  Prüfungen ab: `Tests (Node 20/22, ubuntu-latest)` meldeten
+  „Personenbezogener Pfad gefunden" — zwei echte Pfade in `COMPACTIONS.md`
+  (`C:\Users\<name>\…`). Behoben in `b8b2e51`, aber erst mit dem zweiten Push
+  sichtbar.
+- **Die Lücke bleibt:** Das Skript kann einen abgebrochenen Lauf nicht
+  fortsetzen. Es verlangt `main`, legt den Branch neu an und setzt `main` hart
+  auf `origin/main` zurück; steht man nach einem Fehlschlag auf dem eigenen
+  Wellen-Branch, ist jeder weitere Aufruf blockiert. Ein Fortsetzungspfad für
+  `welle-*` mit offenem PR fehlt — noch nicht umgesetzt, weil der Nutzer die
+  Auslieferung zuerst abschließen wollte.
+- **Der lokale Hook sieht weniger als CI.** Die zwei Pfade passierten
+  `pre-commit` und fielen erst in `ci.yml` auf. Ursache nicht geprüft; der
+  Hook prüft offenbar andere Dateien oder Muster.
+- **`gh pr merge --delete-branch` scheiterte** mit `fatal: not a git repository`.
+  Ursache war die Shell des Nutzers, nicht das Repo: `GIT_DIR`/
+  `GIT_WORK_TREE` leer, `.git` intakt, `git -C <pfad>` funktionierte immer. Die
+  PowerShell hielt vermutlich ein veraltetes Verzeichnis-Handle. Der Fehler trat
+  auch in meiner Sitzung einmal auf und verschwand ohne Änderung.
+
+## Work State
+- Geprüft: `gh pr checks 20` — alle 16 Prüfungen grün. `git diff main
+  welle-20261121-1213` leer, Branch vollständig gemergt.
+- Aufgeräumt: Remote-Branch per API gelöscht, `git fetch --prune`, lokaler Branch
+  durch den Nutzer (`git branch -d`, vom Guard bei mir verweigert).
+
+## Next Move
+1. Entscheiden, ob `ship.ps1` einen Fortsetzungspfad bekommt (Vorschlag steht).
+2. Prüfen, warum der lokale Hook die Benutzerpfade nicht gefunden hat.
+
+## Important Context
+- **Zwei Sitzungen im selben Arbeitsbaum** waren die Ursache der Verwirrung:
+  falscher Pfad in der Parallelsitzung, fremde Commits im eigenen Branch,
+  verlorenes Verzeichnis-Handle. Für getrennte Aufgaben getrennte Arbeitsbäume
+  verwenden.
