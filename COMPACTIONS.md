@@ -3708,3 +3708,46 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
 - Prozessstart unter Windows immer mit Selbstnachweis pruefen (Datei, die das
   Kind selbst schreibt), nicht ueber stdio.
 
+## Compaction 21.11.2026: Doppelstart-Sperre und Antwortzeit des Servers
+
+### Objective
+- Der Reviewer darf nicht zweimal starten; bei laufendem Prozess soll das
+  Skript auf das geladene Modell warten (Auftrag des Nutzers).
+
+### Important Details
+- **Ursache des Doppelstarts:** `/health` und `/v1/models` antworten auch im
+  Leerlauf in rund 2 s. Die Pruefungen liefen mit 2 s Timeout und hielten einen
+  laufenden Server fuer abwesend. Zwei Aufrufer starteten je einen Server:
+  2 x 3,6 GB, zusammen 12,7 GB Grafikspeicher.
+- **Sperre:** `start-reviewer.ps1` sucht vor dem Start einen `llama-server` mit
+  gleichem Modellpfad und `--port` in der Kommandozeile. Findet es einen, wartet
+  es bis 120 s auf `/health` und nennt das Modell aus `/v1/models`.
+- **Timeouts:** 5 s in `start-reviewer.ps1` (drei Stellen), 5000 ms in
+  `ensureRunning` (vorher 1500 ms). Der Watchdog hatte schon 5 s.
+- **Messartefakt:** Ein Aufruf von `start-reviewer.ps1` aus einer Shell mit
+  Ausgabe-Pipe wirkt haengend, weil der gestartete Server die Pipe erbt. Das
+  Skript ist fertig (Log: `Reviewer bereit`). Entkoppelt ueber `Start-Process`
+  mit Ausgabedatei verhaelt es sich normal.
+
+### Work State
+- Geaendert: scripts/start-reviewer.ps1, src/reviewer.js, PLANUNG.md,
+  CHANGELOG.md, COMPACTIONS.md.
+- Belegt: Parser 0 Fehler, `test.mjs` 1002/1002, Doppelstart-Test zeigt nur
+  einen Prozess; der zweite Aufruf meldet den laufenden Prozess.
+- Offen: Der zweite Aufruf soll nach dem Laden `bereit` melden - mit dem alten
+  2-s-Timeout lief er in die 120-s-Meldung. Mit 5 s noch nicht nachgemessen.
+
+### Next Move
+1. Doppelstart-Test mit 5-s-Timeout wiederholen: beide Aufrufe entkoppelt,
+   Ausgaben in Dateien, nach 60 s pruefen.
+2. Deploy, dann Kaltstart: Server aus, OpenCode neu starten, im guard.log
+   `setup: Aufwaermlauf ok <mehrere Sekunden>` erwarten.
+
+### Important Context
+- Ein Aufruf aus der OpenCode-Shell, der einen Server startet, kann 180 bis
+  300 s "haengen" und wird dann abgebrochen; der Abbruch toetet die
+  Prozessgruppe samt Server. Fuer Starttests immer `Start-Process` mit
+  Ausgabedatei verwenden.
+- Der Guard zaehlt Rueckfragen: Nach mehreren abgelehnten Aufrufen greift das
+  Deny-Limit und blockiert auch harmlose Befehle zeitweise.
+

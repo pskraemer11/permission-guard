@@ -162,6 +162,19 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **`start-reviewer.ps1` startet nicht doppelt (21.11.2026):** Vor dem Start wird
+  geprüft, ob bereits ein `llama-server` mit demselben Modellpfad und Port läuft
+  (Kommandozeile). Wenn ja, wartet das Skript bis zu 120 s auf `/health` und
+  meldet das geladene Modell aus `/v1/models`, statt einen zweiten Server zu
+  starten. Am 21.11. hatten zwei Aufrufer im Abstand von 10 s je einen Server
+  gestartet; beide luden 3,6 GB, einer bekam keinen Port, zusammen 12,7 GB
+  Grafikspeicher. Beleg: Bei laufendem Server erkennt der zweite Aufruf
+  `llama-server laeuft bereits (PID …)`, und es bleibt bei einem Prozess.
+- **Antwortzeit des Servers berücksichtigt (21.11.2026):** `/health` und
+  `/v1/models` antworten auch im Leerlauf in rund 2 s. Die Prüfungen liefen
+  deshalb in einen 2-s-Timeout und hielten einen laufenden Server für
+  abwesend — das war die Ursache des Doppelstarts. `start-reviewer.ps1` prüft
+  jetzt mit 5 s, `ensureRunning` in `reviewer.js` mit 5000 ms statt 1500 ms.
 - **`ensureRunning` startet den Reviewer wirklich (21.11.2026):** `spawn` lief mit
   `detached: true`. Unter Windows erzeugt das einen Prozess, der sofort wieder
   endet — belegt mit einem Dummy-Skript in vier Varianten: `detached: true`

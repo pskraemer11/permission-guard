@@ -65,6 +65,8 @@ Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
 | `start-reviewer.ps1` Zeitlimit     | erkennt gehaltene Log-Dateien in 10 s und bricht mit Pfad und Hinweis ab; `/health`-Schleife mit 120-s-Budget (21.11.2026)                                                                                                                                          |
 | Log-Ausweichen                     | belegte Standard-Log-Datei → `…<port>.<pid>.log`; `ensureRunning` schreibt nach `%TEMP%\permission-guard-start.log` (21.11.2026)                                                                                                                                    |
 | Plugin-Start                       | `spawn` ohne `detached`: Mit `detached: true` endete der Prozess unter Windows sofort, der Server kam immer erst vom Watchdog (21.11.2026)                                                                                                                          |
+| Doppelstart-Sperre                 | laufender `llama-server` mit gleichem Modellpfad und Port wird erkannt; der zweite Aufruf wartet auf das Modell statt zu starten (21.11.2026)                                                                                                                       |
+| Antwortzeit `/health`              | 2,0 bis 2,1 s im Leerlauf; Prüfungen deshalb mit 5 s Timeout, sonst gilt ein laufender Server als abwesend (21.11.2026)                                                                                                                                             |
 | P0-9 pytest-Optionen               | `--junit-xml`, `--junitxml`, `--html`, `--log-file`, `--result-log`, `--cache-clear`, `--pastebin`, `-o`, `--override-ini` und die Datei-Varianten von `--cov-report` bleiben Rückfrage; `-p no:cacheprovider` und `--cov-report term` bleiben erlaubt (21.11.2026) |
 | Warmup-Kaltstart                   | Kaltstart live belegt: `Aufwaermlauf fehlgeschlagen 2007 ms (ECONNREFUSED)`, erste Entscheidung `TypeError`. Seitdem wiederholt `warmOne` bis `warmupTimeoutMs` statt fünfmal; `test.mjs` 1002/1002 (21.11.2026)                                                    |
 | S6: Parent-Workflow entfernen      | `AI+IDE-Hints/.github/workflows/permission-guard.yml` existiert nicht mehr                                                                                                                                                                                          |
@@ -1742,6 +1744,37 @@ bleibt die Berechtigungsprüfung.
 
 **Messung.** `test.mjs` 975/975 (acht neue Fälle), `test-index.mjs` 45/45
 (zwei neue Fälle).
+
+## Nachtrag 21.11.2026: Doppelstart verhindert, Antwortzeit des Servers gemessen
+
+**Befund.** `/health` und `/v1/models` antworten auch im Leerlauf in rund 2 s
+(gemessen dreimal hintereinander: 2,0 bis 2,1 s). Beide Prüfungen liefen
+deshalb in einen 2-s-Timeout und hielten einen laufenden Server für abwesend.
+So starteten am 21.11. zwei Aufrufer im Abstand von 10 s je einen Server:
+zwei `llama-server` mit je 3,6 GB, einer ohne Port, zusammen 12,7 GB
+Grafikspeicher.
+
+**Behoben, zwei Teile:**
+
+1. `start-reviewer.ps1` prüft vor dem Start, ob bereits ein `llama-server` mit
+   demselben Modellpfad und Port läuft (Kommandozeile). Wenn ja, wartet es auf
+   `/health` und meldet das geladene Modell aus `/v1/models`; ein zweiter
+   Server wird nicht gestartet.
+2. Timeouts: `start-reviewer.ps1` prüft mit 5 s, `ensureRunning` in
+   `reviewer.js` mit 5000 ms statt 1500 ms. Der Watchdog hatte bereits 5 s und
+   war deshalb nie betroffen.
+
+**Beleg.** Zwei Aufrufe im Abstand von 3 s: Der zweite meldet
+`llama-server laeuft bereits (PID …) - warte auf geladenes Modell`, es bleibt
+bei einem Prozess.
+
+**Nebenbefund zur Messung.** Wird `start-reviewer.ps1` aus einer Shell
+aufgerufen, die die Ausgabe über eine Pipe liest, wirkt der Aufruf hängend: Der
+gestartete Server erbt die Pipe und hält sie offen, die Shell sieht kein Ende.
+Das Skript selbst ist fertig (Log zeigt `Reviewer bereit`). Entkoppelt über
+`Start-Process` mit Ausgabedatei verhält es sich normal. Kein Projektfehler,
+aber der Grund, warum Handaufrufe aus einer Pipe nicht als Hänger zu deuten
+sind.
 
 ## Nachtrag 21.11.2026: Warum der Server nie vom Plugin kam
 

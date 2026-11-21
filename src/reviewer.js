@@ -831,8 +831,12 @@ export async function ensureRunning(config) {
   if (typeof fetch !== "function") return { ok: false, reason: "kein fetch" }
 
   const base = String(cfg.baseUrl).replace(/\/+$/, "").replace(/\/v1$/, "")
+  // 5 s statt 1,5 s: Der Server antwortet auch im Leerlauf gemessen in rund
+  // 2 s (21.11.2026, /health wie /v1/models). Mit 1,5 s galt ein laufender
+  // Server als fehlend, und ensureRunning startete einen zweiten - der
+  // Doppelstart mit 12,7 GB Grafikspeicher.
   try {
-    const response = await fetch(`${base}/health`, { signal: AbortSignal.timeout(1500) })
+    const response = await fetch(`${base}/health`, { signal: AbortSignal.timeout(5000) })
     if (response.ok) return { ok: true, already: true }
   } catch {
     // nicht erreichbar - unten starten
