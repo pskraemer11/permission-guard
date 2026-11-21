@@ -42,21 +42,21 @@ Ablageort.
 Stand: 21.11.2026. Die Liste vom 20.11. ist gegen die späteren Nachträge geprüft.
 Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
 
-| Prio | Punkt                               | Was fehlt                                                                                                                                                    | Aufwand | Abhängigkeit           |
-| ---- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- | ---------------------- |
-| P1   | Dateiwerkzeuge prüfen               | die neue `deny`-Regel blockt den `edit`-Pfad; unklar bleibt, ob frühere Zugriffe über eine gespeicherte Freigabe oder eine stille `ask`-Quittung durchgingen | S       | kontrollierter Test    |
-| P1   | Warmup-Kaltstart                    | Fehlerpfad ist belegt (5 Versuche, kein `TypeError`); der vollständige Kaltstart über den Dateiwatcher fehlt noch                                            | S       | Dateiwatcher löst aus  |
-| P2   | `start-reviewer.ps1` ohne Zeitlimit | wartet unbegrenzt auf `/health`; scheitert der Start, hängt der Aufruf ohne Meldung (21.11.2026 zweimal beobachtet)                                          | S       | keine                  |
-| P2   | P0-5 Prompt-Schärfung               | Kriterien statt „harmlos?", zwei Negativbeispiele, Messung vorher/nachher                                                                                    | M       | keine (Text liegt vor) |
-| P2   | P0-11 Server-Stapel                 | große Argumente scheitern am physischen Stapel; `-ub`-Anhebung ungemessen                                                                                    | M       | Messplatz              |
-| P2   | Dreiweg-Antwort „Unbestimmt"        | eingebaut, aber aus (11/14); Entscheidung offen                                                                                                              | S       | Messung aus P0-5       |
-| P2   | G3 lokales Modell im Graubereich    | nur annotieren, nie blockieren; nur wenn G2 messbaren Nutzen zeigt                                                                                           | L       | Nutzen von G2 belegt   |
-| P3   | P1-03 Shell-Pfad                    | `deny` gewinnt im Edit-Pfad, im Shell-Pfad nicht                                                                                                             | M       | roter Fall             |
-| P3   | P0-9 weitere pytest-Optionen        | `-o`, `--junit-xml`, `--html`, `-p no:cacheprovider` unbewiesen                                                                                              | S       | eigene Probe           |
-| P3   | Smoke braucht Warmup                | `smoke-reviewer.mjs` wärmt nicht vor                                                                                                                         | S       | keine                  |
-| P3   | MMProj bei Clef-Flash               | nötig oder falsch verdrahtet? (~900 MB im Modell-Setup)                                                                                                      | S       | Auftrag                |
-| P3   | Weg B: Sandbox-ADR                  | eigener Entscheidungsauftrag, weniger `ask` bei gleicher Härte                                                                                               | M       | Auftrag                |
-| —    | Suchmuster mit Befehlsnamen         | `Select-String -Pattern 'iex'` wird verweigert; bewusst offen als Grenze des Klassifizierers                                                                 | —       | keine                  |
+| Prio | Punkt                               | Was fehlt                                                                                                                                                    | Aufwand                                                                                                                                                     | Abhängigkeit           |                     |
+| ---- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ------------------- |
+| P1   | Dateiwerkzeuge prüfen               | `deny` blockt den `edit`-Pfad; die pauschalen `edit                                                                                                          | *`-Freigaben (Workspace und global) sind gelöscht. Ungeklärt bleibt nur, ob frühere Zugriffe über eine Freigabe oder eine stille `ask`-Quittung durchgingen | S                      | kontrollierter Test |
+| P1   | Warmup-Kaltstart                    | Fehlerpfad ist belegt (5 Versuche, kein `TypeError`); der vollständige Kaltstart über den Dateiwatcher fehlt noch                                            | S                                                                                                                                                           | Dateiwatcher löst aus  |                     |
+| P2   | `start-reviewer.ps1` ohne Zeitlimit | wartet unbegrenzt auf `/health`; scheitert der Start, hängt der Aufruf ohne Meldung (21.11.2026 zweimal beobachtet)                                          | S                                                                                                                                                           | keine                  |                     |
+| P2   | P0-5 Prompt-Schärfung               | Kriterien statt „harmlos?", zwei Negativbeispiele, Messung vorher/nachher                                                                                    | M                                                                                                                                                           | keine (Text liegt vor) |                     |
+| P2   | P0-11 Server-Stapel                 | große Argumente scheitern am physischen Stapel; `-ub`-Anhebung ungemessen                                                                                    | M                                                                                                                                                           | Messplatz              |                     |
+| P2   | Dreiweg-Antwort „Unbestimmt"        | eingebaut, aber aus (11/14); Entscheidung offen                                                                                                              | S                                                                                                                                                           | Messung aus P0-5       |                     |
+| P2   | G3 lokales Modell im Graubereich    | nur annotieren, nie blockieren; nur wenn G2 messbaren Nutzen zeigt                                                                                           | L                                                                                                                                                           | Nutzen von G2 belegt   |                     |
+| P3   | P1-03 Shell-Pfad                    | `deny` gewinnt im Edit-Pfad, im Shell-Pfad nicht                                                                                                             | M                                                                                                                                                           | roter Fall             |                     |
+| P3   | P0-9 weitere pytest-Optionen        | `-o`, `--junit-xml`, `--html`, `-p no:cacheprovider` unbewiesen                                                                                              | S                                                                                                                                                           | eigene Probe           |                     |
+| P3   | Smoke braucht Warmup                | `smoke-reviewer.mjs` wärmt nicht vor                                                                                                                         | S                                                                                                                                                           | keine                  |                     |
+| P3   | MMProj bei Clef-Flash               | nötig oder falsch verdrahtet? (~900 MB im Modell-Setup)                                                                                                      | S                                                                                                                                                           | Auftrag                |                     |
+| P3   | Weg B: Sandbox-ADR                  | eigener Entscheidungsauftrag, weniger `ask` bei gleicher Härte                                                                                               | M                                                                                                                                                           | Auftrag                |                     |
+| —    | Suchmuster mit Befehlsnamen         | `Select-String -Pattern 'iex'` wird verweigert; bewusst offen als Grenze des Klassifizierers                                                                 | —                                                                                                                                                           | keine                  |                     |
 
 ### Erledigt seit dem 20.11.2026
 
@@ -97,7 +97,7 @@ und **keine Zeile im `guard.log`**.
 **Gegenprobe.** Derselbe Pfad über die Shell ist geschützt:
 
 ```text
-2026-11-21T14:17:41.970Z deny geschuetzter Pfad: c:\users\pskra\.config\opencode\opencode.jsonc
+2026-11-21T14:17:41.970Z deny geschuetzter Pfad: c:\users\<name>\.config\opencode\opencode.jsonc
 ```
 
 **Was das heißt.** Für Shell-Aufrufe greift die Regel „Schreiben in
@@ -132,6 +132,31 @@ kontrollierten Schreibversuch auf einen Pfad, der garantiert `ask` ergibt.
 auch eine gespeicherte — erzeugt keine Spur im Guard-Log. Wer wissen will, was
 der Agent außerhalb des Workspace tut, braucht deshalb eine Regel, die nicht
 still erlaubt: `external_directory` auf `ask`.
+
+**Gespeicherte Freigaben aufgeräumt (21.11.2026).** Sie liegen in der Tabelle
+`permission` der Datenbank `~/.local/share/opencode/opencode.db` und sind über
+die API les- und löschbar:
+
+```powershell
+opencode api get /api/permission/saved
+opencode api get "/api/permission/saved?projectID=global"
+opencode api delete /api/permission/saved/<id>
+```
+
+Gefunden waren neun `edit|*`-Freigaben — die pauschale Erlaubnis für **jeden**
+Pfad. Gelöscht wurden zwei:
+
+- `psv_1ac3d2ebf002vIMaP6HFvaaMdY` (dieser Workspace)
+- `psv_15a7ef12e001cPgIX015PwbzgR` (`projectID=global`, wirkte in **allen**
+  Projekten)
+
+Zusätzlich entfernt: `external_directory` für `~/.config/opencode/*` in diesem
+Workspace — mit der `deny`-Regel überflüssig und ein zweiter Weg hinein.
+
+**Bleibt:** sechs `edit|*`-Freigaben in anderen Projekten
+(`25f9db58…`, `055b3507…`, `510268dd…`, `84b69e7e…`, `2cc93aa4…`, `ae761e6c…`,
+`2b037565…`). Sie wirken nur in ihrem jeweiligen Workspace; bei Bedarf lassen
+sie sich mit `?projectID=<id>` einzeln auflisten und löschen.
 
 ## Nachtrag 21.11.2026: `start-reviewer.ps1` wartet ohne Obergrenze
 
