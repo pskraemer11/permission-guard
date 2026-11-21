@@ -39,11 +39,17 @@ einzelne Dateien werden nicht dorthin geschrieben.
 
 ## Tests – tmp_path-Workaround (Codex-Windows-Sandbox)
 
-Pytest legt `tmp_path`- und Basetemp-Verzeichnisse mit `mode=0o700` an;
-die Codex-Sandbox kann danach nicht mehr darauf zugreifen. Daher gilt
-in diesem Repo:
+**Hintergrund.** Pytest legt `tmp_path`- und Basetemp-Verzeichnisse mit
+`mode=0o700` an; die Codex-Sandbox kann danach nicht mehr darauf zugreifen. Das
+ist ein Fehler der Sandbox, kein Projektfehler — gemeldet unter
+<https://github.com/openai/codex/issues/19791> (dort als zusätzlicher Kommentar),
+noch offen. Hier steht nur der Workaround, bis er entfällt. Vergleich und
+Begründung: `CHANGELOG.md` im Nachbar-Repo `../codex-picker`, ADR
+`docs/adr/0003-tmp-path-workaround-codex-sandbox.md`.
 
-1. Ein dauerhaft vorhandener Repo-Ordner dient als Artefakt-Root, z. B.
+Die Fixture in `tests/conftest.py` überschreibt `tmp_path` deshalb:
+
+1. Ein dauerhaft vorhandener Repo-Ordner dient als Artefakt-Root:
    `tests/artifacts/` (in `tests/conftest.py` angelegt).
 2. `tests/artifacts/` ist in `.gitignore` aufgenommen.
 3. Pro Test ein eigener Ordner unter `tests/artifacts/` mit `.mkdir()`
@@ -51,12 +57,11 @@ in diesem Repo:
 4. Nach dem Test mit `shutil.rmtree(..., ignore_errors=True)` aufräumen.
 5. Kein `--basetemp`-Flag verwenden.
 
-Zu vermeiden:
+Zu vermeiden (umgeht die Fixture und fällt auf `0o700` zurück):
 
-- `tmp_path` (Pytest)
 - `tmp_path_factory.mktemp`
 - `tempfile.TemporaryDirectory` / `tempfile.mkdtemp`
-  (auch diese erzeugen intern `0o700`-Ordner)
 
-Die Testartefakte liegen vorübergehend im Repo; da `tests/artifacts/`
-bereits ignoriert ist, ist das als Projektkonvention vertretbar.
+Neue Tests nehmen den `tmp_path`-Parameter; die Fixture greift automatisch.
+Fällt der Workaround weg, werden die Tests unverändert wieder auf Pytests
+eingebautes `tmp_path` laufen.

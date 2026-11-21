@@ -142,14 +142,18 @@ Bewusst **nicht** freigeschaltet, alle aus demselben Replay belegt:
 
 Beides ausdrückliche Nutzerentscheidungen, pfadverankert wie pytest:
 
-| Fall                                                                                                                                                                                                                      | Bewertung                                                             |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `node tools/permission-guard/test/test.mjs`, `src/replay.mjs`, `src/analyze.mjs`, dazu `test/test-index.mjs`, `test/test-wiring.mjs`, `bench-*.mjs`, `test/smoke-reviewer.mjs` — auch relativ, mit `2>&1`, nach `cd` oder | Lesen — Selbstpflege des Guards, Inhalt versioniert                   |
-| mit eindeutig zugewiesenem Pfad-Präfix                                                                                                                                                                                    |                                                                       |
-| `python <skript>` mit Zielpfad innerhalb des Projekts (`*.py`), Parameter des Skripts ungeprüft                                                                                                                           | Lesen — Inhalt ist versioniert und damit vor der Ausführung reviewbar |
-| `python -c`, `python -m <anderes>`, `python` ohne Zielskript (REPL)                                                                                                                                                       | `ask` — Inline-Code ist für das Review unsichtbar                     |
-| Skripte außerhalb des Projekts (Temp-Ordner) und `<Projekt>\.git`                                                                                                                                                         | `ask` — außerhalb des reviewten Umkreises                             |
-| `node` mit fremdem Skript, `--eval`, `--version`, nackter Aufruf; `deno`, `ruby`, `perl`                                                                                                                                  | `ask` — nur die benannten Selbst-Skripte sind freigegeben             |
+| Fall                                                                                            | Bewertung                                                             |
+| ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `node` mit einem der Selbst-Skripte (Liste unten)                                               | Lesen — Selbstpflege des Guards, Inhalt versioniert                   |
+| `python <skript>` mit Zielpfad innerhalb des Projekts (`*.py`), Parameter des Skripts ungeprüft | Lesen — Inhalt ist versioniert und damit vor der Ausführung reviewbar |
+| `python -c`, `python -m <anderes>`, `python` ohne Zielskript (REPL)                             | `ask` — Inline-Code ist für das Review unsichtbar                     |
+| Skripte außerhalb des Projekts (Temp-Ordner) und `<Projekt>\.git`                               | `ask` — außerhalb des reviewten Umkreises                             |
+| `node` mit fremdem Skript, `--eval`, `--version`, nackter Aufruf; `deno`, `ruby`, `perl`        | `ask` — nur die benannten Selbst-Skripte sind freigegeben             |
+
+Selbst-Skripte, auch relativ, mit `2>&1`, nach `cd` oder mit eindeutig
+zugewiesenem Pfad-Präfix: `test/test.mjs`, `test/test-index.mjs`,
+`test/test-wiring.mjs`, `test/smoke-reviewer.mjs`, `bench-*.mjs`,
+`src/replay.mjs`, `src/analyze.mjs`.
 
 Aufgelöst wird gegen den Arbeitsordner der Sitzung, ein `cd` im selben Skript
 folgt mit; Misslingen eines `cd`-Ziels stellt relative Auflösung ab (fail

@@ -74,6 +74,42 @@ if [ -n "$_violations" ]; then
   exit 1
 fi
 
+# --- 2b) Benutzerpfade und Schluessel in hinzugefuegten Zeilen -------------
+# Dieselben Muster wie der CI-Schritt der Projekte ("Keine Benutzerpfade und
+# keine Schluessel"), damit ein Commit nicht erst nach dem Push scheitert.
+# Anlass 21.11.2026: Zwei Zeilen mit C:\Users\<name>\... passierten den
+# Commit und fielen erst in der CI auf.
+# Ausgegeben wird nur der Dateiname, nie der gefundene Wert.
+_path_rx='(/Users/[A-Za-z0-9._-]{3,}/|[A-Za-z]:\\+Users\\+[A-Za-z0-9._-]{3,})'
+# Die Praefixe brauchen eine Mindestlaenge, sonst blockiert die Nennung in
+# einer Doku-Zeile (etwa "oc_sk_" als Beispiel) jeden Commit.
+_key_rx='(sk-[A-Za-z0-9]{16,}|oc_sk_[A-Za-z0-9]{8,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})'
+
+_hits=""
+while IFS= read -r -d '' _file; do
+  case "$_file" in
+    *.md|*.js|*.mjs|*.json|*.ps1|*.py|*.toml|*.yml|*.yaml) ;;
+    *) continue ;;
+  esac
+  [ -f "$_file" ] || continue
+  if git diff --cached -U0 --diff-filter=ACMR -- "$_file" \
+       | grep -E '^\+' | grep -vE '^\+\+\+' | grep -Eq "$_path_rx"; then
+    _hits="${_hits}    ${_file} (Benutzerpfad)"$'\n'
+  elif git diff --cached -U0 --diff-filter=ACMR -- "$_file" \
+       | grep -E '^\+' | grep -vE '^\+\+\+' | grep -Eq "$_key_rx"; then
+    _hits="${_hits}    ${_file} (Schluesselverdacht)"$'\n'
+  fi
+done < <(git diff --cached --name-only -z --diff-filter=ACMR)
+
+if [ -n "$_hits" ]; then
+  echo "" >&2
+  echo "COMMIT BLOCKIERT - Benutzerpfad oder Schluesselverdacht in einer hinzugefuegten Zeile." >&2
+  printf '%s' "$_hits" >&2
+  echo "  Der Wert selbst wird absichtlich nicht ausgegeben." >&2
+  echo "  Fix: Platzhalter verwenden, etwa C:\\Users\\<name> oder \$HOME." >&2
+  exit 1
+fi
+
 # --- 3) Skill-Urteilsdatei (Bring-Schuld des Skill-Repos, 05.11.2026) ------
 # Nur im Skill-Repo vorhanden: dort liegen references/scripts/skill-verdicts.mjs
 # und skill-reviews/verdicts.json. Sind Skill-Dateien gestaged, wird die
@@ -93,6 +129,13 @@ if [ -f "$_verdicts_tool" ] && [ -f "$_verdicts_db" ] \
   if ! command -v node >/dev/null 2>&1; then
     echo "" >&2
     echo "COMMIT BLOCKIERT - node fehlt, Urteilsdatei kann nicht geprueft werden." >&2
+    exit 1
+  fi
+
+  node "$_verdicts_tool" --verify-layout --skills skills --out "$_verdicts_db"
+  if [ $? -ne 0 ]; then
+    echo "" >&2
+    echo "COMMIT BLOCKIERT - Skill-Struktur unvollstaendig oder ungueltig." >&2
     exit 1
   fi
 
