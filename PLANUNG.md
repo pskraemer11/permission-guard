@@ -85,6 +85,30 @@ Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
    als ADR-Entwurf, P0-9 als eigene Probe mit einem Testfall je Option.
 5. **Bewusst offen:** das `iex`-Suchmuster. Es ist eine Grenze, kein Fehler.
 
+## Nachtrag 21.11.2026: `open-knowledge_exec` im Audit-Log
+
+`src/mcp-report.mjs` meldet `unknownIntent=80`, davon 75 mal
+`open-knowledge_exec`, alle über Ebene 3 entschieden. Geprüft mit
+`staging/audit-tool.mjs` gegen `%LOCALAPPDATA%\opencode\permission-guard\audit.jsonl`:
+
+- 152 Zeilen zum Werkzeug, **Zeitraum 18.11.2026 15:25 bis 21:00** — der
+  gesamte Bestand des Logs.
+- 150 `open-knowledge_exec`, 2 `open-knowledge_config`.
+- 76 Aufrufe mit Absicht `unknown` und Urteil `model/3`; die übrigen 76 sind die
+  `execute.after`-Datensätze ohne Absichtsfeld.
+
+**Damit ist der Befund historisch.** Die 76 Modellentscheidungen stammen alle
+vom 18.11., also von vor der Namensliste `MCP_READ_ONLY_TOOLS`
+(`src/guard.js`, seit 20.11.). Seitdem gilt `open-knowledge_exec` als `read`,
+belegt durch `test.mjs` (Zeile 1186: `cat` → `allow`) und die Gegenprobe
+(`fremdserver_exec` → `model`).
+
+**Offen bleibt die Beobachtung, nicht der Befund:** Das Audit-Log endet am
+18.11.2026, obwohl die Datei am 20.11. zuletzt geschrieben wurde. Entweder gab
+es seitdem keine MCP-Aufrufe oder das Audit ist abgeschaltet
+(`PERMISSION_GUARD_AUDIT=off`). Solange das nicht geklärt ist, sagt
+`mcp-report` nichts über den heutigen Betrieb.
+
 ## Nachtrag 21.11.2026: G1 live belegt
 
 Zwei echte Abrufe über den Code-Mode-Pfad, Protokoll in `guard.log` (UTC):
