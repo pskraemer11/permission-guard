@@ -162,6 +162,14 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **`ensureRunning` startet den Reviewer wirklich (21.11.2026):** `spawn` lief mit
+  `detached: true`. Unter Windows erzeugt das einen Prozess, der sofort wieder
+  endet — belegt mit einem Dummy-Skript in vier Varianten: `detached: true`
+  (mit `stdio: "ignore"` und mit Datei-Deskriptor) ergab keinen
+  Selbstnachweis, `detached: false` lief in beiden Fällen. Folge: Der Server
+  wurde nie vom Plugin gestartet, sondern immer erst vom Watchdog; der
+  Aufwärmlauf lief deshalb bei jedem Kaltstart ins Leere, unabhängig vom
+  Timeout. `detached` ist entfernt, `unref()` bleibt. `test.mjs` 1002/1002.
 - **`start-reviewer.ps1` weicht bei belegter Log-Datei aus (21.11.2026):** Ist
   `permission-guard-reviewer-<port>.log` noch von einem Vorgänger gehalten,
   schreibt der Start nach `…<port>.<pid>.log`, statt abzubrechen. Am 21.11.

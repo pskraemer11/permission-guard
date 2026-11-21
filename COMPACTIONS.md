@@ -3671,3 +3671,40 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
 - Ein blockierender Start ist kein Modell- oder Serverproblem. Erst pruefen, wer
   die Log-Dateien haelt, dann den Server verdaechtigen.
 
+## Compaction 21.11.2026: spawn detached hat den Serverstart verhindert
+
+### Objective
+- Den Kaltstart-Beleg fuer den Aufwaermlauf liefern (Auftrag des Nutzers).
+
+### Important Details
+- **Befund:** `ensureRunning` startete `start-reviewer.ps1` mit
+  `spawn(..., { detached: true })`. Unter Windows endet dieser Prozess sofort.
+  Belegt mit einem Dummy-Skript in vier Varianten: detached true ergab keinen
+  Selbstnachweis, detached false lief in beiden stdio-Varianten.
+- **Folge:** Der Server wurde nie vom Plugin gestartet, sondern immer erst vom
+  Watchdog (zwei bis fuenf Minuten spaeter). Der Aufwaermlauf lief deshalb bei
+  jedem Kaltstart ins Leere, unabhaengig vom Timeout. Das erklaert alle
+  negativen Kaltstart-Laeufe vom 20. und 21.11.
+- **Fix:** `detached` entfernt, `unref()` bleibt. `test.mjs` 1002/1002.
+- **Nebenbefund:** `ensureRunning` findet `start-reviewer.ps1` nur im deployten
+  Ziel, wo beide Dateien flach nebeneinander liegen. Ein Test direkt aus dem
+  Repo scheitert mit "start-reviewer.ps1 fehlt" - kein Fehler, sondern die
+  Verzeichnisstruktur.
+
+### Work State
+- Geaendert: src/reviewer.js, PLANUNG.md, CHANGELOG.md, COMPACTIONS.md.
+- Der Reviewer laeuft (ueber start-reviewer.ps1 gestartet, /health ok).
+- staging/spawn-vergleich.mjs und staging/dummy-start.ps1 sind die Messwerkzeuge.
+
+### Next Move
+1. Deploy, damit das deployte reviewer.js den Fix hat.
+2. Server aus, OpenCode neu starten. Erwartung im guard.log:
+   `setup: Aufwaermlauf ok <mehrere Sekunden>`, in
+   `%TEMP%\permission-guard-start.log`: `Reviewer bereit: ...`.
+
+### Important Context
+- `child.pid` ist auch bei einem sofort sterbenden Prozess gesetzt. Ein
+  gesetzter PID beweist keinen laufenden Prozess.
+- Prozessstart unter Windows immer mit Selbstnachweis pruefen (Datei, die das
+  Kind selbst schreibt), nicht ueber stdio.
+

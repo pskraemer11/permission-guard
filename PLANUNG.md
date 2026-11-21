@@ -64,6 +64,7 @@ Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
 | `-b`/`-ub` 2048                    | Default in `start-reviewer.ps1` seit 21.11.2026; Compute-Puffer 4297 → 2149 MiB, KV-Cache unverändert                                                                                                                                                               |
 | `start-reviewer.ps1` Zeitlimit     | erkennt gehaltene Log-Dateien in 10 s und bricht mit Pfad und Hinweis ab; `/health`-Schleife mit 120-s-Budget (21.11.2026)                                                                                                                                          |
 | Log-Ausweichen                     | belegte Standard-Log-Datei → `…<port>.<pid>.log`; `ensureRunning` schreibt nach `%TEMP%\permission-guard-start.log` (21.11.2026)                                                                                                                                    |
+| Plugin-Start                       | `spawn` ohne `detached`: Mit `detached: true` endete der Prozess unter Windows sofort, der Server kam immer erst vom Watchdog (21.11.2026)                                                                                                                          |
 | P0-9 pytest-Optionen               | `--junit-xml`, `--junitxml`, `--html`, `--log-file`, `--result-log`, `--cache-clear`, `--pastebin`, `-o`, `--override-ini` und die Datei-Varianten von `--cov-report` bleiben Rückfrage; `-p no:cacheprovider` und `--cov-report term` bleiben erlaubt (21.11.2026) |
 | Warmup-Kaltstart                   | Kaltstart live belegt: `Aufwaermlauf fehlgeschlagen 2007 ms (ECONNREFUSED)`, erste Entscheidung `TypeError`. Seitdem wiederholt `warmOne` bis `warmupTimeoutMs` statt fünfmal; `test.mjs` 1002/1002 (21.11.2026)                                                    |
 | S6: Parent-Workflow entfernen      | `AI+IDE-Hints/.github/workflows/permission-guard.yml` existiert nicht mehr                                                                                                                                                                                          |
@@ -1741,6 +1742,35 @@ bleibt die Berechtigungsprüfung.
 
 **Messung.** `test.mjs` 975/975 (acht neue Fälle), `test-index.mjs` 45/45
 (zwei neue Fälle).
+
+## Nachtrag 21.11.2026: Warum der Server nie vom Plugin kam
+
+**Befund.** `ensureRunning` startete `start-reviewer.ps1` mit `spawn(..., { detached: true })`.
+Unter Windows erzeugt `detached: true` einen Prozess, der sofort wieder endet.
+Damit wurde das Startskript nie ausgeführt: kein `pwsh`-Prozess, keine Ausgabe,
+kein Server. Der Aufwärmlauf lief seine volle Zeit ins Leere — gleich welches
+Timeout. Gestartet wurde der Server immer erst vom Watchdog, zwei bis fünf
+Minuten später.
+
+**Beleg.** Dummy-Skript, das selbst in eine Datei schreibt (Nachweis unabhängig
+von der Ausgabeumleitung):
+
+| Variante                       | Kindprozess läuft | Ausgabe in Datei |
+| ------------------------------ | ----------------- | ---------------- |
+| `detached: true`, `ignore`     | nein              | –                |
+| `detached: true`, Datei-Deskr. | nein              | leer             |
+| `detached: false`, `ignore`    | ja                | –                |
+| `detached: false`, Datei-Deskr.| ja                | `stdout-erreicht`|
+
+`child.pid` war in allen Fällen gesetzt; der Prozess beendete sich nur sofort.
+
+**Behoben.** `detached` ist entfernt, `unref()` bleibt. Damit wartet Node nicht
+auf das Kind, und das Kind überlebt das Ende des Hosts — beides war der Zweck
+von `detached`.
+
+**Offen.** Der positive Kaltstart-Beleg steht aus: Server aus, OpenCode starten,
+im `guard.log` muss `setup: Aufwaermlauf ok <mehrere Sekunden>` stehen und in
+`%TEMP%\permission-guard-start.log` die Zeile `Reviewer bereit: …`.
 
 ## Nachtrag 21.11.2026: Warmup-Kaltstart belegt — Lücke gefunden und geschlossen
 

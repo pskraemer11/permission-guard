@@ -859,10 +859,16 @@ export async function ensureRunning(config) {
     } catch {
       // Ohne Log wird trotzdem gestartet; stdio bleibt dann "ignore".
     }
+    // Kein `detached: true` (Befund 21.11.2026): Unter Windows erzeugte
+    // spawn damit einen Prozess, der sofort wieder endete - mit und ohne
+    // Ausgabeumleitung. Belegt mit einem Dummy-Skript: detached true = kein
+    // Selbstnachweis, detached false = laeuft. Deshalb kam der Server nie vom
+    // Plugin, sondern immer erst vom Watchdog. `unref()` genuegt, damit Node
+    // nicht auf das Kind wartet; es laeuft nach dem Ende des Hosts weiter.
     const child = spawn(
       "pwsh",
       ["-NoProfile", "-WindowStyle", "Hidden", "-File", starter, "-Port", port],
-      { detached: true, stdio: fd === null ? "ignore" : ["ignore", fd, fd], windowsHide: true },
+      { stdio: fd === null ? "ignore" : ["ignore", fd, fd], windowsHide: true },
     )
     if (fd !== null) {
       try {
