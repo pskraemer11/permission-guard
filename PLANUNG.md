@@ -1664,3 +1664,60 @@ der beteiligten Repos, die Entscheidung in
 `docs/adr/0003-tmp-path-workaround-codex-sandbox.md` und das Muster im Skill
 `python-project-init` (Baseline und Template). Betroffen hier:
 `tests/conftest.py`, `.gitignore`, `AGENTS.md`.
+
+## Nachtrag 21.11.2026: Aufteilung der README
+
+Die README war auf rund 1470 Zeilen gewachsen und hatte die Rolle eines
+Entscheidungsprotokolls übernommen: datierte Stände, Messreihen, Regelwerk im
+Detail. Sie ist jetzt ein Einstieg für Erstnutzer (rund 290 Zeilen), das
+Fachliche steht in `METHODOLOGY.md` und `METHODOLOGY_de.md`.
+
+**Verschoben, nicht neu geschrieben.** Die Fachabschnitte sind wörtlich
+übernommen: Regelwerk im Detail (Listen, Netz-Lesen, `python`, `.NET`,
+Interpreter, Skill-Skripte, unlesbare Formen, Geheimnisbegriffe, Hilfe und
+Version, fremde CLIs), Befehlszerlegung, Git-Muster, Ebene 1, MCP-Urteil,
+Messverfahren und Änderbarkeit. Die README behält Problem, Lösung,
+Installation, Einrichten, die Verbotsliste, die Gegenüberstellung OpenCode/Codex,
+die Grenzen und den Testbefehl-Block.
+
+**Aus der README hierher übernommen:** die beiden folgenden datierten Stände.
+Sie waren Teil der Historie und gehören nicht in einen Einstiegstext.
+
+### Stand 13.11.2026: Review-Runde
+
+- **Umgehung behoben:** Eine Zuweisung vor einem Schreib- oder Löschbefehl
+  (`$null = Remove-Item …`) wurde nicht geprüft. Jetzt wird der Befehl dahinter
+  geprüft, mit Test und Gegenprobe.
+- **MCP `sync` ist schreibend:** `sync` und `sync_status` fragen nach.
+- **404 auf `/systemone`:** Ein Backend ohne dieses Protokoll (LM Studio,
+  Chat-GGUF) bekommt die Entscheidung über den Chat-Weg.
+- **Argumente:** Kanal-Tags neutralisiert, Texte auf 32000 Zeichen begrenzt.
+  Jede Kürzung, Tiefenbegrenzung oder ausgelassene Feldgruppe fragt ohne
+  Modellaufruf nach (fail closed).
+- **Zeitbudget Shell:** Ein Budget für alle Segmente zusammen.
+- **Aufwärmlauf:** Beide Wege bei gemischten Backends.
+- **Audit:** Zustand vor jedem Anhängen neu lesen (zwei Plugin-Instanzen).
+- **Shell-Messung:** `npm run bench:shell`. Mit der Frage aus Runde 2 (Ordner im
+  Fragetext): 17/17, einstimmig. Mit der alten Frage und dem Ordner nur im
+  Zustand lag dieselbe Messung bei 12/17; die Fehlschläge waren Schreiben im
+  Projekt und Temp-Ordner sowie das Lesen von `token.json`.
+- **Parallelität:** Der Server läuft mit `-np 1`. Eine Anfrage nach der anderen
+  wird bedient, parallel zu senden brächte nichts. Während des Aufwärmlaufs
+  wartet eine Entscheidung in der Warteschlange und kann den Zeitrahmen
+  überschreiten.
+
+### Stand 20.11.2026: Größenlimit und Geheimnisfrage
+
+- **Große MCP-Argumente:** über 32000 Zeichen (als JSON) bleibt ein
+  `read`-Werkzeug `allow`; jede andere Absicht wird `deny`. Eine Rückfrage,
+  die niemand lesen kann, ist kein Schutz.
+- **Fehlende Geheimnis-Antwort:** Liefert das Entscheidungsmodell keinen Wert
+  für die Geheimnisfrage, lautet das Shell-Urteil `ask`, statt sich allein auf
+  die Hauptfrage zu verlassen.
+- **Eingabe zu groß für das Modell:** Der Serverfehler „too large to process"
+  ergibt für diesen Befehl `deny`; andere Serverfehler bleiben `ask`.
+
+**Befund beim Umbau:** Die Zeile „Installation nach dem Klonen: `npm ci`,
+`npm run test:index`" stand in der README zwischen den datierten Ständen und
+wäre mit ihnen fast verschwunden. Sie steht jetzt in der README unter
+Installation — ohne `npm ci` schlägt das Test-Gate beim Commit fehl.

@@ -3490,3 +3490,55 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
   nutzt dagegen `test/` Singular.
 - Der vorbestehende Dirty State (METHODOLOGY*, alte Docs-Änderungen) wurde in
   diesem Commit mitgezogen, weil der Nutzer „alle Änderungen" befahl.
+
+
+================ Compaction 21.11.2026 / 12:20 ================
+## Objective
+- **Current:** Die README-Aufteilung nachziehen: was der Commit `add47fd` noch
+  nicht enthielt, ergänzen und prüfen.
+- **Completed:** Lücke im Regelwerk geschlossen, `npm ci` in die README,
+  verstellte Querverweise korrigiert, alle Tabellen der vier Dateien
+  ausgerichtet, `CHANGELOG.md` und `PLANUNG.md` nachgezogen.
+
+## Important Details
+- **Der Commit kam aus einer parallelen Sitzung** und nahm den Arbeitsbaum mit.
+  Dadurch fehlten drei Dinge, die beim Aufteilen untergegangen waren:
+  - Der Abschnitt „Was erlaubt wird" hatte seine DetailListen (erlaubte Cmdlets,
+    `git`-Lesebefehle, Schreib-Tabelle, Löschregel) verloren — die README hatte
+    nur die Kurzfassung. Jetzt als „Was erlaubt wird: die Listen" in
+    `METHODOLOGY*`.
+  - `npm ci` / `npm run test:index` stand zwischen den beiden datierten Ständen
+    und wäre mit ihnen nach `PLANUNG.md` gewandert. Steht jetzt in der README
+    unter Installation.
+  - Zwei Querverweise zeigten auf den falschen Abschnitt (Codex-Einzelheiten
+    unter „Als eigenes Repository" statt unter „Zwei Implementierungen").
+- **Prüfverfahren statt Augenmaß:** `staging/coverage-lines.mjs` vergleicht jede
+  Zeile der alten README mit der neuen Fassung; übrig bleiben nur umformulierte
+  Stellen und die bewusst verschobenen Stände. `staging/whitespace-only.mjs`
+  belegt, dass das Tabellen-Ausrichten nur Leerzeichen geändert hat.
+- **Erster Formatierlauf war ein Fehlgriff:** Das Skript übergab Objekte statt
+  Zeilen an die Formatierung und schrieb `|  |` in jede Zeile. Über
+  `staging/backup-*.md` zurückgespielt, Skript korrigiert, danach erneut geprüft.
+
+## Work State
+- Geändert: `METHODOLOGY.md`, `METHODOLOGY_de.md`, `README.md`, `README_de.md`,
+  `PLANUNG.md`, `CHANGELOG.md`, `COMPACTIONS.md`. Kein Code.
+- Geprüft: alle vier Tabellen-Dateien ausgerichtet; Inhaltsvergleich gegen die
+  alte Fassung; `PLANUNG.md` enthält beide datierten Stände.
+- Offen: Freigabe, Commit, Auslieferung durch den Nutzer.
+
+## Next Move
+1. Freigabe einholen, dann committen.
+2. `scripts/ship.ps1` durch den Nutzer.
+
+## Relevant Files
+- `staging/coverage-lines.mjs`, `staging/coverage.mjs`: Verlustkontrolle.
+- `staging/align-tables.mjs`, `staging/check-tables.mjs`: Tabellen ausrichten
+  und prüfen.
+- `staging/whitespace-only.mjs`: belegt reine Leerzeichen-Änderungen.
+- `staging/split-methodology.mjs`, `staging/dumpblock.mjs`: Aufteilung.
+
+## Important Context
+- `METHODOLOGY*` und die kurzen READMEs sind seit `add47fd` versioniert; die
+  neuen Abschnitte kommen als Nachtrag dazu.
+- Untracked bleiben: Screenshots, ein JPG und `review/`.

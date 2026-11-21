@@ -749,6 +749,20 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Dokumentiert
 
+- **README als Einstieg, Fachliches nach `METHODOLOGY.md` (21.11.2026):** Die
+  README war auf rund 1470 Zeilen gewachsen und hatte die Rolle eines
+  Entscheidungsprotokolls übernommen. Neu: `METHODOLOGY.md` und
+  `METHODOLOGY_de.md` tragen das Fachliche (Regelwerk im Detail, Listen der
+  erlaubten Befehle, Befehlszerlegung, Git-Muster, Ebene 1, MCP-Urteil,
+  Messverfahren, Änderbarkeit, Codex-Gegenüberstellung). `README.md` und
+  `README_de.md` sind Einstieg für Erstnutzer (rund 290 Zeilen): Problem,
+  Lösung, Installation, Einrichten, Verbotsliste, Grenzen, Testbefehle,
+  Weiterlesen. Die datierten Stände vom 13.11. und 20.11. stehen jetzt in
+  `PLANUNG.md`. Inhalte wurden verschoben, nicht neu geschrieben; geprüft mit
+  einem Zeilenvergleich gegen die alte Fassung. Die Installationszeile
+  `npm ci` stand zwischen diesen Ständen und wäre fast mitgegangen — sie steht
+  jetzt in der README unter Installation. Alle Tabellen der vier Dateien sind
+  ausgerichtet (`staging/check-tables.mjs`). Kein Code geändert.
 - **Messschwellen über Umgebungsvariablen (21.11.2026):** `README.md` und
   `README_de.md` nennen jetzt die vollständige Liste der Umgebungsvariablen —
   ergänzt um `_BACKEND`, `_SHELL_BACKEND`, `_THRESHOLD` und `_SHELL_THRESHOLD`

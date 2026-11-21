@@ -80,6 +80,14 @@ zwischen Quelle und Laufzeit. Nicht per Junction oder Symlink verbinden: dann
 läge der Guard in einem Ordner mit Schreibfreigabe und die Selbstschutzgrenze
 wäre weg.
 
+Nach dem Klonen einmalig die Node-Abhängigkeit aus der Lock-Datei installieren;
+ohne sie schlägt das Test-Gate beim Commit fehl:
+
+```powershell
+npm ci                  # @opencode/plugin aus package-lock.json
+npm run test:index
+```
+
 Unter Windows zeigt `$HOME` in Git Bash und WSL auf das Linux-Home, nicht auf das
 Windows-Profil. Dort entweder `deploy.ps1` nehmen oder die Ziele setzen:
 `PERMISSION_GUARD_TARGET` und `PERMISSION_GUARD_CODEX_TARGET` auf die
@@ -96,7 +104,7 @@ Timeout stehen in `shell-reviewer.config.json` (beim Deploy aus
 | ------------ | -------------------------------------------------------------------------------------------------------- |
 | `enabled`    | Reviewer ein/aus                                                                                         |
 | `baseUrl`    | OpenAI-kompatibler Endpunkt                                                                              |
-| `model`      | Modellname: `kev-4b` für `systemone`; im Chat-Weg für Backends mit Pflichtangabe                        |
+| `model`      | Modellname: `kev-4b` für `systemone`; im Chat-Weg für Backends mit Pflichtangabe                         |
 | `apiKeyEnv`  | Name der Umgebungsvariable mit dem Key, nie der Key selbst                                               |
 | `timeoutMs`  | Obergrenze, danach `ask`                                                                                 |
 | `grammar`    | GBNF; leer nur für Backends, die sie ablehnen                                                            |
@@ -227,7 +235,7 @@ harter Fälle ab, den Rest die Sandbox. Beide Seiten lesen dieselben 40 Fälle a
 `test/shared-cases.jsonl`, damit sie nicht auseinanderlaufen.
 
 Einzelheiten, die gemeinsamen Testfälle und die unterschiedlichen Löschwurzeln
-stehen in `METHODOLOGY_de.md` unter „Als eigenes Repository veröffentlichen".
+stehen in `METHODOLOGY_de.md` unter „Zwei Implementierungen: OpenCode und Codex".
 
 ## Grenzen
 
@@ -254,7 +262,7 @@ stehen in `METHODOLOGY_de.md` unter „Als eigenes Repository veröffentlichen".
 node test/test.mjs                  # 992 Unit-Tests, Klassifizierer und Reviewer
 node test/test-wiring.mjs           # Fake-git: deny verhindert Ausführung
 node test/test-index.mjs            # Plugin-Verdrahtung, Fake-OpenCode
-node test/bench-mcp.mjs             # 33 feste MCP-Fälle
+node test/bench-mcp.mjs             # 40 feste MCP-Fälle, 15 davon Verbote
 node test/smoke-reviewer.mjs        # 9 Fälle gegen die laufende Konfiguration
 python -m pytest tests -q           # Codex-Guard
 python -m ruff check .              # Python-Lint
@@ -277,10 +285,10 @@ Entscheidung. Befehlstexte werden nie roh gespeichert, sondern nur als
 
 ## Weiterlesen
 
-| Datei                            | Inhalt                                                              |
-| -------------------------------- | ------------------------------------------------------------------- |
-| `METHODOLOGY_de.md`              | Regelwerk im Detail, Entscheidungsmodell, MCP-Urteil, Messverfahren |
-| `PLANUNG.md`                     | Stand, Messreihen, datierte Entscheidungen                          |
-| `CHANGELOG.md`                   | dateiweise Änderungen                                               |
-| `COMPACTIONS.md`                 | warum etwas so entschieden wurde                                    |
-| `docs/adr/0002-reviewer-und-sandbox.md` | Reviewer und Sandbox im Vergleich                            |
+| Datei                                   | Inhalt                                                              |
+| --------------------------------------- | ------------------------------------------------------------------- |
+| `METHODOLOGY_de.md`                     | Regelwerk im Detail, Entscheidungsmodell, MCP-Urteil, Messverfahren |
+| `PLANUNG.md`                            | Stand, Messreihen, datierte Entscheidungen                          |
+| `CHANGELOG.md`                          | dateiweise Änderungen                                               |
+| `COMPACTIONS.md`                        | warum etwas so entschieden wurde                                    |
+| `docs/adr/0002-reviewer-und-sandbox.md` | Reviewer und Sandbox im Vergleich                                   |

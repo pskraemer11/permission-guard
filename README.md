@@ -81,6 +81,14 @@ source and runtime. Do not link the directory by junction or symlink: the guard
 would then sit in a folder with write permission, and the self-protection
 boundary would be gone.
 
+After cloning, install the Node dependency from the lock file once; without it
+the commit test gate fails:
+
+```powershell
+npm ci                  # @opencode/plugin from package-lock.json
+npm run test:index
+```
+
 On Windows, `$HOME` in Git Bash and WSL points at the Linux home, not at the
 Windows profile. There either use `deploy.ps1` or set the targets:
 `PERMISSION_GUARD_TARGET` and `PERMISSION_GUARD_CODEX_TARGET` to the Windows
@@ -97,7 +105,7 @@ afterwards):
 | ------------ | ------------------------------------------------------------------------------------------- |
 | `enabled`    | reviewer on/off                                                                             |
 | `baseUrl`    | OpenAI-compatible endpoint                                                                  |
-| `model`      | model name: `kev-4b` for `systemone`; in the chat path for backends that require it        |
+| `model`      | model name: `kev-4b` for `systemone`; in the chat path for backends that require it         |
 | `apiKeyEnv`  | name of the environment variable with the key, never the key itself                         |
 | `timeoutMs`  | upper bound, then `ask`                                                                     |
 | `grammar`    | GBNF; empty only for backends that reject it                                                |
@@ -227,7 +235,7 @@ the rest to the sandbox. Both sides read the same 40 cases from
 `test/shared-cases.jsonl` so they cannot drift apart.
 
 Details, the shared test cases and the differing deletion roots are in
-`METHODOLOGY.md` under "Als eigenes Repository veröffentlichen".
+`METHODOLOGY.md` under "Two implementations: OpenCode and Codex".
 
 ## Limits
 
@@ -254,7 +262,7 @@ Details, the shared test cases and the differing deletion roots are in
 node test/test.mjs                  # 992 unit tests, classifier and reviewer
 node test/test-wiring.mjs           # fake git: deny prevents execution
 node test/test-index.mjs            # plugin wiring, fake OpenCode
-node test/bench-mcp.mjs             # 33 fixed MCP cases
+node test/bench-mcp.mjs             # 40 fixed MCP cases, 15 of them denials
 node test/smoke-reviewer.mjs        # 9 cases against the running configuration
 python -m pytest tests -q           # Codex guard
 python -m ruff check .              # Python lint
@@ -278,7 +286,8 @@ are private on POSIX (0700/0600).
 
 | File                                     | Content                                                           |
 | ---------------------------------------- | ----------------------------------------------------------------- |
-| `METHODOLOGY_de.md`                      | rule set in detail, decision model, MCP verdict, measurement      |
+| `METHODOLOGY.md`                         | rule set in detail, decision model, MCP verdict, measurement      |
+| `METHODOLOGY_de.md`                      | the same in German                                                |
 | `PLANUNG.md`                             | state, measurement series, dated decisions (German)               |
 | `CHANGELOG.md`                           | file-by-file changes (German)                                     |
 | `COMPACTIONS.md`                         | why something was decided the way it was (German)                 |

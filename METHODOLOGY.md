@@ -9,7 +9,73 @@ The sections are taken over from the former README and unchanged in
 content. Dated states and measurement series live in `PLANUNG.md`, the
 file-by-file changes in `CHANGELOG.md`.
 
-## Regelwerk im Detail
+## Rule set in detail
+
+### What is allowed: the lists
+
+**Read-only:** A script is allowed when **every** statement can be classified
+as:
+
+- `Get-*`, `Test-Path`, `Resolve-Path`, `Measure-Object`, `Select-Object`,
+  `Where-Object`, `ForEach-Object`, `Sort-Object`, `Group-Object`, `Format-*`,
+  `Out-String`, `ConvertFrom/To-Json`, `Import-Csv`, `Select-String`,
+  `Compare-Object`, `Write-Output`
+- `git status|diff|log|show|branch|remote|rev-parse|ls-files|cat-file|stash show|config <key>`
+- `rg`, `grep`, `find`, `ls`, `cat`, `head`, `tail`, `wc`, `diff`, `jq`
+- `cd`, `Set-Location`, `Push-Location`, `Pop-Location`
+- assignments, expressions on variables, `[System.IO.File]::ReadAllText` & co.
+- `npm view|ls|outdated|search`
+- help and version calls: a program name with exactly one help word
+  (`gitleaks --version`, `ruff --help`, `node --version`, `version` as a word)
+- control blocks (`if`, `foreach`, `try`) whose body also only reads
+
+**Script blocks are code of their own.** A block behind a read-only pipeline
+cmdlet (`ForEach-Object`, `Where-Object`, `Select-Object`, `Sort-Object`,
+`Group-Object`, `Measure-Object` and their aliases `%`, `?`, `select`, `sort`,
+`group`, `measure`) is evaluated as its own script. The outer line proceeds only
+if every block returns `allow`; `ask` and `deny` are propagated with their
+reason. This also covers nested and calculated blocks. Previously
+`Get-ChildItem | ForEach-Object { Remove-Item -Recurse -Force C:\Windows\x }`
+counted as "read-only". Control blocks (`if`, `foreach`, `while`) are checked
+statement by statement.
+
+**File tools follow the same protected paths.** When the static rule for
+`edit`, `write` or `patch` returns `ask`, `scopeEdit()` checks every target
+path. Project files and `%TEMP%\opencode` are allowed; protected or external
+targets are denied, while wildcards and empty resources stay `ask`. Static
+`allow` and `deny` rules remain unchanged. Existing path segments are resolved
+physically so junctions and symlinks cannot hide their target. Guard messages
+omit target paths and usernames; URL credentials are removed from Git messages.
+
+**Writing inside the project:** Additionally allowed when every target is
+resolvable and lies inside a trusted folder:
+
+| Command                                                              | Example                                         |
+| -------------------------------------------------------------------- | ----------------------------------------------- |
+| `Set-Content`, `Add-Content`, `Out-File`, `Clear-Content`            | `Set-Content CHANGELOG.md "..."`                |
+| `New-Item`, `mkdir`                                                  | `New-Item -ItemType Directory build`            |
+| `Remove-Item`, `del`, `rm`                                           | `Remove-Item out.txt` — see deletion rule       |
+| `Copy-Item`, `Move-Item`, `Rename-Item`                              | `Move-Item a.md b.md`                           |
+| redirection into a file                                              | `git log > log.txt`                             |
+| `[System.IO.File]::WriteAllText` / `AppendAllText` / `WriteAllBytes` | `WriteAllText("CHANGELOG.md", $row)`            |
+| `git add`, `git commit` (without `--amend`)                          | `git commit -m "..."`                           |
+| `python -m ruff check --fix`, `python -m ruff format`                | `python -m ruff format .`                       |
+
+For `Copy-Item`, `Move-Item`, `Rename-Item` as well as `[System.IO.File]::Copy`,
+`Move` and `Replace`, source, target and any backup are checked together. A
+missing operand or one that cannot be resolved safely is `deny`.
+
+**Deleting is not writing** (user decision 29.10.2026):
+A `remove-item`, `rm`, `del`, `rd`, `rmdir`, `erase` or `ri` goes to a prompt
+as soon as `-Recurse` or `-Force` is set (also abbreviated `-r`/`-fo`), when a
+target contains a wildcard or has no known file extension (`.git` and
+`data.cache` therefore count as potential directories).
+
+This also covers the case that led to the decision: deleting a `.git` in a
+**subfolder** of the project previously passed as "writing in a trusted
+folder". Only plain deletion of a named file with a known extension inside the
+project stays `allow`. The project folder's own `.git` remains hard-blocked
+(`deny`, since 22.10.).
 
 ### Network reads: `Invoke-WebRequest` / `Invoke-RestMethod`
 
@@ -36,7 +102,7 @@ data; without a write target, however, only the request itself leaves.
 | `python -m pytest …` (also `py -3.12 -m pytest …`)                 | reading — the allowance deliberately covers test execution too (decision)                           |
 | `python -m pyright …` (also `py -3.12 -m pyright …`)               | reading — type check per `pyproject.toml`, writes neither source nor bytecode (decision 29.10.2026) |
 | `python -m ruff check …` without `--fix`                           | reading                                                                                             |
-| `python -m ruff format …`, `check … --fix …`                       | writing → target path check as in the README (`ruff format D:\…` stays `ask`, wildcards stay `ask`)  |
+| `python -m ruff format …`, `check … --fix …`                       | writing → target path check as in the README (`ruff format D:\…` stays `ask`, wildcards stay `ask`) |
 | `python -m ruff format --check \|--diff`                           | reading                                                                                             |
 | `python <script>` with target path **inside the project** (dec. 2) | reading — script content is versioned and reviewable; the script's parameters are not checked       |
 | everything else (`python -c`, `python -m pip`, scripts outside     | `ask`                                                                                               |
@@ -75,14 +141,14 @@ Deliberately **not** unlocked, all evidenced by the same replay:
 
 Both are explicit user decisions, anchored to paths like pytest:
 
-| Case                                                                                                            | Assessment                                                             |
-| --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Case                                                                                                                                                                                                                       | Assessment                                                             |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | `node tools/permission-guard/test/test.mjs`, `src/replay.mjs`, `src/analyze.mjs`, plus `test/test-index.mjs`, `test/test-wiring.mjs`, `bench-*.mjs`, `test/smoke-reviewer.mjs` — also relative, with `2>&1`, after `cd` or | reading — the guard maintaining itself, content versioned              |
-| with an unambiguously assigned path prefix                                                                      |                                                                        |
-| `python <script>` with a target path inside the project (`*.py`), script parameters unchecked                   | reading — content is versioned and therefore reviewable before it runs |
-| `python -c`, `python -m <other>`, `python` without target script (REPL)                                         | `ask` — inline code is invisible to review                             |
-| scripts outside the project (temp folder) and `<project>\.git`                                                  | `ask` — outside the reviewed circle                                    |
-| `node` with a foreign script, `--eval`, `--version`, bare call; `deno`, `ruby`, `perl`                          | `ask` — only the named self scripts are allowed                        |
+| with an unambiguously assigned path prefix                                                                                                                                                                                 |                                                                        |
+| `python <script>` with a target path inside the project (`*.py`), script parameters unchecked                                                                                                                              | reading — content is versioned and therefore reviewable before it runs |
+| `python -c`, `python -m <other>`, `python` without target script (REPL)                                                                                                                                                    | `ask` — inline code is invisible to review                             |
+| scripts outside the project (temp folder) and `<project>\.git`                                                                                                                                                             | `ask` — outside the reviewed circle                                    |
+| `node` with a foreign script, `--eval`, `--version`, bare call; `deno`, `ruby`, `perl`                                                                                                                                     | `ask` — only the named self scripts are allowed                        |
 
 Resolution is against the session's working folder; a `cd` in the same script
 follows along; a failed `cd` target disables relative resolution (fail closed).
@@ -159,11 +225,11 @@ therefore do not block. A revoked `trust` appears as the line
 Instead of a prompt nobody can answer with a reason, the guard denies when the
 execution target is not readable in the line:
 
-| Form                   | Example                                    | Behaviour                                                         |
-| ---------------------- | ------------------------------------------ | ----------------------------------------------------------------- |
-| call operator          | `& node $tp $src 2>&1`, `& $browser`       | `deny` — the target sits in a variable                            |
-| dot-sourcing           | `. .\init.ps1`                             | `deny` — loads a script into the running session                  |
-| block with such a form | `if ($ok) { & run.ps1 }`                   | `deny` — the denial dominates the whole block                     |
+| Form                   | Example                                         | Behaviour                                                         |
+| ---------------------- | ----------------------------------------------- | ----------------------------------------------------------------- |
+| call operator          | `& node $tp $src 2>&1`, `& $browser`            | `deny` — the target sits in a variable                            |
+| dot-sourcing           | `. .\init.ps1`                                  | `deny` — loads a script into the running session                  |
+| block with such a form | `if ($ok) { & run.ps1 }`                        | `deny` — the denial dominates the whole block                     |
 | fully spelled-out call | `node "C:\...\node.exe" "C:\...\test/test.mjs"` | normal classification — path visible, `ask`/`allow` per all rules |
 
 Denial also beats the secret prompt (`& $t` next to `$env:GITHUB_TOKEN` →
@@ -359,7 +425,7 @@ The matrix is pinned by `gitGuardrails`, `reviewerGit` and `messageChecks` in
 does not execute the command. The static rules are not part of `test/test.mjs`; they
 are checked via `check_jsonc.py` and the dialog.
 
-## Protokoll und Auswertung
+## Log and evaluation
 
 ### Audit chain (step D, 05.11.2026)
 
@@ -517,7 +583,9 @@ GLiDE-9B asks back on `Get-ChildItem -Force` in all three of three runs. lev was
 already out after the pre-measurement — 13/14 on the MCP side, and `move-outside`
 allowed at p 0.879 — and was therefore not cross-checked.
 
-**Operational details.** The starter passes `-b 4096 -ub 4096`. That only
+**Operational details.**
+
+The starter passes `-b 4096 -ub 4096`. That only
 applies to decision models: they run in embedding mode, where llama.cpp enforces
 `n_batch = n_ubatch`, and question plus answer options must fit into **one**
 batch. The values override the chat-suitable setting in
@@ -671,13 +739,13 @@ Catalogue rules:
 `mcpVerdict()` in `src/guard.js` forms a verdict, `mcpAction()` decides whether it
 applies. Both are pure and testable without a backend.
 
-| Layer                     | Checks                                               | Result                                            |
-| ------------------------- | ---------------------------------------------------- | ------------------------------------------------- |
-| 2 emergency brake (first) | tool name and arguments against a short, narrow list | `deny`                                            |
+| Layer                     | Checks                                               | Result                                                                                  |
+| ------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| 2 emergency brake (first) | tool name and arguments against a short, narrow list | `deny`                                                                                  |
 | 1 fixed rule              | intent from step B                                   | `allow` on `read`; `deny` on `write`/`destructive` outside project and temp, else `ask` |
-| 3 local model             | only on `unknown`, `chat` with three channels or ↵   | `allow` only on a clear "yes" or p ≥              |
-| ↳                         |                                                      | `mcpThreshold`,                                   |
-| ↳                         | `systemone` with `{tool, arguments}`                 | otherwise `ask`                                   |
+| 3 local model             | only on `unknown`, `chat` with three channels or ↵   | `allow` only on a clear "yes" or p ≥                                                    |
+| ↳                         |                                                      | `mcpThreshold`,                                                                         |
+| ↳                         | `systemone` with `{tool, arguments}`                 | otherwise `ask`                                                                         |
 
 Order and limits:
 
@@ -761,8 +829,8 @@ returned 10/14 and 12/14), the run uses a fixed seed and no cache
 | **compact, four examples** | **12/14 (86 %)** | 14/14 unanimous over three runs each       |
 
 The two remaining errors go in the safe direction (prompt instead of
-allowance). The fixed regime remains unchanged: 33/33 forwards, 3/3 in the grey
-area.
+allowance). The fixed regime stayed unchanged across those measurements: 33/33
+forwards, 3/3 in the grey area (the case set now holds 40 cases).
 
 Sensitivity: a single word in the first sentence ("Answer only **with** …")
 shifted 12/14 to 11/14 and the grey-area gate from 3/3 to 2/3. The wording is
@@ -772,9 +840,9 @@ therefore pinned and protected by tests; changes only with a fresh measurement.
 
 `mcpBackend` selects the path:
 
-| Value                 | Path                                                  | Measured (14 grey-area cases)    |
-| --------------------- | ----------------------------------------------------- | -------------------------------- |
-| `chat`                | `chat/completions`, answer word via grammar           | 12/14 at 12B, 13/14 at 26B       |
+| Value                 | Path                                                  | Measured (14 grey-area cases)        |
+| --------------------- | ----------------------------------------------------- | ------------------------------------ |
+| `chat`                | `chat/completions`, answer word via grammar           | 12/14 at 12B, 13/14 at 26B           |
 | `systemone` (default) | `/v1/systemone`, decision model returns a probability | **14/14** with Kev-4B and Clef-Flash |
 
 In `systemone` mode the prompt disappears: the state is `{tool, arguments}`,
@@ -783,7 +851,7 @@ the question a `choice` between "reads" and "changes", and `mcpThreshold`
 <https://huggingface.co/Cloudflare/clef-flash>):
 prompt cases ≤ 0.458, allow cases ≥ 0.884 — the separation is the evidence, not
 the hit rate. Laya (421M) is out: 8/14, probabilities 0.09–0.60 without order.
-The fixed gate remains 33/33 and 3/3 in both modes.
+At that time the fixed gate was 33/33 and 3/3 in both modes.
 
 ```jsonc
 "mcpBackend": "systemone",
@@ -877,13 +945,13 @@ to be. The list is short on purpose — it names formats, not intentions.
 Not every repository with "clef" or "jev" in its name works. Checked on
 20.11.2026:
 
-| Repository | GGUF metadata | `/v1/systemone` |
-| --- | --- | --- |
-| `ggml-org/Clef-Flash-GGUF` | `architecture = clef`, `clef.decision.type = clef` | yes, measured 23/23 at 0.65 |
-| `ggml-org/Kev-4B-GGUF` | `architecture = qwen35`, `qwen35.decision.type = kev` | yes — Q4_K_M 23/23 at 0.50, Q8_0 22/23 |
-| `NANI-Nithin/clef-flash-GGUF` | `architecture = qwen35`, no decision metadata | **no** — language tower only, the joint schema head is not in the file |
-| `ngquocvinh/Jev-Omni-GGUF` | `architecture = gemma4`, no decision metadata | **no** — needs a Python adapter that applies the decision head |
-| `mradermacher/Jeff-1.1-Qwen-4B-GGUF` | `architecture = qwen35`, no decision metadata | **no** — Jev-format, not the llama.cpp API |
+| Repository                           | GGUF metadata                                         | `/v1/systemone`                                                        |
+| ------------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------------------- |
+| `ggml-org/Clef-Flash-GGUF`           | `architecture = clef`, `clef.decision.type = clef`    | yes, measured 23/23 at 0.65                                            |
+| `ggml-org/Kev-4B-GGUF`               | `architecture = qwen35`, `qwen35.decision.type = kev` | yes — Q4_K_M 23/23 at 0.50, Q8_0 22/23                                 |
+| `NANI-Nithin/clef-flash-GGUF`        | `architecture = qwen35`, no decision metadata         | **no** — language tower only, the joint schema head is not in the file |
+| `ngquocvinh/Jev-Omni-GGUF`           | `architecture = gemma4`, no decision metadata         | **no** — needs a Python adapter that applies the decision head         |
+| `mradermacher/Jeff-1.1-Qwen-4B-GGUF` | `architecture = qwen35`, no decision metadata         | **no** — Jev-format, not the llama.cpp API                             |
 
 The architecture alone says nothing: Kev-4B is a `qwen35` model and still a
 decision model. The `decision.type` metadata is what counts.
@@ -903,9 +971,10 @@ silently discards values outside that band and uses the default, so
 
 ### Step E: test regime before activation
 
-`test/bench-mcp.mjs` checks the verdict against `test/mcp-cases.jsonl`: **33 calls with a
-predefined target**, of which 8 `allow`, 14 `ask`, 9 `deny` and 2 in the grey
-area (`model`). Nine blocks are about one third — the plan's requirement. The
+`test/bench-mcp.mjs` checks the verdict against `test/mcp-cases.jsonl`: **40 calls with a
+predefined target**, of which 8 `allow`, 15 `ask`, 15 `deny` and 2 in the grey
+area (`model`). The set started with 33 cases and grew with the rules; 15 blocks
+are about one third — the plan's requirement. The
 expectation sits in the case line, not in the code; otherwise the regime would
 test itself.
 
@@ -1017,14 +1086,14 @@ implementation does not affect the other.
 
 | Property    | OpenCode                                                           | Codex                                                      |
 | ----------- | ------------------------------------------------------------------ | ---------------------------------------------------------- |
-| Entry point | `src/index.js`: `Plugin.define` with `permission.hook("evaluate")`     | `PreToolUse` hook from `~/.codex/hooks.json`, 10 s timeout |
-| Check code  | `src/guard.js` (about 100 KB)                                          | `codex_guard.py` here in the repo (about 270 lines)        |
+| Entry point | `src/index.js`: `Plugin.define` with `permission.hook("evaluate")` | `PreToolUse` hook from `~/.codex/hooks.json`, 10 s timeout |
+| Check code  | `src/guard.js` (about 100 KB)                                      | `codex_guard.py` here in the repo (about 270 lines)        |
 | Verdicts    | `allow`, `ask`, `deny`                                             | `deny` or pass through                                     |
 | Basis       | shell decomposition, static lists, path check, MCP in three layers | text patterns on the command text, fixed catalogue         |
 | Model       | yes, level 1/3 for unclear cases via `llama-server`                | no                                                         |
 | Runtime     | inside the OpenCode process, synchronous                           | own process per call, synchronous                          |
 | Failure     | exception is logged; static rules decide                           | hook does not start: Codex reports and lets it run         |
-| Tests       | `node test/test.mjs` (992 cases)                                        | `python -m pytest tests -q` (149 passed, 1 skipped)        |
+| Tests       | `node test/test.mjs` (992 cases)                                   | `python -m pytest tests -q` (149 passed, 1 skipped)        |
 
 **Why separate.** Codex has no `ask`; a hook can only deny or let through. The
 Codex part is a narrow catalogue of hard cases; the sandbox covers the rest.
