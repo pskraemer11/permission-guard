@@ -1,6 +1,6 @@
 # PLANUNG — permission-guard
 
-Stand: 20.11.2026
+Stand: 21.11.2026
 
 ## Wozu dieses Dokument
 
@@ -39,17 +39,53 @@ Ablageort.
 
 ## Offene Punkte, priorisiert
 
-| Prio | Punkt                                                                                     | Aufwand | Abhängigkeit                  |
-| ---- | ----------------------------------------------------------------------------------------- | ------- | ----------------------------- |
-| P1   | S6: Parent-Workflow entfernen, Verweise umstellen                                         | S       | CI grün (erfüllt), Zustimmung |
-| P2   | Beobachtung nach Aktivierung: 24 h Log und `mcp-report` prüfen                            | S       | läuft seit 05.11.             |
-| P3   | Shell-Fälle als `shell-cases.jsonl` und `bench-shell` festschreiben                       | S       | —                             |
-| P3   | G0/G1: Ergebnis-Form prüfen, Grenz-Markierung                                             | M       | D                             |
-| P3   | G2/G3: statische Injection-Prüfung, optional lokales Modell                               | M–L     | G1                            |
-| P3   | Dreiweg-Antwort „Unbestimmt" entscheiden                                                  | S       | Messung                       |
-| P3   | Warmup-`TypeError` diagnostizieren                                                        | S       | —                             |
-| P3   | Suchmuster mit Befehlsnamen (`iex`) löst Verweigerung aus                                 | S       | —                             |
-| P3   | Smoke braucht Warmup (Lessons learned 16.11.2026)                                         | S       | —                             |
+Stand: 21.11.2026. Die Liste vom 20.11. ist gegen die späteren Nachträge geprüft.
+Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
+
+| Prio | Punkt                            | Was fehlt                                                                                               | Aufwand | Abhängigkeit           |
+| ---- | -------------------------------- | ------------------------------------------------------------------------------------------------------- | ------- | ---------------------- |
+| P1   | G1 live belegen                  | Deploy ist durch (21.11.); es fehlen zwei echte `webfetch`-Abrufe: lokal (erlaubt), extern (fragt nach) | S       | keine                  |
+| P1   | Warmup-Beweis                    | Behandlung eingebaut, Nachweis beim nächsten Kaltstart fehlt                                            | S       | Kaltstart              |
+| P2   | P0-5 Prompt-Schärfung            | Kriterien statt „harmlos?", zwei Negativbeispiele, Messung vorher/nachher                               | M       | keine (Text liegt vor) |
+| P2   | P0-11 Server-Stapel              | große Argumente scheitern am physischen Stapel; `-ub`-Anhebung ungemessen                               | M       | Messplatz              |
+| P2   | Dreiweg-Antwort „Unbestimmt"     | eingebaut, aber aus (11/14); Entscheidung offen                                                         | S       | Messung aus P0-5       |
+| P2   | G3 lokales Modell im Graubereich | nur annotieren, nie blockieren; nur wenn G2 messbaren Nutzen zeigt                                      | L       | Nutzen von G2 belegt   |
+| P3   | P1-03 Shell-Pfad                 | `deny` gewinnt im Edit-Pfad, im Shell-Pfad nicht                                                        | M       | roter Fall             |
+| P3   | P0-9 weitere pytest-Optionen     | `-o`, `--junit-xml`, `--html`, `-p no:cacheprovider` unbewiesen                                         | S       | eigene Probe           |
+| P3   | Smoke braucht Warmup             | `smoke-reviewer.mjs` wärmt nicht vor                                                                    | S       | keine                  |
+| P3   | MMProj bei Clef-Flash            | nötig oder falsch verdrahtet? (~900 MB im Modell-Setup)                                                 | S       | Auftrag                |
+| P3   | Weg B: Sandbox-ADR               | eigener Entscheidungsauftrag, weniger `ask` bei gleicher Härte                                          | M       | Auftrag                |
+| —    | Suchmuster mit Befehlsnamen      | `Select-String -Pattern 'iex'` wird verweigert; bewusst offen als Grenze des Klassifizierers            | —       | keine                  |
+
+### Erledigt seit dem 20.11.2026
+
+| Punkt                              | Beleg                                                                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| S6: Parent-Workflow entfernen      | `AI+IDE-Hints/.github/workflows/permission-guard.yml` existiert nicht mehr                                         |
+| P2: Beobachtung nach Aktivierung   | `src/mcp-report.mjs`: F-Kriterien erfüllt — Tage 13/7, Aufrufe 191/50, Werkzeuge 23/3, schreibend 1/1              |
+| P3: Shell-Fälle festschreiben      | `test/shell-model-cases.jsonl` und `test/bench-shell.mjs`, 23 Fälle                                                |
+| P3: G0/G1 Ergebnis-Form            | Grenz-Markierung umgesetzt und im Code-Mode-Pfad nachgezogen; `test-index.mjs` 45/45                               |
+| P3: G2 statische Injection-Prüfung | sechs Format-Familien in `guard.js`; `test.mjs` 992/992                                                            |
+| P3: Warmup-`TypeError`             | Ursache gefunden (`cause.cause`, `cause.errors`), Wiederholung bei `ECONNREFUSED`/`ECONNRESET` eingebaut           |
+| ADR 0002, Offene Frage 1           | beantwortet durch „Stufe 3 umgesetzt (vier Achsen)"                                                                |
+| ADR 0002, Offene Frage 2           | beantwortet durch „Deny-Limits umgesetzt (Option B)"                                                               |
+
+### Reihenfolge
+
+1. **G1-Live und Warmup-Beweis** — beide brauchen nur einen Neustart und zwei
+   Abrufe. Sie schließen zwei Aussagen, die derzeit als „offen" in der Doku
+   stehen.
+2. **Ein Messblock am Server: P0-5 → Dreiweg → P0-11.** Alle drei brauchen
+   Läufe gegen denselben Reviewer. P0-5 ändert den Prompt, die Dreiweg-Frage
+   die Antwortachse, P0-11 die Startparameter; wer sie trennt, misst dreimal
+   dieselbe Grundlage.
+3. **Entscheidungsabhängig danach:** G3 nur, wenn G2 messbaren Nutzen zeigt
+   (dafür fehlt bisher die Auswertung der markierten Ergebnisse); P1-03 nur mit
+   einem roten Fall aus dem Log — ohne Beleg kein Code-Eingriff.
+4. **Parallel, ohne Code:** MMProj-Frage klären (Modell-Setup ansehen), Weg B
+   als ADR-Entwurf, P0-9 als eigene Probe mit einem Testfall je Option.
+5. **Bewusst offen:** das `iex`-Suchmuster. Es ist eine Grenze, kein Fehler.
+
 
 ## Plan 1: Eigenständiges Repository
 
@@ -397,7 +433,8 @@ Festgelegt:
 | 4   | untracked Docs | nicht veröffentlichen, lokal behalten                            |
 | 5   | G              | zunächst nur annotieren                                          |
 | 6   | npm            | GitHub-only für v0.1.0, `"private": true` (05.11.2026)           |
-| 7   | Kriterien F    | 7 verschiedene Tage, ≥ 50 Aufrufe, ≥ 3 Werkzeuge, davon ≥ 1 schreibend (05.11.2026) |
+| 7   | Kriterien F    | 7 verschiedene Tage, ≥ 50 Aufrufe, ≥ 3 Werkzeuge,                |
+| ↳   |                | davon ≥ 1 schreibend (05.11.2026)                                |
 | 9   | Merge-Regel    | Pflicht-Checks bleiben, Zwang „Branch aktuell“ entfällt          |
 | 10  | Handle         | erlaubt (20.11.2026); E-Mail und Klarname bleiben verboten       |
 
