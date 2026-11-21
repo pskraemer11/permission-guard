@@ -1764,11 +1764,19 @@ ergab vier Treffer — die Familie erkennt also auch normale Markdown- und
 Log-Zeilen. `staging/injection-sample.mjs <datei>` zeigt für eine beliebige
 Datei, welche Zeilen anschlagen.
 
-**Nächster Schritt.** Eine Stichprobe der 44 Treffer sichten. Fällt sie
-überwiegend auf normale Textzeilen, ist die Regel zu breit; dann wäre eine
-engere Fassung zu prüfen (nur `### System:` und Rollenzeilen nach einer
-Leerzeile), mit dem Risiko, echte Fälle zu verlieren. Solange das offen ist,
-bleibt G3 zurückgestellt.
+**Rückwirkend nicht sichtbar.** Die Sichtung über die Session-Daten scheitert:
+Die Tabelle `part` der OpenCode-Datenbank enthält Daten bis 16.10.2026, die
+aktuelle Sitzung liegt dort nicht; `session_part` ist leer. Über die API heißen
+die Werkzeuge `shell`, `edit`, `write`, `read`, `grep` — der Code-Mode, den der
+Guard als `execute` protokolliert, erscheint dort nicht unter diesem Namen. Die
+44 Treffer lassen sich also nicht nachträglich zuordnen.
+
+**Nächster Schritt.** Live sichten: Beim nächsten `verdacht=rollenzeile` im
+`guard.log` die Ausgabe des Aufrufs prüfen und entscheiden, ob die Zeile
+harmlos ist. Fällt sie überwiegend auf normale Textzeilen, ist die Regel zu
+breit; dann wäre eine engere Fassung zu prüfen (nur `### System:` und
+Rollenzeilen nach einer Leerzeile), mit dem Risiko, echte Fälle zu verlieren.
+Solange das offen ist, bleibt G3 zurückgestellt.
 
 ## Nachtrag 20.11.2026: Entscheidungsmodelle gemessen, Kev-4B im Betrieb
 
