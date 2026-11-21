@@ -90,9 +90,18 @@ try {
     # conclusion widersprechen sich dann, und --watch ohne --required wartet
     # endlos (Vorfall 21.11.2026, Job "Zeilenenden und BOM"). Ein Fehlschlag
     # unter den optionalen Pruefungen zaehlt weiterhin.
-    & gh pr checks --watch --required
-    if ($LASTEXITCODE -ne 0) {
-        throw "Erforderliche Pruefungen nicht bestanden. Branch $Branch bleibt stehen; main ist unveraendert."
+    # Direkt nach dem Push sind die Pruefungen noch nicht registriert; gh meldet
+    # dann "no checks reported" und endet mit Exit 1. Das ist kein Fehlschlag,
+    # sondern zu frueh - deshalb warten und erneut versuchen (max. 3 Minuten).
+    # Jeder andere Exitcode ist ein echtes Ergebnis und bricht sofort ab.
+    $deadline = (Get-Date).AddMinutes(3)
+    while ($true) {
+        $report = (& gh pr checks --watch --required 2>&1 | Out-String)
+        if ($LASTEXITCODE -eq 0) { break }
+        if ($report -notmatch 'no checks reported' -or (Get-Date) -gt $deadline) {
+            throw "Erforderliche Pruefungen nicht bestanden. Branch $Branch bleibt stehen; main ist unveraendert.`n$($report.Trim())"
+        }
+        Start-Sleep -Seconds 5
     }
 
     $failed = & gh pr checks --json state,name --jq '[.[] | select(.state == "FAILURE") | .name] | join(", ")'

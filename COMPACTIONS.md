@@ -3320,3 +3320,46 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
 - Ein `--amend` auf einem bereits gepushten Commit erzeugt eine Divergenz
   (ahead 1 / behind 1). Vor dem Amend prüfen, ob der Branch schon gepusht ist.
 - Untracked bleiben: vier Screenshots, ein JPG und `review/`.
+
+
+================ Compaction 21.11.2026 / 01:23 ================
+## Objective
+- **Current:** `ship.ps1` übersteht jetzt auch die Sekunden zwischen
+  `gh pr create` und der Registrierung der Prüfungen. Umgesetzt und geprüft,
+  noch nicht committet.
+- **Completed:** PR #18 gemergt; Messrunde der Decision-Modelle läuft.
+
+## Important Details
+- **Das Rennen:** `gh pr checks` meldet direkt nach dem Push „no checks
+  reported" und endet mit Exit 1 — nicht mit „warte noch". `--watch` allein
+  hätte dasselbe getan; das war die Lücke im ersten Fix.
+- **Lösung:** Wiederholung nur bei genau diesem Wortlaut, 5 s Abstand, maximal
+  drei Minuten. Jede andere Rückmeldung bricht sofort ab und nennt die Ausgabe.
+- **Messrunde:** Kev-4B (Tageskontrolle), pplx-decider-flash-v1.3, GLiDE-9B,
+  lev — je `-np 1` und `-np 5`. `measure.mjs` löst die Falllisten jetzt über
+  `../test/` auf, `measure-all.ps1` hält beide Tasks während des Laufs an.
+- **KnowLine/SingVL/Jeffan sind Decision-Modelle, aber nicht für uns:**
+  `/v1/systemone` kommt dort aus eigenen Python-Frontends (SGLang bzw.
+  FastAPI), nicht aus llama.cpp. Die GGUF-Dateien tragen kein
+  `<arch>.decision.type`; ein Jeffan-GGUF rechnet zudem kausal statt
+  bidirektional und wäre damit ein anderes Modell als gemessen.
+
+## Work State
+- Geändert: `scripts/ship.ps1`, `CHANGELOG.md`, `PLANUNG.md`, `COMPACTIONS.md`.
+- Geprüft: Parser-Prüfung aller `scripts/*.ps1` ohne Befund.
+- Offen: Commit; Ergebnisse der Messrunde auswerten.
+
+## Next Move
+1. Committen.
+2. Messrunde abwarten, Schwellentabellen auswerten, Gegenprobe mit
+   `test/bench-model.mjs` und `test/bench-shell.mjs --repeat 3`.
+
+## Relevant Files
+- `scripts/ship.ps1`: Prüfschleife.
+- `staging/measure-all.ps1`, `staging/measure.mjs`: Messlauf.
+- `staging/measure-<modell>-np<n>.json`: Rohdaten der Runde.
+
+## Important Context
+- Die Messrunde läuft als Hintergrundprozess; sie schreibt nur nach `staging/`
+  und berührt den Arbeitsbaum nicht.
+- Untracked bleiben: vier Screenshots, ein JPG und `review/`.
