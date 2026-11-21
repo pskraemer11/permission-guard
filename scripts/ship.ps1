@@ -62,7 +62,8 @@ try {
         "git switch $Branch",
         "git push -u origin $Branch",
         "gh pr create --base main --head $Branch --fill",
-        "gh pr checks --watch",
+        "gh pr checks --watch --required",
+        "gh pr checks --json state,name (Suche nach FAILURE)",
         "gh pr merge --merge --delete-branch",
         "git switch main",
         "git pull --ff-only"
@@ -84,9 +85,19 @@ try {
     & gh pr create --base main --head $Branch --fill
     if ($LASTEXITCODE -ne 0) { throw 'PR konnte nicht angelegt werden.' }
 
-    & gh pr checks --watch
+    # Nur die erforderlichen Pruefungen blockieren. GitHub laesst gelegentlich
+    # einen fertig gelaufenen Job auf "in_progress" stehen - Status und
+    # conclusion widersprechen sich dann, und --watch ohne --required wartet
+    # endlos (Vorfall 21.11.2026, Job "Zeilenenden und BOM"). Ein Fehlschlag
+    # unter den optionalen Pruefungen zaehlt weiterhin.
+    & gh pr checks --watch --required
     if ($LASTEXITCODE -ne 0) {
-        throw "Pruefungen nicht bestanden. Branch $Branch bleibt stehen; main ist unveraendert."
+        throw "Erforderliche Pruefungen nicht bestanden. Branch $Branch bleibt stehen; main ist unveraendert."
+    }
+
+    $failed = & gh pr checks --json state,name --jq '[.[] | select(.state == "FAILURE") | .name] | join(", ")'
+    if ($failed) {
+        throw "Pruefung fehlgeschlagen: $failed. Branch $Branch bleibt stehen; main ist unveraendert."
     }
 
     & gh pr merge --merge --delete-branch

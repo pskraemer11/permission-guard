@@ -141,6 +141,14 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **`ship.ps1` wartet nur auf erforderliche Prüfungen (21.11.2026):**
+  `gh pr checks --watch --required` statt `--watch`. Grund: GitHub ließ im
+  Push-Lauf 44838614289 den fertigen Job „Zeilenenden und BOM" auf
+  `in_progress` stehen, obwohl alle Schritte `success` meldeten — `--watch`
+  wartete endlos, während die PR-Seite grün zeigte (erforderlich sind nur die
+  vier `Tests (Node …)`-Kontexte und `actionlint`). Ein Fehlschlag unter den
+  optionalen Prüfungen wird weiterhin gemeldet: eine zweite Abfrage sucht
+  `state == "FAILURE"` über alle Prüfungen und bricht dann ab.
 - **Module nach `src/`, Tests nach `test/` (21.11.2026, Stufe 2):** `guard.js`,
   `index.js`, `reviewer.js`, `audit.js`, `diagnostics.js`, `shadow.js` und die
   Berichtswerkzeuge `analyze.mjs`, `replay.mjs`, `stats.mjs`, `mcp-report.mjs`,

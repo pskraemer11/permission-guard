@@ -1550,6 +1550,26 @@ abgezogen), `.githooks/test-gate.conf` (Präfixe `src/`, `test/`; Testbefehl
 `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md`. `docs/adr/0002` nennt die alten
 Pfade weiter und trägt einen Nachtrag dazu.
 
+## Nachtrag 21.11.2026: `ship.ps1` bleibt nicht mehr an optionalen Prüfungen hängen
+
+**Vorfall.** Nach dem Push von `69ce8ea` zeigte die PR-Seite alle Prüfungen grün,
+`gh pr checks --watch` im Terminal wartete trotzdem weiter. Ursache: Im Push-Lauf
+44838614289 blieb der Job „Zeilenenden und BOM" (136641155066) auf
+`status: in_progress` stehen, obwohl alle fünf Schritte `success` meldeten und
+`completed_at` gesetzt war — ein Widerspruch auf GitHub-Seite, den nur ein
+Neustart des Jobs auflöst. Erforderlich sind im Ruleset `baseline` nur fünf
+Kontexte (die vier `Tests (Node …)`-Jobs und `actionlint`); der hängende Job ist
+optional. `mergeStateStatus` war `CLEAN`, der Merge wäre also möglich gewesen.
+
+**Umgesetzt.** `ship.ps1` wartet mit `--required` nur auf die erforderlichen
+Prüfungen. Danach sucht eine zweite Abfrage über alle Prüfungen nach
+`state == "FAILURE"` und bricht bei einem Treffer ab: Ein hängender optionaler
+Job blockiert nicht mehr, ein fehlgeschlagener schon.
+
+**Belegt an PR #17:** `--required` listet nur die zehn erforderlichen Einträge
+(beide Läufe), `--watch --required` endet sofort mit Exit 0, die
+Fehlschlag-Suche liefert `[]`.
+
 ## Nachtrag 21.11.2026: Guard erlaubt die eigenen Prüfskripte im Guard-Ordner
 
 **Befund.** Ein Prüfagent hat nachgewiesen, warum die Sitzung zweimal in die
