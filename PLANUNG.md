@@ -46,7 +46,6 @@ Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
 | ---- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------- | ----------------------- |
 | P1   | Dateiwerkzeuge prüfen               | `deny` blockt den `edit`-Pfad; die pauschalen `edit`-Freigaben sind gelöscht. Offen: Freigabe oder stille `ask`-Quittung? | S       | kontrollierter Test     |
 | P1   | Warmup-Kaltstart                    | Fehlerpfad belegt (5 Versuche, kein `TypeError`); der Kaltstart über den Dateiwatcher fehlt noch                          | S       | Dateiwatcher löst aus   |
-| P2   | `start-reviewer.ps1` ohne Zeitlimit | wartet 60 s auf `/health`, meldet dann Abbruch; bei belegter Log-Datei hängt der Start (21.11.2026)                       | S       | keine                   |
 | P2   | Bench-Grundlage                     | `src/shell-reviewer.config.json` ist jetzt Quelle und wird deployt; Betrieb und Bench messen damit gleich                 | S       | Deploy durch den Nutzer |
 | P2   | G3 lokales Modell im Graubereich    | nur annotieren, nie blockieren; setzt die Sichtung der 48 G2-Treffer voraus (Nachtrag 21.11.)                             | L       | G2-Treffer gesichtet    |
 | P3   | P1-03 Shell-Pfad                    | `deny` gewinnt im Edit-Pfad, im Shell-Pfad nicht                                                                          | M       | roter Fall              |
@@ -65,6 +64,7 @@ Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
 | Dreiweg-Antwort                    | gemessen 21.11.2026: 14/14 mit und ohne; „Unbestimmt" kommt in keinem der 14 Fälle vor                                               |
 | P0-11 Server-Stapel                | gemessen 21.11.2026: bis 48.000 Zeichen Status 200 mit `-ub 4096` und mit `-ub 2048`; kein „too large" im Betrieb                    |
 | `-b`/`-ub` 2048                    | Default in `start-reviewer.ps1` seit 21.11.2026; Compute-Puffer 4297 → 2149 MiB, KV-Cache unverändert                                |
+| `start-reviewer.ps1` Zeitlimit     | erkennt gehaltene Log-Dateien in 10 s und bricht mit Pfad und Hinweis ab; `/health`-Schleife mit 120-s-Budget (21.11.2026)           |
 | S6: Parent-Workflow entfernen      | `AI+IDE-Hints/.github/workflows/permission-guard.yml` existiert nicht mehr                                                           |
 | P2: Beobachtung nach Aktivierung   | `src/mcp-report.mjs`: F-Kriterien erfüllt — Tage 13/7, Aufrufe 191/50, Werkzeuge 23/3, schreibend 1/1                                |
 | P3: Shell-Fälle festschreiben      | `test/shell-model-cases.jsonl` und `test/bench-shell.mjs`, 23 Fälle                                                                  |
@@ -1740,6 +1740,33 @@ bleibt die Berechtigungsprüfung.
 
 **Messung.** `test.mjs` 975/975 (acht neue Fälle), `test-index.mjs` 45/45
 (zwei neue Fälle).
+
+## Nachtrag 21.11.2026: Ursache der hängenden Reviewer-Starts
+
+Zwei Starts am 21.11.2026 hingen je 10 bis 15 Minuten, ohne Meldung. Der
+Server war laut Log längst bereit (`listening on …:8080`), das Skript kam
+trotzdem nicht weiter.
+
+**Ursache.** `Start-Process` mit `-RedirectStandardOutput` öffnet die
+Log-Dateien im Elternprozess. Hielt ein anderer Prozess sie noch, blockierte
+der Aufruf ohne Meldung. Im konkreten Fall war es eine interaktive
+PowerShell-Sitzung (PID 3132, vom Explorer um 12:57 gestartet), die beide
+Dateien offen hielt. `Start-Process` wartete, die `/health`-Schleife wurde nie
+erreicht.
+
+**Behoben.** `start-reviewer.ps1` prüft vor dem Start, ob
+`permission-guard-reviewer-<port>.log` und `.log.err` schreibbar sind
+(`FileShare::None`), wartet bis zu 10 s und bricht sonst mit Pfad und Hinweis
+ab. Die `/health`-Schleife läuft gegen ein Gesamtbudget von 120 s; bei Ablauf
+nennt sie Log-Pfad und PID.
+
+**Verworfen.** Ein `Start-Job` mit `Wait-Job -Timeout` sollte auch
+`Start-Process` selbst begrenzen. In einem nicht-interaktiven `pwsh -File`
+blieb der Job hängen; das äußere Skript lief 300 s weiter. Die Log-Prüfung
+deckt den beobachteten Fall ab, ohne diesen Umweg.
+
+**Beleg.** Bei gehaltener Datei bricht das Skript nach 11 s ab:
+`Log-Datei wird noch gehalten: …\permission-guard-reviewer-8080.log.err`.
 
 ## Nachtrag 21.11.2026: G2 im Betrieb — 45 Treffer, Sichtung offen
 

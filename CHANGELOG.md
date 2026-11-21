@@ -162,6 +162,15 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **`start-reviewer.ps1` bricht statt zu hängen (21.11.2026):** Zwei Starts am
+  21.11. blockierten je 10 bis 15 Minuten, weil eine fremde PowerShell-Sitzung
+  die Log-Dateien offen hielt und `Start-Process -RedirectStandardOutput` beim
+  Öffnen wartete. Das Skript prüft die beiden Log-Dateien jetzt vor dem Start
+  (`FileShare::None`), wartet bis zu 10 s und bricht sonst mit Pfad und Hinweis
+  ab; die `/health`-Schleife läuft gegen ein Gesamtbudget von 120 s und nennt
+  bei Ablauf Log-Pfad und PID. Ein `Start-Job` mit `Wait-Job -Timeout` wurde
+  versucht und verworfen, weil er in `pwsh -File` selbst hängen blieb.
+  Beleg: Abbruch nach 11 s bei gehaltener Datei.
 - **Stapel-Default in `start-reviewer.ps1` auf 2048 (21.11.2026):** `-Batch` und
   `-Ubatch` stehen jetzt auf 2048 statt 4096. Mit Kev-4B gehen auch mit 2048
   Eingaben bis 48.000 Zeichen durch (Status 200, 2,3 s), während der
