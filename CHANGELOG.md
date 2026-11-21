@@ -141,6 +141,12 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **`ship.ps1` übersteht den Start der Prüfungen (21.11.2026):** Unmittelbar
+  nach `gh pr create` meldet `gh pr checks` „no checks reported" und endet mit
+  Exit 1 — der erste Lauf von PR #18 brach daran ab. Das Skript wiederholt
+  jetzt genau diese Meldung (5 s Abstand, höchstens 3 Minuten). Jede andere
+  Rückmeldung — rote Prüfung, Netzfehler, Zeitüberschreitung — bricht sofort
+  ab und nennt die Ausgabe.
 - **`ship.ps1` wartet nur auf erforderliche Prüfungen (21.11.2026):**
   `gh pr checks --watch --required` statt `--watch`. Grund: GitHub ließ im
   Push-Lauf 44838614289 den fertigen Job „Zeilenenden und BOM" auf

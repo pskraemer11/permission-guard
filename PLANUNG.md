@@ -1570,6 +1570,13 @@ Job blockiert nicht mehr, ein fehlgeschlagener schon.
 (beide Läufe), `--watch --required` endet sofort mit Exit 0, die
 Fehlschlag-Suche liefert `[]`.
 
+**Nachtrag: das Rennen nach dem Push.** Der erste Lauf mit `--required` (PR #18)
+brach ab, weil `gh pr checks` zwischen `gh pr create` und der Registrierung der
+Läufe „no checks reported" meldet und das als Fehler mit Exit 1 behandelt — nicht
+als „warte noch". `ship.ps1` wiederholt jetzt genau diesen Wortlaut im
+5-Sekunden-Takt, höchstens drei Minuten lang. Alles andere bricht sofort ab:
+eine rote Prüfung, ein Netzfehler, eine Zeitüberschreitung.
+
 ## Nachtrag 21.11.2026: Guard erlaubt die eigenen Prüfskripte im Guard-Ordner
 
 **Befund.** Ein Prüfagent hat nachgewiesen, warum die Sitzung zweimal in die
