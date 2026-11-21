@@ -162,6 +162,11 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Deploy nennt übersprungene Tests mit Grund (21.11.2026):** `deploy.ps1` und
+  `deploy.sh` rufen pytest mit `-q -rs` auf. Die Kurzform `-q` zeigte nur das
+  `s`; jetzt steht dabei, welcher Test übersprungen wurde und warum — derzeit
+  `tests/test_codex_guard.py:244: POSIX: der Backslash ist ein
+  Namensbestandteil`.
 - **Aufwärmlauf wiederholt bis zur Deadline (21.11.2026):** `warmOne` in
   `reviewer.js` gab nach fünf Versuchen à 500 ms auf — 2 Sekunden. Der
   Kaltstart lädt 2,9 GB und braucht rund 34 Sekunden; live belegt am 21.11.:

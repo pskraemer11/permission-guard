@@ -74,7 +74,7 @@ if [ "$MODE" = "deploy" ] && [ "${SKIP_TESTS:-0}" != "1" ]; then
     exit 1
   fi
   if command -v python >/dev/null 2>&1; then
-    python -m pytest "$SCRIPT_DIR/tests" -q
+    python -m pytest "$SCRIPT_DIR/tests" -q -rs
   else
     echo "FEHLER: python nicht gefunden" >&2
     exit 1
