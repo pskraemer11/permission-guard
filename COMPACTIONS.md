@@ -3637,3 +3637,37 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
   Log-Datei noch vom Vorgaenger gehalten wurde; ein manueller Start mit eigener
   Log-Datei funktionierte in 25 s. Der Watchdog startet danach den Standard.
 
+
+## Compaction 21.11.2026: Ursache der haengenden Reviewer-Starts
+
+### Objective
+- start-reviewer.ps1 sollte nicht mehr ohne Meldung haengen (Auftrag des Nutzers).
+
+### Important Details
+- **Ursache:** Start-Process mit -RedirectStandardOutput oeffnet die Log-Dateien
+  im Elternprozess. Eine fremde interaktive PowerShell-Sitzung (PID 3132, vom
+  Explorer 12:57 gestartet) hielt beide Dateien; der Aufruf blockierte, die
+  /health-Schleife wurde nie erreicht.
+- **Fix:** Vor dem Start werden beide Log-Dateien mit FileShare::None geprueft,
+  bis zu 10 s gewartet, sonst Abbruch mit Pfad und Hinweis. Die
+  /health-Schleife laeuft gegen ein Gesamtbudget von 120 s und nennt bei
+  Ablauf Log-Pfad und PID.
+- **Verworfen:** Start-Job mit Wait-Job -Timeout. In einem nicht-interaktiven
+  pwsh -File blieb der Job haengen, das aeussere Skript lief 300 s weiter.
+
+### Work State
+- Geaendert: scripts/start-reviewer.ps1, PLANUNG.md, CHANGELOG.md.
+- Belegt: Parser 0 Fehler; bei gehaltener Datei Abbruch nach 11 s;
+  node test.mjs 992/992.
+- Der Server laeuft wieder (PID 14220, -b/-ub 2048, /health ok), gestartet mit
+  eigener Log-Datei, weil die fremde Sitzung die Standarddateien weiter haelt.
+
+### Next Move
+1. Der Nutzer schliesst die PowerShell-Sitzung PID 3132, dann funktioniert der
+   Standardweg wieder ohne Umweg.
+2. Deploy, damit das deployte Skript den Fix hat.
+
+### Important Context
+- Ein blockierender Start ist kein Modell- oder Serverproblem. Erst pruefen, wer
+  die Log-Dateien haelt, dann den Server verdaechtigen.
+

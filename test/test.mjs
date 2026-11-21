@@ -520,8 +520,17 @@ const py = [
   ["python -m ruff", "ask"],
   ["python -m ruff server", "ask"],
   ["python -m pytest setup.py", "allow"],
-  // P0-9: "--basetemp" loescht das Zielverzeichnis in jeder Schreibweise.
+  // P0-9: pytest-Optionen mit Schreibwirkung bleiben Rueckfrage.
   ["python -m pytest --basetemp=C:/outside/x", "ask"],
+  ["python -m pytest --junit-xml=out.xml", "ask"],
+  ["python -m pytest --junitxml out.xml", "ask"],
+  ["python -m pytest --html=report.html", "ask"],
+  ["python -m pytest --log-file=log.txt", "ask"],
+  ["python -m pytest --cov-report=html:cov", "ask"],
+  ["python -m pytest --cov-report term", "allow"],
+  ["python -m pytest -o junitxml=out.xml", "ask"],
+  ["python -m pytest --cache-clear", "ask"],
+  ["python -m pytest -p no:cacheprovider", "allow"],
 ]
 
 // Interpreters (Nutzerentscheidungen 1 und 2, 22.10.2026, Abend): node nur
@@ -1774,6 +1783,19 @@ const warmupChecks = []
   }
   const withCause = await warmup(cfgChat)
   warmupChecks.push(["Fehlerursache steht im Grund", withCause.ok === false && /socket closed/.test(String(withCause.reason))])
+
+  // Kaltstart (Befund 21.11.2026): Der Server oeffnet den Port erst nach
+  // mehreren Sekunden. Fuenf Versuche a 500 ms deckten nur 2 s ab und der
+  // Aufwaermlauf gab auf ("fehlgeschlagen 2007 ms"). Jetzt entscheidet die
+  // Deadline aus warmupTimeoutMs.
+  calls = 0
+  globalThis.fetch = async () => {
+    calls++
+    if (calls < 8) throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } })
+    return { ok: true, arrayBuffer: async () => new ArrayBuffer(0), json: async () => ({}) }
+  }
+  const slowStart = await warmup({ ...cfgChat, warmupTimeoutMs: 5000 })
+  warmupChecks.push(["Kaltstart: mehr als fuenf Versuche", slowStart.ok === true && calls === 8])
 
   globalThis.fetch = realFetch2
 }

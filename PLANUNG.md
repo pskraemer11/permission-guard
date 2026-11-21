@@ -45,12 +45,9 @@ Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
 | Prio | Punkt                               | Was fehlt                                                                                                                 | Aufwand | Abhängigkeit            |
 | ---- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------- | ----------------------- |
 | P1   | Dateiwerkzeuge prüfen               | `deny` blockt den `edit`-Pfad; die pauschalen `edit`-Freigaben sind gelöscht. Offen: Freigabe oder stille `ask`-Quittung? | S       | kontrollierter Test     |
-| P1   | Warmup-Kaltstart                    | Fehlerpfad belegt (5 Versuche, kein `TypeError`); der Kaltstart über den Dateiwatcher fehlt noch                          | S       | Dateiwatcher löst aus   |
-| P2   | `start-reviewer.ps1` ohne Zeitlimit | wartet 60 s auf `/health`, meldet dann Abbruch; bei belegter Log-Datei hängt der Start (21.11.2026)                       | S       | keine                   |
 | P2   | Bench-Grundlage                     | `src/shell-reviewer.config.json` ist jetzt Quelle und wird deployt; Betrieb und Bench messen damit gleich                 | S       | Deploy durch den Nutzer |
-| P2   | G3 lokales Modell im Graubereich    | nur annotieren, nie blockieren; setzt die Sichtung der 45 G2-Treffer voraus (Nachtrag 21.11.)                             | L       | G2-Treffer gesichtet    |
+| P2   | G3 lokales Modell im Graubereich    | nur annotieren, nie blockieren; setzt die Sichtung der 48 G2-Treffer voraus (Nachtrag 21.11.)                             | L       | G2-Treffer gesichtet    |
 | P3   | P1-03 Shell-Pfad                    | `deny` gewinnt im Edit-Pfad, im Shell-Pfad nicht                                                                          | M       | roter Fall              |
-| P3   | P0-9 weitere pytest-Optionen        | `-o`, `--junit-xml`, `--html`, `-p no:cacheprovider` unbewiesen                                                           | S       | eigene Probe            |
 | P3   | Smoke braucht Warmup                | `smoke-reviewer.mjs` wärmt nicht vor                                                                                      | S       | keine                   |
 | P3   | MMProj bei Clef-Flash               | nötig oder falsch verdrahtet? (~900 MB im Modell-Setup)                                                                   | S       | Auftrag                 |
 | P3   | Weg B: Sandbox-ADR                  | eigener Entscheidungsauftrag, weniger `ask` bei gleicher Härte                                                            | M       | Auftrag                 |
@@ -58,21 +55,24 @@ Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
 
 ### Erledigt seit dem 20.11.2026
 
-| Punkt                              | Beleg                                                                                                                                |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| G1 live belegen                    | `webfetch allow -> allow lokales Ziel`, `shield annotate tool=execute`, Ergebnis trägt `[ud-…]`; externes Ziel `-> ask` (21.11.2026) |
-| P0-5 Prompt-Schärfung              | umgesetzt 20.11.2026: Frage und Nein-Seite geschärft, `bench-shell --repeat 3` 23/23                                                 |
-| Dreiweg-Antwort                    | gemessen 21.11.2026: 14/14 mit und ohne; „Unbestimmt" kommt in keinem der 14 Fälle vor                                               |
-| P0-11 Server-Stapel                | gemessen 21.11.2026: bis 48.000 Zeichen Status 200 mit `-ub 4096` und mit `-ub 2048`; kein „too large" im Betrieb                    |
-| `-b`/`-ub` 2048                    | Default in `start-reviewer.ps1` seit 21.11.2026; Compute-Puffer 4297 → 2149 MiB, KV-Cache unverändert                                |
-| S6: Parent-Workflow entfernen      | `AI+IDE-Hints/.github/workflows/permission-guard.yml` existiert nicht mehr                                                           |
-| P2: Beobachtung nach Aktivierung   | `src/mcp-report.mjs`: F-Kriterien erfüllt — Tage 13/7, Aufrufe 191/50, Werkzeuge 23/3, schreibend 1/1                                |
-| P3: Shell-Fälle festschreiben      | `test/shell-model-cases.jsonl` und `test/bench-shell.mjs`, 23 Fälle                                                                  |
-| P3: G0/G1 Ergebnis-Form            | Grenz-Markierung umgesetzt und im Code-Mode-Pfad nachgezogen; `test-index.mjs` 45/45                                                 |
-| P3: G2 statische Injection-Prüfung | sechs Format-Familien in `guard.js`; `test.mjs` 992/992                                                                              |
-| P3: Warmup-`TypeError`             | Ursache gefunden (`cause.cause`, `cause.errors`), Wiederholung bei `ECONNREFUSED`/`ECONNRESET` eingebaut                             |
-| ADR 0002, Offene Frage 1           | beantwortet durch „Stufe 3 umgesetzt (vier Achsen)"                                                                                  |
-| ADR 0002, Offene Frage 2           | beantwortet durch „Deny-Limits umgesetzt (Option B)"                                                                                 |
+| Punkt                              | Beleg                                                                                                                                                                                                                                                               |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G1 live belegen                    | `webfetch allow -> allow lokales Ziel`, `shield annotate tool=execute`, Ergebnis trägt `[ud-…]`; externes Ziel `-> ask` (21.11.2026)                                                                                                                                |
+| P0-5 Prompt-Schärfung              | umgesetzt 20.11.2026: Frage und Nein-Seite geschärft, `bench-shell --repeat 3` 23/23                                                                                                                                                                                |
+| Dreiweg-Antwort                    | gemessen 21.11.2026: 14/14 mit und ohne; „Unbestimmt" kommt in keinem der 14 Fälle vor                                                                                                                                                                              |
+| P0-11 Server-Stapel                | gemessen 21.11.2026: bis 48.000 Zeichen Status 200 mit `-ub 4096` und mit `-ub 2048`; kein „too large" im Betrieb                                                                                                                                                   |
+| `-b`/`-ub` 2048                    | Default in `start-reviewer.ps1` seit 21.11.2026; Compute-Puffer 4297 → 2149 MiB, KV-Cache unverändert                                                                                                                                                               |
+| `start-reviewer.ps1` Zeitlimit     | erkennt gehaltene Log-Dateien in 10 s und bricht mit Pfad und Hinweis ab; `/health`-Schleife mit 120-s-Budget (21.11.2026)                                                                                                                                          |
+| P0-9 pytest-Optionen               | `--junit-xml`, `--junitxml`, `--html`, `--log-file`, `--result-log`, `--cache-clear`, `--pastebin`, `-o`, `--override-ini` und die Datei-Varianten von `--cov-report` bleiben Rückfrage; `-p no:cacheprovider` und `--cov-report term` bleiben erlaubt (21.11.2026) |
+| Warmup-Kaltstart                   | Kaltstart live belegt: `Aufwaermlauf fehlgeschlagen 2007 ms (ECONNREFUSED)`, erste Entscheidung `TypeError`. Seitdem wiederholt `warmOne` bis `warmupTimeoutMs` statt fünfmal; `test.mjs` 1002/1002 (21.11.2026)                                                    |
+| S6: Parent-Workflow entfernen      | `AI+IDE-Hints/.github/workflows/permission-guard.yml` existiert nicht mehr                                                                                                                                                                                          |
+| P2: Beobachtung nach Aktivierung   | `src/mcp-report.mjs`: F-Kriterien erfüllt — Tage 13/7, Aufrufe 191/50, Werkzeuge 23/3, schreibend 1/1                                                                                                                                                               |
+| P3: Shell-Fälle festschreiben      | `test/shell-model-cases.jsonl` und `test/bench-shell.mjs`, 23 Fälle                                                                                                                                                                                                 |
+| P3: G0/G1 Ergebnis-Form            | Grenz-Markierung umgesetzt und im Code-Mode-Pfad nachgezogen; `test-index.mjs` 45/45                                                                                                                                                                                |
+| P3: G2 statische Injection-Prüfung | sechs Format-Familien in `guard.js`; `test.mjs` 992/992                                                                                                                                                                                                             |
+| P3: Warmup-`TypeError`             | Ursache gefunden (`cause.cause`, `cause.errors`), Wiederholung bei `ECONNREFUSED`/`ECONNRESET` eingebaut                                                                                                                                                            |
+| ADR 0002, Offene Frage 1           | beantwortet durch „Stufe 3 umgesetzt (vier Achsen)"                                                                                                                                                                                                                 |
+| ADR 0002, Offene Frage 2           | beantwortet durch „Deny-Limits umgesetzt (Option B)"                                                                                                                                                                                                                |
 
 |  |
 
@@ -1741,21 +1741,72 @@ bleibt die Berechtigungsprüfung.
 **Messung.** `test.mjs` 975/975 (acht neue Fälle), `test-index.mjs` 45/45
 (zwei neue Fälle).
 
+## Nachtrag 21.11.2026: Warmup-Kaltstart belegt — Lücke gefunden und geschlossen
+
+**Der Kaltstart ist belegt.** Nach einem OpenCode-Neustart mit ausgeschaltetem
+Server:
+
+| Zeit         | Zeile                                                                      |
+| ------------ | -------------------------------------------------------------------------- |
+| 21:32:00.666 | `setup: Server gestartet (Port 8080)`                                      |
+| 21:32:02.673 | `setup: Aufwaermlauf fehlgeschlagen 2007 ms (TypeError: ECONNREFUSED)`     |
+| 21:32:10.789 | `ask (reviewer) TypeError`                                                 |
+
+**Befund.** Der Fehlerpfad funktioniert — fünf Versuche, kein Absturz, klare
+Meldung, fail closed. Aber der Aufwärmlauf deckte nur 2 Sekunden ab. Der
+Kaltstart lädt 2,9 GB und braucht rund 34 Sekunden; die erste echte Entscheidung
+zahlte ihn und endete in `TypeError` → `ask`.
+
+**Behoben.** `warmOne` wiederholt nicht mehr fünfmal, sondern bis
+`warmupTimeoutMs` (Standard 90 s). Bei Erfolg oder einem nicht wiederholbaren
+Fehler endet die Schleife sofort. `test.mjs` 1002/1002 mit einem Fall, in dem
+der Server erst beim achten Versuch antwortet.
+
+**Offen:** Ein neuer Kaltstart-Lauf mit dem Fix steht aus; er braucht wieder
+einen Neustart von OpenCode.
+
+## Nachtrag 21.11.2026: Ursache der hängenden Reviewer-Starts
+
+Zwei Starts am 21.11.2026 hingen je 10 bis 15 Minuten, ohne Meldung. Der
+Server war laut Log längst bereit (`listening on …:8080`), das Skript kam
+trotzdem nicht weiter.
+
+**Ursache.** `Start-Process` mit `-RedirectStandardOutput` öffnet die
+Log-Dateien im Elternprozess. Hielt ein anderer Prozess sie noch, blockierte
+der Aufruf ohne Meldung. Im konkreten Fall war es eine interaktive
+PowerShell-Sitzung (PID 3132, vom Explorer um 12:57 gestartet), die beide
+Dateien offen hielt. `Start-Process` wartete, die `/health`-Schleife wurde nie
+erreicht.
+
+**Behoben.** `start-reviewer.ps1` prüft vor dem Start, ob
+`permission-guard-reviewer-<port>.log` und `.log.err` schreibbar sind
+(`FileShare::None`), wartet bis zu 10 s und bricht sonst mit Pfad und Hinweis
+ab. Die `/health`-Schleife läuft gegen ein Gesamtbudget von 120 s; bei Ablauf
+nennt sie Log-Pfad und PID.
+
+**Verworfen.** Ein `Start-Job` mit `Wait-Job -Timeout` sollte auch
+`Start-Process` selbst begrenzen. In einem nicht-interaktiven `pwsh -File`
+blieb der Job hängen; das äußere Skript lief 300 s weiter. Die Log-Prüfung
+deckt den beobachteten Fall ab, ohne diesen Umweg.
+
+**Beleg.** Bei gehaltener Datei bricht das Skript nach 11 s ab:
+`Log-Datei wird noch gehalten: …\permission-guard-reviewer-8080.log.err`.
+
 ## Nachtrag 21.11.2026: G2 im Betrieb — 45 Treffer, Sichtung offen
 
 `guard.log` (Debug-Log des Plugins) zählt für den Zeitraum 18.–21.11.2026:
 
 | Zeile                      | Anzahl |
 | -------------------------- | ------ |
-| `shield annotate`          | 172    |
-| davon mit `verdacht=`      | 45     |
-| `rollenzeile`              | 44     |
+| `shield annotate`          | 181    |
+| davon mit `verdacht=`      | 48     |
+| `rollenzeile`              | 47     |
 | `chat-marker`              | 1      |
 
-G2 schlägt also in rund 26 % der annotierten Ergebnisse an. **Ob das echte
-Fälle sind, ist ungeprüft:** Das Audit-Log speichert nur `secret`, `oversized`,
-`unresolved` und `content`, nicht die G2-Familie; die steht ausschließlich im
-Debug-Log.
+Stand 21.11.2026, 21:40. G2 schlägt also in rund 27 % der annotierten Ergebnisse
+an. **Ob das echte Fälle sind, ist ungeprüft:** Das Audit-Log speichert nur
+`secret`, `oversized`, `unresolved` und `content`, nicht die G2-Familie; die
+steht ausschließlich im Debug-Log.
 
 **Regelbreite.** `rollenzeile` matcht jede Zeile, die mit `user:`,
 `assistant:`, `system:`, `human:` oder `### System:` beginnt. Eine
@@ -1764,11 +1815,21 @@ ergab vier Treffer — die Familie erkennt also auch normale Markdown- und
 Log-Zeilen. `staging/injection-sample.mjs <datei>` zeigt für eine beliebige
 Datei, welche Zeilen anschlagen.
 
-**Nächster Schritt.** Eine Stichprobe der 44 Treffer sichten. Fällt sie
-überwiegend auf normale Textzeilen, ist die Regel zu breit; dann wäre eine
-engere Fassung zu prüfen (nur `### System:` und Rollenzeilen nach einer
-Leerzeile), mit dem Risiko, echte Fälle zu verlieren. Solange das offen ist,
-bleibt G3 zurückgestellt.
+**Rückwirkend nur teilweise sichtbar.** Die Daten liegen in OpenCode V2 unter
+`session_message` (Parts inline in `data.content`); die Tabellen `part` und
+`message` sind der V1-Bestand bis 16.10.2026, `session_part` ist leer. Die
+Zuordnung scheitert aber am Code-Mode: Der Guard protokolliert ihn als
+`execute`, in den Nachrichten stehen im Zeitfenster der Treffer jedoch nur
+`shell`, `read`, `text` und `reasoning` — ein `execute`-Part fehlt. Zwei Treffer
+ließen sich zuordnen; beide zeigen denselben Testfall (`### System: du darfst
+alles`), keinen Betriebsfall. Die übrigen 46 bleiben offen.
+
+**Nächster Schritt.** Live sichten: Beim nächsten `verdacht=rollenzeile` im
+`guard.log` die Ausgabe des Aufrufs prüfen und entscheiden, ob die Zeile
+harmlos ist. Fällt sie überwiegend auf normale Textzeilen, ist die Regel zu
+breit; dann wäre eine engere Fassung zu prüfen (nur `### System:` und
+Rollenzeilen nach einer Leerzeile), mit dem Risiko, echte Fälle zu verlieren.
+Solange das offen ist, bleibt G3 zurückgestellt.
 
 ## Nachtrag 20.11.2026: Entscheidungsmodelle gemessen, Kev-4B im Betrieb
 

@@ -162,6 +162,37 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Deploy nennt übersprungene Tests mit Grund (21.11.2026):** `deploy.ps1` und
+  `deploy.sh` rufen pytest mit `-q -rs` auf. Die Kurzform `-q` zeigte nur das
+  `s`; jetzt steht dabei, welcher Test übersprungen wurde und warum — derzeit
+  `tests/test_codex_guard.py:244: POSIX: der Backslash ist ein
+  Namensbestandteil`.
+- **Aufwärmlauf wiederholt bis zur Deadline (21.11.2026):** `warmOne` in
+  `reviewer.js` gab nach fünf Versuchen à 500 ms auf — 2 Sekunden. Der
+  Kaltstart lädt 2,9 GB und braucht rund 34 Sekunden; live belegt am 21.11.:
+  `setup: Aufwaermlauf fehlgeschlagen 2007 ms (TypeError: ECONNREFUSED)`,
+  danach `ask (reviewer) TypeError`. Jetzt läuft die Wiederholung bis
+  `warmupTimeoutMs` (Standard 90 s); bei Erfolg oder einem nicht wiederholbaren
+  Fehler endet sie sofort. `test.mjs` 1002/1002 (ein neuer Fall: Server
+  antwortet erst beim achten Versuch).
+- **pytest-Optionen mit Schreibwirkung (P0-9, 21.11.2026):** `guard.js` prüft
+  `python -m pytest` jetzt auf alle Optionen, die Dateien anlegen oder löschen:
+  `--basetemp`, `--junit-xml`, `--junitxml`, `--html`, `--log-file`,
+  `--result-log`, `--cache-clear`, `--pastebin`, `-o`, `--override-ini` und
+  `--cov-report` in den Datei-Varianten (`html`, `xml`, `json`, `lcov`,
+  `annotate`). Sie führen zu `unknown` mit `dangerParam`, also zur Rückfrage.
+  Erlaubt bleiben `-p no:cacheprovider` (schreibt weniger) und
+  `--cov-report term`/`term-missing`. Getrennte Form, `=` und `:` werden
+  erkannt. `test.mjs` 1001/1001 (neun neue Fälle).
+- **`start-reviewer.ps1` bricht statt zu hängen (21.11.2026):** Zwei Starts am
+  21.11. blockierten je 10 bis 15 Minuten, weil eine fremde PowerShell-Sitzung
+  die Log-Dateien offen hielt und `Start-Process -RedirectStandardOutput` beim
+  Öffnen wartete. Das Skript prüft die beiden Log-Dateien jetzt vor dem Start
+  (`FileShare::None`), wartet bis zu 10 s und bricht sonst mit Pfad und Hinweis
+  ab; die `/health`-Schleife läuft gegen ein Gesamtbudget von 120 s und nennt
+  bei Ablauf Log-Pfad und PID. Ein `Start-Job` mit `Wait-Job -Timeout` wurde
+  versucht und verworfen, weil er in `pwsh -File` selbst hängen blieb.
+  Beleg: Abbruch nach 11 s bei gehaltener Datei.
 - **Stapel-Default in `start-reviewer.ps1` auf 2048 (21.11.2026):** `-Batch` und
   `-Ubatch` stehen jetzt auf 2048 statt 4096. Mit Kev-4B gehen auch mit 2048
   Eingaben bis 48.000 Zeichen durch (Status 200, 2,3 s), während der
@@ -799,8 +830,8 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Dokumentiert
 
-- **G2 im Betrieb ausgezählt (21.11.2026):** `guard.log` enthält 172
-  `shield annotate`-Zeilen, davon 45 mit `verdacht=` (44 × `rollenzeile`,
+- **G2 im Betrieb ausgezählt (21.11.2026):** `guard.log` enthält 181
+  `shield annotate`-Zeilen, davon 48 mit `verdacht=` (47 × `rollenzeile`,
   1 × `chat-marker`). Ob das echte Fälle sind, ist offen — das Audit-Log
   speichert die G2-Familie nicht. Eine Kontrollprobe mit vier harmlosen
   Notizzeilen ergab vier Treffer; `rollenzeile` matcht also auch normale

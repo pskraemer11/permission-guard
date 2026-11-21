@@ -88,6 +88,41 @@ try {
 if ($alive) { "Port $Port ist bereits belegt - laeuft der Reviewer schon?"; exit 0 }
 
 $log = Join-Path $env:TEMP "permission-guard-reviewer-$Port.log"
+
+# Gesamtbudget fuer Start und Bereitschaft. Ein haengender Start kostete am
+# 21.11.2026 zweimal 10 bis 15 Minuten: Der Server war laenger bereit, das
+# Skript merkte es nicht und blockierte beim Oeffnen der Log-Datei.
+$startBudgetSeconds = 120
+$deadline = (Get-Date).AddSeconds($startBudgetSeconds)
+
+function Test-FileWritable {
+  param([string]$Path)
+  try {
+    $stream = [System.IO.File]::Open(
+      $Path,
+      [System.IO.FileMode]::Append,
+      [System.IO.FileAccess]::Write,
+      [System.IO.FileShare]::None)
+    $stream.Close()
+    return $true
+  } catch {
+    return $false
+  }
+}
+
+# Der Vorgaenger haelt die Log-Datei noch, dann blockiert Start-Process ohne
+# Meldung. Erst warten, bis beide Dateien frei sind, sonst klar abbrechen.
+$logFree = $false
+for ($i = 0; $i -lt 40; $i++) {
+  if ((Test-FileWritable $log) -and (Test-FileWritable "$log.err")) { $logFree = $true; break }
+  Start-Sleep -Milliseconds 250
+}
+if (-not $logFree) {
+  "Log-Datei wird noch gehalten: $log.err"
+  "Vorgaenger beenden (scripts/start-reviewer.ps1 -Stop) oder kurz warten."
+  exit 1
+}
+
 # Standard bleibt CUDA/GPU. -Cpu ist fuer einen separaten CPU-Build ohne CUDA
 # gedacht. --no-op-offload gehoert nicht dazu: Er bremst auch den reinen
 # CPU-Build (Smoke 17.11.2026, zwei Aufrufe ueber 6000 ms).
@@ -95,16 +130,23 @@ $gpuLayers = $Cpu ? '0' : 'all'
 $serverArgs = @('-m', $ModelPath, '-c', '32768', '-np', "$Np", '-b', "$Batch", '-ub', "$Ubatch", '--port', "$Port", '--no-webui', '-ngl', $gpuLayers, '--jinja')
 if ($KvUnified -or $Np -gt 1) { $serverArgs += @('--kv-unified') }
 if ($DraftPath) { $serverArgs += @('--model-draft', $DraftPath) }
+# Start. Die Log-Dateien sind oben geprueft; damit blockiert Start-Process
+# nicht am Vorgaenger. Die Zeit vor und nach dem Aufruf wird gemessen, weil
+# genau dieser Aufruf am 21.11.2026 zweimal haengen blieb.
+$started = Get-Date
 $proc = Start-Process -FilePath $Server -WindowStyle Hidden -ArgumentList $serverArgs `
   -PassThru -RedirectStandardOutput $log -RedirectStandardError "$log.err"
 $proc.Id | Set-Content -LiteralPath $pidFile
+$startSeconds = [int]((Get-Date) - $started).TotalSeconds
+if ($startSeconds -gt 10) { "Hinweis: Start-Process brauchte $startSeconds s - Log-Datei war blockiert?" }
 
-foreach ($i in 1..120) {
+while ((Get-Date) -lt $deadline) {
   Start-Sleep -Milliseconds 500
   try {
     $h = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/health" -TimeoutSec 2 -ErrorAction Stop
     if ($h.StatusCode -eq 200) { "Reviewer bereit: http://127.0.0.1:$Port/v1 (Log: $log)"; exit 0 }
   } catch { }
 }
-"Server antwortet nicht - siehe $log.err"
+"Reviewer nicht bereit nach $startBudgetSeconds s - Log: $log.err"
+"Prozess PID $($proc.Id) laeuft weiter; beenden mit scripts/start-reviewer.ps1 -Stop."
 exit 1

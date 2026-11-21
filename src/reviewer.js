@@ -893,12 +893,12 @@ export async function warmup(config) {
   return failed ? { ...failed, ms: Date.now() - started } : { ok: true, ms: Date.now() - started }
 }
 
-// Fuenf Versuche mit 500 ms Abstand: `ensureRunning` startet den Server
-// losgeloest und kehrt sofort zurueck, der Port ist dann oft noch zu
-// (ECONNREFUSED) oder die Verbindung bricht waehrend des Modellladens ab
-// (ECONNRESET). Ohne Wiederholung entfaellt der Aufwaermlauf genau beim
-// Kaltstart, und die erste echte Entscheidung zahlt ihn (Befund 20.11.2026).
-const WARMUP_ATTEMPTS = 5
+// Wiederholung bis zur Deadline: `ensureRunning` startet den Server losgeloest
+// und kehrt sofort zurueck, der Port ist dann oft noch zu (ECONNREFUSED) oder
+// die Verbindung bricht waehrend des Modellladens ab (ECONNRESET). Fuenf
+// Versuche a 500 ms deckten nur 2 s ab; der Kaltstart laedt 2,9 GB und braucht
+// rund 34 s (Befund 21.11.2026: "Aufwaermlauf fehlgeschlagen 2007 ms"). Die
+// Grenze ist jetzt warmupTimeoutMs, nicht eine Versuchszahl.
 const WARMUP_RETRY_MS = 500
 
 // Netzfehler, bei denen ein neuer Versuch sinnvoll ist. Node legt den Code je
@@ -925,9 +925,10 @@ function errorCodes(error) {
 
 async function warmOne(cfg, endpoint) {
   const started = Date.now()
-  for (let attempt = 1; ; attempt++) {
+  const deadline = started + Math.max(2000, cfg.warmupTimeoutMs ?? 90000)
+  for (;;) {
     const result = await warmAttempt(cfg, endpoint)
-    if (result.ok || !result.retryable || attempt >= WARMUP_ATTEMPTS) {
+    if (result.ok || !result.retryable || Date.now() >= deadline) {
       return { ...result, ms: Date.now() - started }
     }
     await new Promise((resolve) => setTimeout(resolve, WARMUP_RETRY_MS))

@@ -194,7 +194,7 @@ if (-not $Check -and -not $SkipTests) {
     if ($LASTEXITCODE -ne 0) {
         throw "Tests fehlgeschlagen (Exitcode $LASTEXITCODE) - kein Deploy."
     }
-    & python -m pytest (Join-Path $source "tests") -q
+    & python -m pytest (Join-Path $source "tests") -q -rs
     if ($LASTEXITCODE -ne 0) {
         throw "Python-Tests fehlgeschlagen (Exitcode $LASTEXITCODE) - kein Deploy."
     }
