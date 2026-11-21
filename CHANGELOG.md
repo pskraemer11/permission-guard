@@ -799,8 +799,8 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Dokumentiert
 
-- **G2 im Betrieb ausgezählt (21.11.2026):** `guard.log` enthält 172
-  `shield annotate`-Zeilen, davon 45 mit `verdacht=` (44 × `rollenzeile`,
+- **G2 im Betrieb ausgezählt (21.11.2026):** `guard.log` enthält 181
+  `shield annotate`-Zeilen, davon 48 mit `verdacht=` (47 × `rollenzeile`,
   1 × `chat-marker`). Ob das echte Fälle sind, ist offen — das Audit-Log
   speichert die G2-Familie nicht. Eine Kontrollprobe mit vier harmlosen
   Notizzeilen ergab vier Treffer; `rollenzeile` matcht also auch normale
