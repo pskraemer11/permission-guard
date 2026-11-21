@@ -102,15 +102,31 @@ und **keine Zeile im `guard.log`**.
 
 **Was das heißt.** Für Shell-Aufrufe greift die Regel „Schreiben in
 `~/.config/opencode` ist `deny`". Für die Dateiwerkzeuge des Harness greift sie
-in dieser Sitzung nicht — weder Protokoll noch Urteil. Die README beschreibt
-`scopeEdit()` als Prüfung für `edit`, `write` und `patch`; beobachtet ist davon
-nichts.
+in dieser Sitzung nicht — weder Protokoll noch Urteil.
+
+**Ursache eingegrenzt.** Die statischen Regeln sind in Ordnung: Für `edit` gibt
+es `*` → `ask`, `~/Python-Projekte/*` → `allow` und einige Sonderfälle, aber
+**keine Regel für `~/.config/opencode`**. Damit wäre der Effekt `ask`, und
+`scopeEdit` hätte den geschützten Pfad verworfen. Dazu kommt es nicht, weil
+**kein `edit`-Ereignis beim Hook ankommt**: Im `guard.log` stehen für die
+gesamte Sitzung nur zwei `edit`-Blöcke (13:52 und 14:04), und beide tragen die
+Handschrift der Testsuite — jeweils ein `edit`-Paar unmittelbar vor einem
+`mcp … xlsx-tools-mcp_create_workbook`-Fall aus `test.mjs`. Die über zwanzig
+Dateiänderungen an `PLANUNG.md`, `README.md` und den Hooks haben keine einzige
+Zeile erzeugt.
+
+**Schlussfolgerung.** Der Guard ist ein Torwächter *innerhalb* von OpenCode. Er
+sieht, was OpenCode durch `permission.evaluate` schickt: Shell-Aufrufe,
+MCP-Aufrufe und OpenCodes eigene Dateiwerkzeuge. Die Dateiwerkzeuge dieses
+Harness laufen an dieser Stelle vorbei — nicht weil eine Regel falsch wäre,
+sondern weil sie nie gefragt wird. Die Regel „`deny` ist nicht umgehbar" gilt
+deshalb nur für Aufrufe, die den Weg durch OpenCode nehmen.
 
 **Offene Fragen.** Ob der Hook diese Werkzeuge unter anderen Namen sieht, ob die
 statische Regel vorher `allow` sagt (dann läuft `scopeEdit` nicht) oder ob der
-Harness sie gar nicht durch `permission.evaluate` schickt, ist ungeklärt. Ohne
-diese Klärung ist die Aussage „geschützte Pfade sind schreibgeschützt" nur für
-die Shell belegt.
+Harness sie gar nicht durch `permission.evaluate` schickt, ist damit beantwortet:
+Der Harness schickt sie nicht durch. Zu klären bleibt, ob eine Harness-Einstellung
+das erzwingen kann oder ob es eine Grenze der Architektur ist.
 
 **Nicht ausgenutzt.** Nach dem Befund habe ich keine weiteren Schreibzugriffe
 über diesen Weg vorgenommen; die doppelte Serverdefinition habe ich mit
