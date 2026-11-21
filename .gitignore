@@ -1,6 +1,7 @@
-# Laufzeitkonfiguration: enthaelt Backend, Modell und Port der jeweiligen
-# Maschine und gehoert nicht ins Repository. Vorlage: shell-reviewer.config.example.json
-shell-reviewer.config.json
+# Laufzeitkonfiguration: Die Quelle liegt seit 21.11.2026 versioniert unter
+# src/shell-reviewer.config.json und wird per deploy.ps1 ins Ziel gespielt.
+# Eine Datei im Wurzelverzeichnis bleibt ortsbezogen und unversioniert.
+/shell-reviewer.config.json
 
 # Node
 node_modules/

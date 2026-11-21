@@ -8,6 +8,16 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **`src/shell-reviewer.config.json` als versionierte Quelle (21.11.2026):**
+  Die Laufzeitkonfiguration des Reviewers lag bisher nur unter
+  `~/.config/opencode/plugins/permission-guard/` und war damit nicht prüfbar.
+  Der Bench im Repo las deshalb die eingebauten Defaults (`shellThreshold`
+  0,65), während der Betrieb mit 0,50 entschied — 20/23 statt 23/23 im
+  Shell-Bench. Die Datei liegt jetzt in `src/`, wird per `deploy.ps1` ins Ziel
+  kopiert und per SHA256 verglichen. `.gitignore` sperrt nur noch die
+  Wurzeldatei. Werte: `shellThreshold` 0,50, `mcpThreshold` 0,70,
+  `resultShield` `annotate`, `gitShadow` `shadow`, Modell `kev-4b`.
+
 - **Grenz-Markierung für MCP-Ergebnisse (20.11.2026, G1):** `index.js` umschließt
   im `execute.after`-Hook die Textinhalte von MCP-Ergebnissen mit
   `[ud-<id>]…[/ud-<id>]`, entschärft vorhandene `[ud-`-Marker im Text zu
@@ -152,6 +162,23 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Stapel-Default in `start-reviewer.ps1` auf 2048 (21.11.2026):** `-Batch` und
+  `-Ubatch` stehen jetzt auf 2048 statt 4096. Mit Kev-4B gehen auch mit 2048
+  Eingaben bis 48.000 Zeichen durch (Status 200, 2,3 s), während der
+  Compute-Puffer von 4297 auf 2149 MiB fällt; der KV-Cache bleibt bei 544 MiB
+  für 32768 Token, weil `--kv-unified` einen gemeinsamen Puffer nutzt.
+  `README.md`, `README_de.md`, `METHODOLOGY.md`, `METHODOLOGY_de.md` und der
+  Nachtrag in `docs/adr/0002` nennen den neuen Wert.
+- **`deploy.ps1` übernimmt die Konfiguration aus dem Repo (21.11.2026):** Liegt
+  `src/shell-reviewer.config.json` vor, wird sie wie die Module flach ins Ziel
+  kopiert und in den SHA256-Vergleich aufgenommen. `-ShellThreshold` und
+  `-ResultShield` wirken dann nicht mehr und das Skript sagt das. Fehlt die
+  Quelle, bleibt das alte Verhalten: Vorlage beim ersten Deploy erzeugen,
+  später nur fehlende Schlüssel ergänzen.
+- **Beide Benches nennen ihre Grundlage (21.11.2026):** `bench-shell.mjs` und
+  `bench-model.mjs` geben vor dem Lauf Datei oder Defaults, Backend, Modell,
+  Server und Schwelle aus. Anlass: Der Shell-Bench meldete 20/23, weil er mit
+  0,65 statt 0,50 maß; die Zahl war ohne diese Zeile nicht einzuordnen.
 - **`ship.ps1` kann einen abgebrochenen Lauf fortsetzen (21.11.2026):** Nach
   einem roten Check blieb der Lauf auf dem Wellen-Branch stehen; jeder weitere
   Aufruf brach an `Aktueller Branch ist 'welle-…', erwartet 'main'` ab. Steht
@@ -772,6 +799,13 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Dokumentiert
 
+- **G2 im Betrieb ausgezählt (21.11.2026):** `guard.log` enthält 172
+  `shield annotate`-Zeilen, davon 45 mit `verdacht=` (44 × `rollenzeile`,
+  1 × `chat-marker`). Ob das echte Fälle sind, ist offen — das Audit-Log
+  speichert die G2-Familie nicht. Eine Kontrollprobe mit vier harmlosen
+  Notizzeilen ergab vier Treffer; `rollenzeile` matcht also auch normale
+  Markdown- und Log-Zeilen. `PLANUNG.md` hält den Befund und den nächsten
+  Schritt fest (Stichprobe der Treffer); G3 bleibt bis dahin zurückgestellt.
 - **README als Einstieg, Fachliches nach `METHODOLOGY.md` (21.11.2026):** Die
   README war auf rund 1470 Zeilen gewachsen und hatte die Rolle eines
   Entscheidungsprotokolls übernommen. Neu: `METHODOLOGY.md` und

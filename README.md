@@ -140,7 +140,7 @@ therefore the more reliable route: they work regardless of location.
 The default path uses CUDA with `-ngl all`. `-Cpu` is meant for machines without
 an NVIDIA graphics card or for a pure CPU build; set `timeoutMs` to 8000 there,
 because one decision then takes about 4 s. Why the starter passes
-`-b 4096 -ub 4096` is explained in `METHODOLOGY.md` under "Operational details".
+`-b 2048 -ub 2048` is explained in `METHODOLOGY.md` under "Operational details".
 
 **Configuration is read once, at load time.** `loadConfig()` runs in `setup()`,
 so once per plugin instance. A change to `shell-reviewer.config.json` therefore
@@ -255,6 +255,16 @@ Details, the shared test cases and the differing deletion roots are in
 - **The decision model has a batch limit, not a character limit.** Over-long
   requests are answered by the server with an error that the guard turns into
   `deny` for that call.
+- **The guard only sees what OpenCode asks about.** A `deny` rule in
+  `opencode.jsonc` is dependable and is not bypassed — verified on 21.11.2026:
+  after adding `{ "action": "edit", "resource": "~/.config/opencode/*",
+  "effect": "deny" }`, the agent was refused write access to the very file it
+  had changed shortly before. An `allow` rule, by contrast, leaves **no trace in
+  the guard log**: the hook decides and logs only when the static rule yields
+  `ask`. Saved approvals ("Allow always") turn `ask` into `allow` before the
+  hook is consulted. If you want to watch what happens, you need rules that do
+  not allow silently — `external_directory` set to `ask` is the switch for
+  that.
 
 ## Checking it yourself
 

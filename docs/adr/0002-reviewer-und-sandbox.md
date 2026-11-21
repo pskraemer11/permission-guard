@@ -803,3 +803,15 @@ Das ausgelieferte Plugin bleibt flach. Der Lader liest
 Dateinamen im Ziel ab. Tests, Falllisten und Messwerkzeuge werden nicht mehr
 ausgeliefert — sie importieren `../src/` und liefen im flachen Ziel ins Leere.
 
+
+## Nachtrag 21.11.2026: Stapel-Default auf 2048
+
+Abschnitt 4 nennt -b 4096 -ub 4096 als Aufruf von start-reviewer.ps1. Der
+Default ist seit dem 21.11.2026 **2048**. Grund: Mit Kev-4B gehen auch mit
+2048 Eingaben bis 48000 Zeichen durch (Status 200, 2,3 s), waehrend der
+Compute-Puffer von 4297 auf 2149 MiB faellt. Der KV-Cache bleibt bei 544 MiB
+fuer 32768 Token, weil --kv-unified einen gemeinsamen Puffer nutzt. Die
+Parameter -Batch/-Ubatch bleiben einzeln setzbar; -b und -ub muessen
+gleich bleiben, weil llama.cpp im Embedding-Modus 
+_batch = n_ubatch erzwingt.
+

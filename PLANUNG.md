@@ -42,27 +42,29 @@ Ablageort.
 Stand: 21.11.2026. Die Liste vom 20.11. ist gegen die späteren Nachträge geprüft.
 Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
 
-| Prio | Punkt                               | Was fehlt                                                                                                                                                  | Aufwand | Abhängigkeit           |
-| ---- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ---------------------- |
-| P1   | Dateiwerkzeuge prüfen               | `edit`/`write` des Harness änderten `~/.config/opencode/opencode.jsonc` ohne Rückfrage und ohne Log-Zeile; der Shell-Aufruf auf denselben Pfad wird `deny` | M       | keine                  |
-| P1   | Warmup-Kaltstart                    | Fehlerpfad ist belegt (5 Versuche, kein `TypeError`); der vollständige Kaltstart über den Dateiwatcher fehlt noch                                          | S       | Dateiwatcher löst aus  |
-| P2   | `start-reviewer.ps1` ohne Zeitlimit | wartet unbegrenzt auf `/health`; scheitert der Start, hängt der Aufruf ohne Meldung (21.11.2026 zweimal beobachtet)                                        | S       | keine                  |
-| P2   | P0-5 Prompt-Schärfung               | Kriterien statt „harmlos?", zwei Negativbeispiele, Messung vorher/nachher                                                                                  | M       | keine (Text liegt vor) |
-| P2   | P0-11 Server-Stapel                 | große Argumente scheitern am physischen Stapel; `-ub`-Anhebung ungemessen                                                                                  | M       | Messplatz              |
-| P2   | Dreiweg-Antwort „Unbestimmt"        | eingebaut, aber aus (11/14); Entscheidung offen                                                                                                            | S       | Messung aus P0-5       |
-| P2   | G3 lokales Modell im Graubereich    | nur annotieren, nie blockieren; nur wenn G2 messbaren Nutzen zeigt                                                                                         | L       | Nutzen von G2 belegt   |
-| P3   | P1-03 Shell-Pfad                    | `deny` gewinnt im Edit-Pfad, im Shell-Pfad nicht                                                                                                           | M       | roter Fall             |
-| P3   | P0-9 weitere pytest-Optionen        | `-o`, `--junit-xml`, `--html`, `-p no:cacheprovider` unbewiesen                                                                                            | S       | eigene Probe           |
-| P3   | Smoke braucht Warmup                | `smoke-reviewer.mjs` wärmt nicht vor                                                                                                                       | S       | keine                  |
-| P3   | MMProj bei Clef-Flash               | nötig oder falsch verdrahtet? (~900 MB im Modell-Setup)                                                                                                    | S       | Auftrag                |
-| P3   | Weg B: Sandbox-ADR                  | eigener Entscheidungsauftrag, weniger `ask` bei gleicher Härte                                                                                             | M       | Auftrag                |
-| —    | Suchmuster mit Befehlsnamen         | `Select-String -Pattern 'iex'` wird verweigert; bewusst offen als Grenze des Klassifizierers                                                               | —       | keine                  |
+| Prio | Punkt                               | Was fehlt                                                                                                                 | Aufwand | Abhängigkeit            |
+| ---- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------- | ----------------------- |
+| P1   | Dateiwerkzeuge prüfen               | `deny` blockt den `edit`-Pfad; die pauschalen `edit`-Freigaben sind gelöscht. Offen: Freigabe oder stille `ask`-Quittung? | S       | kontrollierter Test     |
+| P1   | Warmup-Kaltstart                    | Fehlerpfad belegt (5 Versuche, kein `TypeError`); der Kaltstart über den Dateiwatcher fehlt noch                          | S       | Dateiwatcher löst aus   |
+| P2   | `start-reviewer.ps1` ohne Zeitlimit | wartet 60 s auf `/health`, meldet dann Abbruch; bei belegter Log-Datei hängt der Start (21.11.2026)                       | S       | keine                   |
+| P2   | Bench-Grundlage                     | `src/shell-reviewer.config.json` ist jetzt Quelle und wird deployt; Betrieb und Bench messen damit gleich                 | S       | Deploy durch den Nutzer |
+| P2   | G3 lokales Modell im Graubereich    | nur annotieren, nie blockieren; setzt die Sichtung der 45 G2-Treffer voraus (Nachtrag 21.11.)                             | L       | G2-Treffer gesichtet    |
+| P3   | P1-03 Shell-Pfad                    | `deny` gewinnt im Edit-Pfad, im Shell-Pfad nicht                                                                          | M       | roter Fall              |
+| P3   | P0-9 weitere pytest-Optionen        | `-o`, `--junit-xml`, `--html`, `-p no:cacheprovider` unbewiesen                                                           | S       | eigene Probe            |
+| P3   | Smoke braucht Warmup                | `smoke-reviewer.mjs` wärmt nicht vor                                                                                      | S       | keine                   |
+| P3   | MMProj bei Clef-Flash               | nötig oder falsch verdrahtet? (~900 MB im Modell-Setup)                                                                   | S       | Auftrag                 |
+| P3   | Weg B: Sandbox-ADR                  | eigener Entscheidungsauftrag, weniger `ask` bei gleicher Härte                                                            | M       | Auftrag                 |
+| —    | Suchmuster mit Befehlsnamen         | `Select-String -Pattern 'iex'` wird verweigert; bewusst offen als Grenze des Klassifizierers                              | —       | keine                   |
 
 ### Erledigt seit dem 20.11.2026
 
 | Punkt                              | Beleg                                                                                                                                |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | G1 live belegen                    | `webfetch allow -> allow lokales Ziel`, `shield annotate tool=execute`, Ergebnis trägt `[ud-…]`; externes Ziel `-> ask` (21.11.2026) |
+| P0-5 Prompt-Schärfung              | umgesetzt 20.11.2026: Frage und Nein-Seite geschärft, `bench-shell --repeat 3` 23/23                                                 |
+| Dreiweg-Antwort                    | gemessen 21.11.2026: 14/14 mit und ohne; „Unbestimmt" kommt in keinem der 14 Fälle vor                                               |
+| P0-11 Server-Stapel                | gemessen 21.11.2026: bis 48.000 Zeichen Status 200 mit `-ub 4096` und mit `-ub 2048`; kein „too large" im Betrieb                    |
+| `-b`/`-ub` 2048                    | Default in `start-reviewer.ps1` seit 21.11.2026; Compute-Puffer 4297 → 2149 MiB, KV-Cache unverändert                                |
 | S6: Parent-Workflow entfernen      | `AI+IDE-Hints/.github/workflows/permission-guard.yml` existiert nicht mehr                                                           |
 | P2: Beobachtung nach Aktivierung   | `src/mcp-report.mjs`: F-Kriterien erfüllt — Tage 13/7, Aufrufe 191/50, Werkzeuge 23/3, schreibend 1/1                                |
 | P3: Shell-Fälle festschreiben      | `test/shell-model-cases.jsonl` und `test/bench-shell.mjs`, 23 Fälle                                                                  |
@@ -72,6 +74,75 @@ Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
 | ADR 0002, Offene Frage 1           | beantwortet durch „Stufe 3 umgesetzt (vier Achsen)"                                                                                  |
 | ADR 0002, Offene Frage 2           | beantwortet durch „Deny-Limits umgesetzt (Option B)"                                                                                 |
 
+|  |
+
+**Die Grundlage war anders als angenommen.** Der Betrieb läuft mit
+`Kev-4B-Q4_K_M` (`-c 32768 -np 5 -b 4096 -ub 4096 --kv-unified`), nicht mit
+Clef-Flash. Die alten Zahlen (23/23, 14/14) stammten von Clef-Flash; deshalb
+wurde alles mit Kev-4B neu gemessen.
+
+### P0-5 war bereits umgesetzt
+
+Der Nachtrag vom 20.11.2026 („P0-5 Prompt-Schärfung umgesetzt") beschreibt
+Prompt-Änderung und Messung. Die Offene-Punkte-Tabelle führte den Punkt
+trotzdem noch als offen; das ist korrigiert.
+
+### Dreiweg-Antwort
+
+| Lauf                            | Treffer | Einstimmig |
+| ------------------------------- | ------- | ---------- |
+| `bench-model --repeat 3`        | 14/14   | 14/14      |
+| `bench-model --three --repeat 3` | 14/14  | 14/14      |
+
+`staging/threeway-probe.mjs` zählt die Rohantworten: In keinem der 14 Fälle
+antwortet das Modell „Unbestimmt". Mit Kev-4B kostet die dritte Antwort also
+nichts, wird aber auch nie genutzt. Der Schalter bleibt aus; für Modelle, die
+ihn brauchen, bleibt er erhalten.
+
+### P0-11 Server-Stapel
+
+**Kein historischer Fall:** Weder `guard.log` noch `audit.jsonl` enthalten eine
+Zeile „zu gross", „too large" oder „unpruefbar: Eingabe". Der alte Befund
+(ab ~4.000 Zeichen, Clef-Flash, `-ub 1024`) ist mit dem Betriebsmodell nicht
+reproduzierbar.
+
+`staging/stack-limit.mjs` schickt die echte Fünf-Achsen-Anfrage mit wachsendem
+Befehl:
+
+| Länge  | `-ub 4096` | `-ub 2048` |
+| ------ | ---------- | ---------- |
+| 8.000  | 540 ms     | 540 ms     |
+| 16.000 | 939 ms     | 915 ms     |
+| 32.000 | 1.918 ms   | 1.743 ms   |
+| 48.000 | 1.822 ms   | 2.304 ms   |
+
+Alle Status 200. Der Compute-Puffer halbiert sich mit 2048:
+
+| Parameter     | Compute-Puffer | Host-Puffer | KV-Cache |
+| ------------- | -------------- | ----------- | -------- |
+| `-b/-ub 4096` | 4.297 MiB      | 417 MiB     | 544 MiB  |
+| `-b/-ub 2048` | 2.149 MiB      | 209 MiB     | 544 MiB  |
+
+Damit ist `-ub 2048` eine belegte Option. Der Default in `start-reviewer.ps1`
+steht seit dem 21.11.2026 auf 2048 (`-Batch`/`-Ubatch`); die Messung oben ist
+der Beleg. Bei 32.000 Zeichen liegt die Antwort bei 1,7–1,9 s und damit
+innerhalb des Timeouts von 2.500 ms, aber ohne große Reserve.
+
+### Bench-Grundlage
+
+Der Bench lief mit den eingebauten Defaults (`shellThreshold` 0,65), der
+Betrieb mit 0,50. Ergebnis: 20/23 statt 23/23 — ein Messartefakt, kein
+Modellfehler.
+
+Behoben: `src/shell-reviewer.config.json` ist jetzt die versionierte Quelle
+(`.gitignore` sperrt nur noch die Wurzeldatei). `deploy.ps1` kopiert sie ins
+Ziel und vergleicht per SHA256. Beide Benches nennen in der ersten Zeile ihre
+Grundlage (Datei oder Defaults), Backend, Modell, Server und Schwelle.
+
+**Offen:** Der Deploy muss einmal durch den Nutzer laufen; danach sind Repo und
+Laufzeit identisch. `-ShellThreshold` und `-ResultShield` wirken dann nicht
+mehr, solange die Repo-Datei die Quelle ist — das Skript weist darauf hin.
+
 ### Reihenfolge
 
 1. **Warmup-Kaltstart** — der Fehlerpfad ist belegt, es fehlt nur der
@@ -80,8 +151,8 @@ Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
    Läufe gegen denselben Reviewer. P0-5 ändert den Prompt, die Dreiweg-Frage
    die Antwortachse, P0-11 die Startparameter; wer sie trennt, misst dreimal
    dieselbe Grundlage.
-3. **Entscheidungsabhängig danach:** G3 nur, wenn G2 messbaren Nutzen zeigt
-   (dafür fehlt bisher die Auswertung der markierten Ergebnisse); P1-03 nur mit
+3. **Entscheidungsabhängig danach:** G3 nur, wenn die G2-Treffer gesichtet sind
+   (45 im Debug-Log, überwiegend `rollenzeile`; Sichtung offen); P1-03 nur mit
    einem roten Fall aus dem Log — ohne Beleg kein Code-Eingriff.
 4. **Parallel, ohne Code:** MMProj-Frage klären (Modell-Setup ansehen), Weg B
    als ADR-Entwurf, P0-9 als eigene Probe mit einem Testfall je Option.
@@ -97,24 +168,66 @@ und **keine Zeile im `guard.log`**.
 **Gegenprobe.** Derselbe Pfad über die Shell ist geschützt:
 
 ```text
-2026-11-21T14:17:41.970Z deny geschuetzter Pfad: c:\users\pskra\.config\opencode\opencode.jsonc
+2026-11-21T14:17:41.970Z deny geschuetzter Pfad: c:\users\<name>\.config\opencode\opencode.jsonc
 ```
 
 **Was das heißt.** Für Shell-Aufrufe greift die Regel „Schreiben in
 `~/.config/opencode` ist `deny`". Für die Dateiwerkzeuge des Harness greift sie
-in dieser Sitzung nicht — weder Protokoll noch Urteil. Die README beschreibt
-`scopeEdit()` als Prüfung für `edit`, `write` und `patch`; beobachtet ist davon
-nichts.
+in dieser Sitzung nicht — weder Protokoll noch Urteil.
 
-**Offene Fragen.** Ob der Hook diese Werkzeuge unter anderen Namen sieht, ob die
-statische Regel vorher `allow` sagt (dann läuft `scopeEdit` nicht) oder ob der
-Harness sie gar nicht durch `permission.evaluate` schickt, ist ungeklärt. Ohne
-diese Klärung ist die Aussage „geschützte Pfade sind schreibgeschützt" nur für
-die Shell belegt.
+**Ursache eingegrenzt — und die erste Deutung war falsch.** Nach dem Einbau
+der Regel `{ "action": "edit", "resource": "~/.config/opencode/*", "effect":
+"deny" }` hat der Harness denselben Schreibzugriff **verweigert**
+(`Permission denied: edit`). Die Dateiwerkzeuge gehen also sehr wohl durch
+OpenCodes Rechteprüfung. Meine Zwischendeutung „der Harness schickt sie nicht
+durch" war damit widerlegt.
 
-**Nicht ausgenutzt.** Nach dem Befund habe ich keine weiteren Schreibzugriffe
-über diesen Weg vorgenommen; die doppelte Serverdefinition habe ich mit
-demselben Werkzeug entfernt, weil der Nutzer es ausdrücklich verlangt hat.
+**Was dann erklärt, warum die früheren Schreibzugriffe durchgingen:** Der
+`guard.log` enthält für die gesamte Sitzung nur zwei `edit`-Blöcke (13:52 und
+14:28), beide mit der Handschrift der Testsuite — jeweils vier Entscheidungen in
+vier Millisekunden, unmittelbar vor einem `mcp … xlsx-tools-mcp_create_workbook`-
+Fall aus `test.mjs`. Die über zwanzig echten Dateiänderungen haben keine Zeile
+erzeugt. Der Hook entscheidet und protokolliert aber nur, wenn die statische
+Regel `ask` ergibt; bei `allow` kehrt er früh zurück. Für `~/.config/opencode`
+gab es keine Regel, also griff `*` → `ask` — und `ask` wird von gespeicherten
+Freigaben („Allow always") in ein `allow` umgewandelt, bevor der Hook gefragt
+wird. Diese Freigaben sind projektbezogen und dauerhaft; sie überstimmen keine
+konfigurierte `deny`-Regel, weshalb die neue Regel jetzt greift.
+
+**Nicht bewiesen:** ob es wirklich eine gespeicherte Freigabe war oder ob der
+Client die `ask`-Entscheidung ohne Rückfrage und ohne Log quittiert hat. Beides
+passt zu den Beobachtungen; unterscheiden ließe es sich nur mit einem
+kontrollierten Schreibversuch auf einen Pfad, der garantiert `ask` ergibt.
+
+**Was daraus folgt.** Eine `deny`-Regel ist belastbar. Eine `allow`-Regel —
+auch eine gespeicherte — erzeugt keine Spur im Guard-Log. Wer wissen will, was
+der Agent außerhalb des Workspace tut, braucht deshalb eine Regel, die nicht
+still erlaubt: `external_directory` auf `ask`.
+
+**Gespeicherte Freigaben aufgeräumt (21.11.2026).** Sie liegen in der Tabelle
+`permission` der Datenbank `~/.local/share/opencode/opencode.db` und sind über
+die API les- und löschbar:
+
+```powershell
+opencode api get /api/permission/saved
+opencode api get "/api/permission/saved?projectID=global"
+opencode api delete /api/permission/saved/<id>
+```
+
+Gefunden waren neun `edit|*`-Freigaben — die pauschale Erlaubnis für **jeden**
+Pfad. Gelöscht wurden zwei:
+
+- `psv_1ac3d2ebf002vIMaP6HFvaaMdY` (dieser Workspace)
+- `psv_15a7ef12e001cPgIX015PwbzgR` (`projectID=global`, wirkte in **allen**
+  Projekten)
+
+Zusätzlich entfernt: `external_directory` für `~/.config/opencode/*` in diesem
+Workspace — mit der `deny`-Regel überflüssig und ein zweiter Weg hinein.
+
+**Bleibt:** sechs `edit|*`-Freigaben in anderen Projekten
+(`25f9db58…`, `055b3507…`, `510268dd…`, `84b69e7e…`, `2cc93aa4…`, `ae761e6c…`,
+`2b037565…`). Sie wirken nur in ihrem jeweiligen Workspace; bei Bedarf lassen
+sie sich mit `?projectID=<id>` einzeln auflisten und löschen.
 
 ## Nachtrag 21.11.2026: `start-reviewer.ps1` wartet ohne Obergrenze
 
@@ -1627,6 +1740,35 @@ bleibt die Berechtigungsprüfung.
 
 **Messung.** `test.mjs` 975/975 (acht neue Fälle), `test-index.mjs` 45/45
 (zwei neue Fälle).
+
+## Nachtrag 21.11.2026: G2 im Betrieb — 45 Treffer, Sichtung offen
+
+`guard.log` (Debug-Log des Plugins) zählt für den Zeitraum 18.–21.11.2026:
+
+| Zeile                      | Anzahl |
+| -------------------------- | ------ |
+| `shield annotate`          | 172    |
+| davon mit `verdacht=`      | 45     |
+| `rollenzeile`              | 44     |
+| `chat-marker`              | 1      |
+
+G2 schlägt also in rund 26 % der annotierten Ergebnisse an. **Ob das echte
+Fälle sind, ist ungeprüft:** Das Audit-Log speichert nur `secret`, `oversized`,
+`unresolved` und `content`, nicht die G2-Familie; die steht ausschließlich im
+Debug-Log.
+
+**Regelbreite.** `rollenzeile` matcht jede Zeile, die mit `user:`,
+`assistant:`, `system:`, `human:` oder `### System:` beginnt. Eine
+Kontrollprobe mit vier harmlosen Notizzeilen (`staging/injection-probe.txt`)
+ergab vier Treffer — die Familie erkennt also auch normale Markdown- und
+Log-Zeilen. `staging/injection-sample.mjs <datei>` zeigt für eine beliebige
+Datei, welche Zeilen anschlagen.
+
+**Nächster Schritt.** Eine Stichprobe der 44 Treffer sichten. Fällt sie
+überwiegend auf normale Textzeilen, ist die Regel zu breit; dann wäre eine
+engere Fassung zu prüfen (nur `### System:` und Rollenzeilen nach einer
+Leerzeile), mit dem Risiko, echte Fälle zu verlieren. Solange das offen ist,
+bleibt G3 zurückgestellt.
 
 ## Nachtrag 20.11.2026: Entscheidungsmodelle gemessen, Kev-4B im Betrieb
 
