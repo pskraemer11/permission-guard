@@ -162,6 +162,15 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **pytest-Optionen mit Schreibwirkung (P0-9, 21.11.2026):** `guard.js` prüft
+  `python -m pytest` jetzt auf alle Optionen, die Dateien anlegen oder löschen:
+  `--basetemp`, `--junit-xml`, `--junitxml`, `--html`, `--log-file`,
+  `--result-log`, `--cache-clear`, `--pastebin`, `-o`, `--override-ini` und
+  `--cov-report` in den Datei-Varianten (`html`, `xml`, `json`, `lcov`,
+  `annotate`). Sie führen zu `unknown` mit `dangerParam`, also zur Rückfrage.
+  Erlaubt bleiben `-p no:cacheprovider` (schreibt weniger) und
+  `--cov-report term`/`term-missing`. Getrennte Form, `=` und `:` werden
+  erkannt. `test.mjs` 1001/1001 (neun neue Fälle).
 - **`start-reviewer.ps1` bricht statt zu hängen (21.11.2026):** Zwei Starts am
   21.11. blockierten je 10 bis 15 Minuten, weil eine fremde PowerShell-Sitzung
   die Log-Dateien offen hielt und `Start-Process -RedirectStandardOutput` beim

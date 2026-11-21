@@ -2758,6 +2758,41 @@ const PY_VERSION_FLAG = /^-\d+(\.\d+)*$/
 // (-O und -o, -S und -s liefern jeweils dasselbe Token).
 const PY_SAFE_FLAGS = new Set(["-u", "-b", "-bb", "-o", "-oo", "-e", "-i", "-s", "--isolated"])
 
+// P0-9 (21.11.2026): pytest-Optionen mit Schreibwirkung. Geprueft werden die
+// getrennte Form, "=" und ":"; "--cov-report" nur in den Datei-Varianten, weil
+// "term" und "term-missing" nichts schreiben. "-p no:cacheprovider" fehlt
+// bewusst: Es schreibt weniger, nicht mehr.
+const PYTEST_WRITE_FLAGS = [
+  "--basetemp",
+  "--junit-xml",
+  "--junitxml",
+  "--html",
+  "--log-file",
+  "--result-log",
+  "--cache-clear",
+  "--pastebin",
+  "-o",
+  "--override-ini",
+]
+const PYTEST_REPORT_PREFIX = /^(html|xml|json|lcov|annotate)\b/
+
+function pytestWrites(rest) {
+  for (let index = 0; index < rest.length; index++) {
+    const token = rest[index]
+    if (PYTEST_WRITE_FLAGS.some((flag) => token === flag || token.startsWith(`${flag}=`) || token.startsWith(`${flag}:`))) {
+      return true
+    }
+    // "--cov-report" nimmt den Wert getrennt oder mit "=".
+    const report = token.startsWith("--cov-report=")
+      ? token.slice("--cov-report=".length)
+      : token === "--cov-report"
+        ? (rest[index + 1] ?? "")
+        : ""
+    if (report && PYTEST_REPORT_PREFIX.test(report)) return true
+  }
+  return false
+}
+
 function classifyPython(s, ctx) {
   const opts = ctx?.opts ?? {}
   const tokens = tokenizeCli(s)
@@ -2776,11 +2811,14 @@ function classifyPython(s, ctx) {
   if (head === "-m") {
     const module = (tokens[i + 1] ?? "").toLowerCase()
     if (module === "pytest") {
-      // "--basetemp" loescht das Zielverzeichnis in jeder Schreibweise
-      // (getrennt, mit "=" oder mit ":"); es bleibt Rueckfrage. Andere
-      // pytest-Optionen werden nicht geraten (offen, siehe PLANUNG.md).
+      // P0-9 (21.11.2026): Optionen mit Schreibwirkung bleiben Rueckfrage.
+      // "--basetemp" loescht das Zielverzeichnis, "--junit-xml", "--html",
+      // "--log-file" und "--result-log" schreiben Berichte an einen Pfad,
+      // "-o"/"--override-ini" kann jede ini-Einstellung ueberschreiben (auch
+      // junitxml, log_file, cache_dir), "--cache-clear" loescht den Cache,
+      // "--pastebin" sendet Daten ins Netz. Alles andere bleibt "read".
       const rest = tokens.slice(i + 2).map((t) => t.toLowerCase())
-      if (rest.some((t) => t === "--basetemp" || t.startsWith("--basetemp=") || t.startsWith("--basetemp:"))) {
+      if (pytestWrites(rest)) {
         if (ctx) ctx.dangerParam = true
         return "unknown"
       }

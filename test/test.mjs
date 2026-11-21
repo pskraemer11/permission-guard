@@ -520,8 +520,17 @@ const py = [
   ["python -m ruff", "ask"],
   ["python -m ruff server", "ask"],
   ["python -m pytest setup.py", "allow"],
-  // P0-9: "--basetemp" loescht das Zielverzeichnis in jeder Schreibweise.
+  // P0-9: pytest-Optionen mit Schreibwirkung bleiben Rueckfrage.
   ["python -m pytest --basetemp=C:/outside/x", "ask"],
+  ["python -m pytest --junit-xml=out.xml", "ask"],
+  ["python -m pytest --junitxml out.xml", "ask"],
+  ["python -m pytest --html=report.html", "ask"],
+  ["python -m pytest --log-file=log.txt", "ask"],
+  ["python -m pytest --cov-report=html:cov", "ask"],
+  ["python -m pytest --cov-report term", "allow"],
+  ["python -m pytest -o junitxml=out.xml", "ask"],
+  ["python -m pytest --cache-clear", "ask"],
+  ["python -m pytest -p no:cacheprovider", "allow"],
 ]
 
 // Interpreters (Nutzerentscheidungen 1 und 2, 22.10.2026, Abend): node nur
