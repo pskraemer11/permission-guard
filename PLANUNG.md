@@ -42,27 +42,29 @@ Ablageort.
 Stand: 21.11.2026. Die Liste vom 20.11. ist gegen die späteren Nachträge geprüft.
 Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
 
-| Prio | Punkt                               | Was fehlt                                                                                                                                                    | Aufwand                                                                                                                                                     | Abhängigkeit           |                     |
-| ---- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ------------------- |
-| P1   | Dateiwerkzeuge prüfen               | `deny` blockt den `edit`-Pfad; die pauschalen `edit                                                                                                          | *`-Freigaben (Workspace und global) sind gelöscht. Ungeklärt bleibt nur, ob frühere Zugriffe über eine Freigabe oder eine stille `ask`-Quittung durchgingen | S                      | kontrollierter Test |
-| P1   | Warmup-Kaltstart                    | Fehlerpfad ist belegt (5 Versuche, kein `TypeError`); der vollständige Kaltstart über den Dateiwatcher fehlt noch                                            | S                                                                                                                                                           | Dateiwatcher löst aus  |                     |
-| P2   | `start-reviewer.ps1` ohne Zeitlimit | wartet unbegrenzt auf `/health`; scheitert der Start, hängt der Aufruf ohne Meldung (21.11.2026 zweimal beobachtet)                                          | S                                                                                                                                                           | keine                  |                     |
-| P2   | P0-5 Prompt-Schärfung               | Kriterien statt „harmlos?", zwei Negativbeispiele, Messung vorher/nachher                                                                                    | M                                                                                                                                                           | keine (Text liegt vor) |                     |
-| P2   | P0-11 Server-Stapel                 | große Argumente scheitern am physischen Stapel; `-ub`-Anhebung ungemessen                                                                                    | M                                                                                                                                                           | Messplatz              |                     |
-| P2   | Dreiweg-Antwort „Unbestimmt"        | eingebaut, aber aus (11/14); Entscheidung offen                                                                                                              | S                                                                                                                                                           | Messung aus P0-5       |                     |
-| P2   | G3 lokales Modell im Graubereich    | nur annotieren, nie blockieren; nur wenn G2 messbaren Nutzen zeigt                                                                                           | L                                                                                                                                                           | Nutzen von G2 belegt   |                     |
-| P3   | P1-03 Shell-Pfad                    | `deny` gewinnt im Edit-Pfad, im Shell-Pfad nicht                                                                                                             | M                                                                                                                                                           | roter Fall             |                     |
-| P3   | P0-9 weitere pytest-Optionen        | `-o`, `--junit-xml`, `--html`, `-p no:cacheprovider` unbewiesen                                                                                              | S                                                                                                                                                           | eigene Probe           |                     |
-| P3   | Smoke braucht Warmup                | `smoke-reviewer.mjs` wärmt nicht vor                                                                                                                         | S                                                                                                                                                           | keine                  |                     |
-| P3   | MMProj bei Clef-Flash               | nötig oder falsch verdrahtet? (~900 MB im Modell-Setup)                                                                                                      | S                                                                                                                                                           | Auftrag                |                     |
-| P3   | Weg B: Sandbox-ADR                  | eigener Entscheidungsauftrag, weniger `ask` bei gleicher Härte                                                                                               | M                                                                                                                                                           | Auftrag                |                     |
-| —    | Suchmuster mit Befehlsnamen         | `Select-String -Pattern 'iex'` wird verweigert; bewusst offen als Grenze des Klassifizierers                                                                 | —                                                                                                                                                           | keine                  |                     |
+| Prio | Punkt                               | Was fehlt                                                                                                                 | Aufwand | Abhängigkeit            |
+| ---- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------- | ----------------------- |
+| P1   | Dateiwerkzeuge prüfen               | `deny` blockt den `edit`-Pfad; die pauschalen `edit`-Freigaben sind gelöscht. Offen: Freigabe oder stille `ask`-Quittung? | S       | kontrollierter Test     |
+| P1   | Warmup-Kaltstart                    | Fehlerpfad belegt (5 Versuche, kein `TypeError`); der Kaltstart über den Dateiwatcher fehlt noch                          | S       | Dateiwatcher löst aus   |
+| P2   | `start-reviewer.ps1` ohne Zeitlimit | wartet 60 s auf `/health`, meldet dann Abbruch; bei belegter Log-Datei hängt der Start (21.11.2026)                       | S       | keine                   |
+| P2   | `-b`/`-ub` auf 2048 stellen         | gemessen: Compute-Puffer halbiert, 48.000 Zeichen gehen durch; Entscheidung über den Startskript-Default offen            | S       | keine                   |
+| P2   | Bench-Grundlage                     | `src/shell-reviewer.config.json` ist jetzt Quelle und wird deployt; Betrieb und Bench messen damit gleich                 | S       | Deploy durch den Nutzer |
+| P2   | G3 lokales Modell im Graubereich    | nur annotieren, nie blockieren; nur wenn G2 messbaren Nutzen zeigt                                                        | L       | Nutzen von G2 belegt    |
+| P3   | P1-03 Shell-Pfad                    | `deny` gewinnt im Edit-Pfad, im Shell-Pfad nicht                                                                          | M       | roter Fall              |
+| P3   | P0-9 weitere pytest-Optionen        | `-o`, `--junit-xml`, `--html`, `-p no:cacheprovider` unbewiesen                                                           | S       | eigene Probe            |
+| P3   | Smoke braucht Warmup                | `smoke-reviewer.mjs` wärmt nicht vor                                                                                      | S       | keine                   |
+| P3   | MMProj bei Clef-Flash               | nötig oder falsch verdrahtet? (~900 MB im Modell-Setup)                                                                   | S       | Auftrag                 |
+| P3   | Weg B: Sandbox-ADR                  | eigener Entscheidungsauftrag, weniger `ask` bei gleicher Härte                                                            | M       | Auftrag                 |
+| —    | Suchmuster mit Befehlsnamen         | `Select-String -Pattern 'iex'` wird verweigert; bewusst offen als Grenze des Klassifizierers                              | —       | keine                   |
 
 ### Erledigt seit dem 20.11.2026
 
 | Punkt                              | Beleg                                                                                                                                |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | G1 live belegen                    | `webfetch allow -> allow lokales Ziel`, `shield annotate tool=execute`, Ergebnis trägt `[ud-…]`; externes Ziel `-> ask` (21.11.2026) |
+| P0-5 Prompt-Schärfung              | umgesetzt 20.11.2026: Frage und Nein-Seite geschärft, `bench-shell --repeat 3` 23/23                                                 |
+| Dreiweg-Antwort                    | gemessen 21.11.2026: 14/14 mit und ohne; „Unbestimmt" kommt in keinem der 14 Fälle vor                                               |
+| P0-11 Server-Stapel                | gemessen 21.11.2026: bis 48.000 Zeichen Status 200 mit `-ub 4096` und mit `-ub 2048`; kein „too large" im Betrieb                    |
 | S6: Parent-Workflow entfernen      | `AI+IDE-Hints/.github/workflows/permission-guard.yml` existiert nicht mehr                                                           |
 | P2: Beobachtung nach Aktivierung   | `src/mcp-report.mjs`: F-Kriterien erfüllt — Tage 13/7, Aufrufe 191/50, Werkzeuge 23/3, schreibend 1/1                                |
 | P3: Shell-Fälle festschreiben      | `test/shell-model-cases.jsonl` und `test/bench-shell.mjs`, 23 Fälle                                                                  |
@@ -71,6 +73,74 @@ Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
 | P3: Warmup-`TypeError`             | Ursache gefunden (`cause.cause`, `cause.errors`), Wiederholung bei `ECONNREFUSED`/`ECONNRESET` eingebaut                             |
 | ADR 0002, Offene Frage 1           | beantwortet durch „Stufe 3 umgesetzt (vier Achsen)"                                                                                  |
 | ADR 0002, Offene Frage 2           | beantwortet durch „Deny-Limits umgesetzt (Option B)"                                                                                 |
+
+|  |
+
+**Die Grundlage war anders als angenommen.** Der Betrieb läuft mit
+`Kev-4B-Q4_K_M` (`-c 32768 -np 5 -b 4096 -ub 4096 --kv-unified`), nicht mit
+Clef-Flash. Die alten Zahlen (23/23, 14/14) stammten von Clef-Flash; deshalb
+wurde alles mit Kev-4B neu gemessen.
+
+### P0-5 war bereits umgesetzt
+
+Der Nachtrag vom 20.11.2026 („P0-5 Prompt-Schärfung umgesetzt") beschreibt
+Prompt-Änderung und Messung. Die Offene-Punkte-Tabelle führte den Punkt
+trotzdem noch als offen; das ist korrigiert.
+
+### Dreiweg-Antwort
+
+| Lauf                            | Treffer | Einstimmig |
+| ------------------------------- | ------- | ---------- |
+| `bench-model --repeat 3`        | 14/14   | 14/14      |
+| `bench-model --three --repeat 3` | 14/14  | 14/14      |
+
+`staging/threeway-probe.mjs` zählt die Rohantworten: In keinem der 14 Fälle
+antwortet das Modell „Unbestimmt". Mit Kev-4B kostet die dritte Antwort also
+nichts, wird aber auch nie genutzt. Der Schalter bleibt aus; für Modelle, die
+ihn brauchen, bleibt er erhalten.
+
+### P0-11 Server-Stapel
+
+**Kein historischer Fall:** Weder `guard.log` noch `audit.jsonl` enthalten eine
+Zeile „zu gross", „too large" oder „unpruefbar: Eingabe". Der alte Befund
+(ab ~4.000 Zeichen, Clef-Flash, `-ub 1024`) ist mit dem Betriebsmodell nicht
+reproduzierbar.
+
+`staging/stack-limit.mjs` schickt die echte Fünf-Achsen-Anfrage mit wachsendem
+Befehl:
+
+| Länge  | `-ub 4096` | `-ub 2048` |
+| ------ | ---------- | ---------- |
+| 8.000  | 540 ms     | 540 ms     |
+| 16.000 | 939 ms     | 915 ms     |
+| 32.000 | 1.918 ms   | 1.743 ms   |
+| 48.000 | 1.822 ms   | 2.304 ms   |
+
+Alle Status 200. Der Compute-Puffer halbiert sich mit 2048:
+
+| Parameter     | Compute-Puffer | Host-Puffer | KV-Cache |
+| ------------- | -------------- | ----------- | -------- |
+| `-b/-ub 4096` | 4.297 MiB      | 417 MiB     | 544 MiB  |
+| `-b/-ub 2048` | 2.149 MiB      | 209 MiB     | 544 MiB  |
+
+Damit ist `-ub 2048` eine belegte Option; der Startskript-Default bleibt
+vorerst 4096. Bei 32.000 Zeichen liegt die Antwort bei 1,7–1,9 s und damit
+innerhalb des Timeouts von 2.500 ms, aber ohne große Reserve.
+
+### Bench-Grundlage
+
+Der Bench lief mit den eingebauten Defaults (`shellThreshold` 0,65), der
+Betrieb mit 0,50. Ergebnis: 20/23 statt 23/23 — ein Messartefakt, kein
+Modellfehler.
+
+Behoben: `src/shell-reviewer.config.json` ist jetzt die versionierte Quelle
+(`.gitignore` sperrt nur noch die Wurzeldatei). `deploy.ps1` kopiert sie ins
+Ziel und vergleicht per SHA256. Beide Benches nennen in der ersten Zeile ihre
+Grundlage (Datei oder Defaults), Backend, Modell, Server und Schwelle.
+
+**Offen:** Der Deploy muss einmal durch den Nutzer laufen; danach sind Repo und
+Laufzeit identisch. `-ShellThreshold` und `-ResultShield` wirken dann nicht
+mehr, solange die Repo-Datei die Quelle ist — das Skript weist darauf hin.
 
 ### Reihenfolge
 

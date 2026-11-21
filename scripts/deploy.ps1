@@ -84,12 +84,20 @@ $codexFiles = @(
     "codex_guard.py"
 )
 
-# Die Laufzeitkonfiguration ist ortsabhaengig (Backend, Modell, Port). Sie wird
-# beim ersten Deploy aus der Vorlage erzeugt. Spaeter werden nur FEHLENDE
-# Schluessel ergaenzt; vorhandene Werte bleiben unangetastet. So bleibt die
-# Datei vollstaendig, ohne die Einstellungen des Nutzers zu ueberschreiben.
+# Die Laufzeitkonfiguration ist seit 21.11.2026 versioniert: src/shell-reviewer.config.json
+# ist die Quelle, wird mitkopiert und per SHA256 verglichen. Damit messen Bench
+# und Betrieb dieselben Werte. Fehlt die Quelle, gilt das alte Verhalten:
+# Vorlage beim ersten Deploy erzeugen, spaeter nur fehlende Schluessel ergaenzen.
 $configName = "shell-reviewer.config.json"
 $configExample = "shell-reviewer.config.example.json"
+$configSource = Join-Path $source (Join-Path "src" $configName)
+$configFromRepo = Test-Path -LiteralPath $configSource
+if ($configFromRepo) {
+    $files += "src/$configName"
+    if ($ShellThreshold -gt 0 -or $ResultShield) {
+        Write-Host "Hinweis: -ShellThreshold/-ResultShield wirken nicht, solange src/$configName die Quelle ist."
+    }
+}
 
 foreach ($dir in @($Target, $CodexTarget)) {
     if (-not (Test-Path -LiteralPath $dir)) {
@@ -198,7 +206,11 @@ if (-not $Check) {
     Copy-DeployFiles -Names $files -To $Target
 
     $configTarget = Join-Path $Target $configName
-    if (-not (Test-Path -LiteralPath $configTarget)) {
+    if ($configFromRepo) {
+        # Schon durch Copy-DeployFiles kopiert; hier nur die Bestaetigung.
+        Write-Host "  $configName (Quelle: src/)"
+    }
+    elseif (-not (Test-Path -LiteralPath $configTarget)) {
         Copy-Item -LiteralPath (Join-Path $source $configExample) -Destination $configTarget -Force
         Write-Host "  $configName (aus Vorlage erzeugt)"
     }

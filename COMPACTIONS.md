@@ -3588,3 +3588,52 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
   falscher Pfad in der Parallelsitzung, fremde Commits im eigenen Branch,
   verlorenes Verzeichnis-Handle. Für getrennte Aufgaben getrennte Arbeitsbäume
   verwenden.
+
+## Compaction 21.11.2026: Messblock P0-5, Dreiweg, P0-11 und Bench-Grundlage
+
+### Objective
+- Den Messblock P0-5, Dreiweg und P0-11 gegen den laufenden Reviewer
+  durchfuehren, nachdem P0-5 bereits am 20.11. umgesetzt worden war.
+- Betrieb und Bench auf dieselbe Konfigurationsgrundlage bringen.
+
+### Important Details
+- **Das Betriebsmodell ist Kev-4B, nicht Clef-Flash.** Die alten Zahlen (23/23,
+  14/14) stammten von Clef-Flash; mit Kev-4B wurde alles neu gemessen.
+- **P0-5 war umgesetzt** (PLANUNG-Nachtrag 20.11.); nur die Offene-Punkte-
+  Tabelle war veraltet.
+- **Dreiweg:** 14/14 mit und ohne dritte Antwort; 'Unbestimmt' kommt in keinem
+  der 14 Faelle vor. Der Schalter bleibt aus, bleibt aber erhalten.
+- **P0-11:** Kein historischer 'too large'-Fall in guard.log oder audit.jsonl.
+  Mit Kev-4B gehen bis 48.000 Zeichen durch, mit -ub 4096 und mit -ub 2048.
+  Der Compute-Puffer halbiert sich: 4.297 MiB -> 2.149 MiB.
+- **Der Shell-Bench meldete 20/23, weil er mit 0,65 statt 0,50 maß.** Ursache:
+  loadConfig() liest die Datei neben reviewer.js. Deployt liegt reviewer.js
+  flach neben shell-reviewer.config.json (0,50); im Repo liegt es unter src/
+  ohne Datei, also galten die Defaults (0,65). Mit 0,50: 23/23.
+- **Loesung:** src/shell-reviewer.config.json ist jetzt die versionierte Quelle;
+  deploy.ps1 kopiert sie flach ins Ziel und vergleicht per SHA256. Beide
+  Benches nennen ihre Grundlage in der ersten Zeile.
+
+### Work State
+- Geaendert: .gitignore (nur Wurzeldatei gesperrt), src/shell-reviewer.config.json
+  (neu), scripts/deploy.ps1 (Quelle aus dem Repo), test/bench-shell.mjs und
+  test/bench-model.mjs (Grundlagen-Ausgabe), PLANUNG.md (Tabelle repariert,
+  Messblock), CHANGELOG.md.
+- Belegt: node test.mjs 992/992; bench-shell 23/23; bench-model 14/14.
+- **Offen:** deploy.ps1 muss einmal durch den Nutzer laufen; danach sind Repo
+  und Laufzeit identisch. deploy.ps1 -Check wurde vom Deny-Limit blockiert.
+
+### Next Move
+1. Deploy durch den Nutzer (deploy.ps1), danach -Check.
+2. Entscheiden, ob -b/-ub 2048 der Startskript-Default wird (Compute-Puffer
+   halbiert, 48.000 Zeichen belegt).
+3. Warmup-Kaltstart ueber den Dateiwatcher bleibt offen.
+
+### Important Context
+- **Ein durchgelaufener Befehl ist kein Beweis fuer eine Regel.** Der
+  Shell-Bench mit 20/23 sah wie ein Modellproblem aus, war aber eine
+  Konfigurationsfrage. Erst die Grundlage pruefen, dann das Modell.
+- **start-reviewer.ps1 kann am Log haengen.** Zwei Starts blockierten, weil die
+  Log-Datei noch vom Vorgaenger gehalten wurde; ein manueller Start mit eigener
+  Log-Datei funktionierte in 25 s. Der Watchdog startet danach den Standard.
+

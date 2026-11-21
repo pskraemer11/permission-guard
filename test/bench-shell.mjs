@@ -45,6 +45,14 @@ if (!config.enabled) {
   console.error("bench-shell: Reviewer ist deaktiviert (shell-reviewer.config.json).")
   process.exit(1)
 }
+// 21.11.2026: Der Bench lief bisher still mit den Defaults (0,65), waehrend der
+// Betrieb 0,50 nutzt - 20/23 statt 23/23. Die erste Zeile nennt deshalb die
+// Grundlage, damit die Zahl einordbar ist.
+const configFile = path.join(HERE, "..", "src", "shell-reviewer.config.json")
+const configOrigin = fs.existsSync(configFile) ? "src/shell-reviewer.config.json" : "Defaults (keine Datei)"
+console.log(`Grundlage: ${configOrigin}`)
+console.log(`  Backend ${config.shellBackend} | Modell ${config.model} | Server ${config.baseUrl}`)
+console.log(`  Schwellen: shell ${config.shellThreshold}, secrets ${config.secretsThreshold}`)
 
 const rows = []
 let invalidVotes = 0

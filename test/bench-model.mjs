@@ -51,6 +51,12 @@ if (!config.enabled) {
   console.error("bench-model: Reviewer ist deaktiviert (shell-reviewer.config.json).")
   process.exit(1)
 }
+// 21.11.2026: gleiche Begruendung wie in bench-shell.mjs - die Grundlage nennen.
+const configFile = path.join(HERE, "..", "src", "shell-reviewer.config.json")
+const configOrigin = fs.existsSync(configFile) ? "src/shell-reviewer.config.json" : "Defaults (keine Datei)"
+console.log(`Grundlage: ${configOrigin}`)
+console.log(`  Backend ${config.mcpBackend} | Modell ${config.model} | Server ${config.baseUrl}`)
+console.log(`  Schwelle: mcp ${config.mcpThreshold}${threeWay ? " | Dreiweg an" : ""}`)
 
 const rows = []
 let invalidVotes = 0

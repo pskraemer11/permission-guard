@@ -8,6 +8,16 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **`src/shell-reviewer.config.json` als versionierte Quelle (21.11.2026):**
+  Die Laufzeitkonfiguration des Reviewers lag bisher nur unter
+  `~/.config/opencode/plugins/permission-guard/` und war damit nicht prüfbar.
+  Der Bench im Repo las deshalb die eingebauten Defaults (`shellThreshold`
+  0,65), während der Betrieb mit 0,50 entschied — 20/23 statt 23/23 im
+  Shell-Bench. Die Datei liegt jetzt in `src/`, wird per `deploy.ps1` ins Ziel
+  kopiert und per SHA256 verglichen. `.gitignore` sperrt nur noch die
+  Wurzeldatei. Werte: `shellThreshold` 0,50, `mcpThreshold` 0,70,
+  `resultShield` `annotate`, `gitShadow` `shadow`, Modell `kev-4b`.
+
 - **Grenz-Markierung für MCP-Ergebnisse (20.11.2026, G1):** `index.js` umschließt
   im `execute.after`-Hook die Textinhalte von MCP-Ergebnissen mit
   `[ud-<id>]…[/ud-<id>]`, entschärft vorhandene `[ud-`-Marker im Text zu
@@ -152,6 +162,16 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **`deploy.ps1` übernimmt die Konfiguration aus dem Repo (21.11.2026):** Liegt
+  `src/shell-reviewer.config.json` vor, wird sie wie die Module flach ins Ziel
+  kopiert und in den SHA256-Vergleich aufgenommen. `-ShellThreshold` und
+  `-ResultShield` wirken dann nicht mehr und das Skript sagt das. Fehlt die
+  Quelle, bleibt das alte Verhalten: Vorlage beim ersten Deploy erzeugen,
+  später nur fehlende Schlüssel ergänzen.
+- **Beide Benches nennen ihre Grundlage (21.11.2026):** `bench-shell.mjs` und
+  `bench-model.mjs` geben vor dem Lauf Datei oder Defaults, Backend, Modell,
+  Server und Schwelle aus. Anlass: Der Shell-Bench meldete 20/23, weil er mit
+  0,65 statt 0,50 maß; die Zahl war ohne diese Zeile nicht einzuordnen.
 - **`ship.ps1` kann einen abgebrochenen Lauf fortsetzen (21.11.2026):** Nach
   einem roten Check blieb der Lauf auf dem Wellen-Branch stehen; jeder weitere
   Aufruf brach an `Aktueller Branch ist 'welle-…', erwartet 'main'` ab. Steht
