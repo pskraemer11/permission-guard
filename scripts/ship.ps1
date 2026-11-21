@@ -50,40 +50,79 @@ try {
     }
 
     $current = Invoke-Git @('rev-parse', '--abbrev-ref', 'HEAD')
-    if ($current -ne 'main') { throw "Aktueller Branch ist '$current', erwartet 'main'." }
+    $resume = $current -ne 'main'
+    if ($resume -and $current -notlike 'welle-*') {
+        throw "Aktueller Branch ist '$current', erwartet 'main' oder ein Wellen-Branch ('welle-*')."
+    }
 
     $ahead = [int](Invoke-Git @('rev-list', '--count', 'origin/main..HEAD'))
     if ($ahead -lt 1) { throw 'Kein Commit vor origin/main - nichts zu liefern.' }
-    if (-not $Branch) { $Branch = 'welle-' + (Get-Date -Format 'yyyyMMdd-HHmm') }
 
-    $steps = @(
-        "git branch $Branch",
-        "git reset --hard origin/main",
-        "git switch $Branch",
-        "git push -u origin $Branch",
-        "gh pr create --base main --head $Branch --fill",
-        "gh pr checks --watch --required",
-        "gh pr checks --json state,name (Suche nach FAILURE)",
-        "gh pr merge --merge --delete-branch",
-        "git switch main",
-        "git pull --ff-only"
-    )
+    if ($resume) {
+        # Fortsetzen: ein frueherer Lauf hat Branch, Reset und Push schon
+        # erledigt und ist an den Pruefungen oder am PR gescheitert. Ein zweiter
+        # Lauf darf weder den Branch neu anlegen noch main erneut zuruecksetzen.
+        $Branch = $current
+    }
+    elseif (-not $Branch) {
+        $Branch = 'welle-' + (Get-Date -Format 'yyyyMMdd-HHmm')
+    }
+
+    $steps = if ($resume) {
+        @(
+            "git push -u origin $Branch",
+            "gh pr list --head $Branch --state open (PR weiterverwenden, sonst anlegen)",
+            "gh pr checks --watch --required",
+            "gh pr checks --json state,name (Suche nach FAILURE)",
+            "gh pr merge --merge --delete-branch",
+            "git switch main",
+            "git pull --ff-only"
+        )
+    }
+    else {
+        @(
+            "git branch $Branch",
+            "git reset --hard origin/main",
+            "git switch $Branch",
+            "git push -u origin $Branch",
+            "gh pr create --base main --head $Branch --fill",
+            "gh pr checks --watch --required",
+            "gh pr checks --json state,name (Suche nach FAILURE)",
+            "gh pr merge --merge --delete-branch",
+            "git switch main",
+            "git pull --ff-only"
+        )
+    }
     if ($DryRun) {
-        "Branch: $Branch ($ahead Commit(s))"
+        if ($resume) { "Setze fort auf $Branch ($ahead Commit(s) vor origin/main)" }
+        else { "Branch: $Branch ($ahead Commit(s))" }
         $steps | ForEach-Object { "  $_" }
         return
     }
 
-    Invoke-Git @('branch', $Branch) | Out-Null
-    Invoke-Git @('reset', '--hard', 'origin/main') | Out-Null
-    Invoke-Git @('switch', $Branch) | Out-Null
-    "Branch $Branch angelegt ($ahead Commit(s))."
+    if ($resume) {
+        "Setze fort auf $Branch ($ahead Commit(s) vor origin/main)."
+    }
+    else {
+        Invoke-Git @('branch', $Branch) | Out-Null
+        Invoke-Git @('reset', '--hard', 'origin/main') | Out-Null
+        Invoke-Git @('switch', $Branch) | Out-Null
+        "Branch $Branch angelegt ($ahead Commit(s))."
+    }
 
     Invoke-Git @('push', '-u', 'origin', $Branch) | Out-Null
     "Gepusht."
 
-    & gh pr create --base main --head $Branch --fill
-    if ($LASTEXITCODE -ne 0) { throw 'PR konnte nicht angelegt werden.' }
+    # Ein vorhandener offener PR wird weiterverwendet; nur ohne PR wird einer
+    # angelegt. Sonst scheitert der zweite Lauf an "already exists".
+    $existing = (& gh pr list --head $Branch --state open --json number --jq '.[0].number' | Out-String).Trim()
+    if ($existing) {
+        "PR #$existing wird weiterverwendet."
+    }
+    else {
+        & gh pr create --base main --head $Branch --fill
+        if ($LASTEXITCODE -ne 0) { throw 'PR konnte nicht angelegt werden.' }
+    }
 
     # Nur die erforderlichen Pruefungen blockieren. GitHub laesst gelegentlich
     # einen fertig gelaufenen Job auf "in_progress" stehen - Status und

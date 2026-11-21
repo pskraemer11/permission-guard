@@ -141,14 +141,18 @@ Deliberately **not** unlocked, all evidenced by the same replay:
 
 Both are explicit user decisions, anchored to paths like pytest:
 
-| Case                                                                                                                                                                                                                       | Assessment                                                             |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `node tools/permission-guard/test/test.mjs`, `src/replay.mjs`, `src/analyze.mjs`, plus `test/test-index.mjs`, `test/test-wiring.mjs`, `bench-*.mjs`, `test/smoke-reviewer.mjs` — also relative, with `2>&1`, after `cd` or | reading — the guard maintaining itself, content versioned              |
-| with an unambiguously assigned path prefix                                                                                                                                                                                 |                                                                        |
-| `python <script>` with a target path inside the project (`*.py`), script parameters unchecked                                                                                                                              | reading — content is versioned and therefore reviewable before it runs |
-| `python -c`, `python -m <other>`, `python` without target script (REPL)                                                                                                                                                    | `ask` — inline code is invisible to review                             |
-| scripts outside the project (temp folder) and `<project>\.git`                                                                                                                                                             | `ask` — outside the reviewed circle                                    |
-| `node` with a foreign script, `--eval`, `--version`, bare call; `deno`, `ruby`, `perl`                                                                                                                                     | `ask` — only the named self scripts are allowed                        |
+| Case                                                                                          | Assessment                                                             |
+| --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `node` with one of the self scripts (list below)                                              | reading — the guard maintaining itself, content versioned              |
+| `python <script>` with a target path inside the project (`*.py`), script parameters unchecked | reading — content is versioned and therefore reviewable before it runs |
+| `python -c`, `python -m <other>`, `python` without target script (REPL)                       | `ask` — inline code is invisible to review                             |
+| scripts outside the project (temp folder) and `<project>\.git`                                | `ask` — outside the reviewed circle                                    |
+| `node` with a foreign script, `--eval`, `--version`, bare call; `deno`, `ruby`, `perl`        | `ask` — only the named self scripts are allowed                        |
+
+Self scripts, also relative, with `2>&1`, after `cd` or with an unambiguously
+assigned path prefix: `test/test.mjs`, `test/test-index.mjs`,
+`test/test-wiring.mjs`, `test/smoke-reviewer.mjs`, `bench-*.mjs`,
+`src/replay.mjs`, `src/analyze.mjs`.
 
 Resolution is against the session's working folder; a `cd` in the same script
 follows along; a failed `cd` target disables relative resolution (fail closed).

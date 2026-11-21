@@ -141,14 +141,37 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 - **`tmp_path`-Workaround, repo-übergreifend ausgerollt (21.11.2026):**
   Pytest legt `tmp_path`-Verzeichnisse mit `mode=0o700` an; die
-  Codex-Windows-Sandbox kann danach nicht mehr darauf zugreifen. Die
+  Codex-Windows-Sandbox kann danach nicht mehr darauf zugreifen. Das ist ein
+  Fehler der Sandbox, kein Projektfehler; er ist gemeldet und dort noch offen
+  (Vergleich: `CHANGELOG.md` im Nachbar-Repo `../codex-picker`). Die
   `tests/conftest.py` überschreibt daher `tmp_path` und legt pro Test einen
   Ordner unter `tests/artifacts/` (git-ignoriert) an. Die Konvention steht in
   `AGENTS.md`, die Entscheidung in `docs/adr/0003-tmp-path-workaround-codex-sandbox.md`.
+  Fällt der Sandbox-Fehler weg, entfällt die Fixture ohne Änderung an den Tests.
   `tests/test_codex_guard.py`: 149 bestanden, 1 übersprungen.
 
 ### Geändert
 
+- **`ship.ps1` kann einen abgebrochenen Lauf fortsetzen (21.11.2026):** Nach
+  einem roten Check blieb der Lauf auf dem Wellen-Branch stehen; jeder weitere
+  Aufruf brach an `Aktueller Branch ist 'welle-…', erwartet 'main'` ab. Steht
+  `HEAD` jetzt auf einem `welle-*`-Branch, überspringt das Skript Branch-Anlage
+  und `git reset --hard origin/main`, verwendet einen offenen PR weiter statt
+  einen zweiten anzulegen und läuft dann Prüfungen, Merge und `main` nachziehen.
+  Jeder andere Branch bricht mit klarer Meldung ab. Beide Pfade mit `-DryRun`
+  geprüft.
+- **`pre-commit` blockiert Benutzerpfade und Schlüsselmuster (21.11.2026):**
+  Die kanonische Vorlage `~/.agents/references/githooks/pre-commit` prüft die
+  hinzugefügten Zeilen jetzt auf `C:\Users\<name>\…`, `/Users/<name>/…` und
+  Schlüsselmuster (`sk-…`, `oc_sk_`, `ghp_…`, `AKIA…`) — dieselben Ausdrücke
+  wie der CI-Schritt „Keine Benutzerpfade und keine Schlüssel". Ausgegeben wird
+  nur der Dateiname. Anlass: Zwei Pfadzeilen passierten `add47fd` und fielen
+  erst in der CI auf. Die Kopie in diesem Repo ist nachgezogen (byte-identisch),
+  ebenso in sieben weiteren Repos unter `~/Python-Projekte`; ein
+  `.githooks/pre-commit.local` ist damit entfallen. `pre-push` und `commit-msg`
+  in einigen Repos sind ältere Fassungen und wurden nicht angefasst. Nachweis:
+  ein Commit-Versuch mit einer Testdatei wurde mit
+  `COMMIT BLOCKIERT - Benutzerpfad …` abgewiesen.
 - **`ship.ps1` übersteht den Start der Prüfungen (21.11.2026):** Unmittelbar
   nach `gh pr create` meldet `gh pr checks` „no checks reported" und endet mit
   Exit 1 — der erste Lauf von PR #18 brach daran ab. Das Skript wiederholt
