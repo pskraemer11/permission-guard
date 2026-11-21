@@ -3363,3 +3363,182 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
 - Die Messrunde läuft als Hintergrundprozess; sie schreibt nur nach `staging/`
   und berührt den Arbeitsbaum nicht.
 - Untracked bleiben: vier Screenshots, ein JPG und `review/`.
+
+
+================ Compaction 21.11.2026 / 11:11 ================
+## Objective
+- **Current:** Nachmessung der Decision-Modelle ausgewertet und dokumentiert;
+  Betriebsmodell bestätigt. Änderungen liegen im Arbeitsbaum, nicht committet.
+- **Completed:** Vormessung (vier Modelle, `-np 1`/`-np 5`), Gegenprobe
+  (Kev-4B, pplx, GLiDE-9B), Doku in beiden READMEs, `CHANGELOG.md`,
+  `PLANUNG.md`.
+
+## Important Details
+- **Entscheidung: Kev-4B bleibt.** pplx-decider-flash-v1.3 ist gleichwertig
+  (14/14 + 23/23), aber 34 ms langsamer und 0,7 GB größer. GLiDE-9B verliert
+  `read-list-project` und braucht 5,4 GB. lev bleibt bei 13/14 im MCP-Teil und
+  gibt `move-outside` mit p 0,879 frei.
+- **Vormessung ist eine Untergrenze.** `staging/measure.mjs` übergibt keinen
+  Temp-Ordner; `write-temp-file` kommt dort auf p 0,223, im echten Weg auf
+  `allow`. Für Schwellenbereiche taugt sie, für die Entscheidung nur die
+  Gegenprobe.
+- **Schwellen kommen aus Umgebungsvariablen.** `loadConfig` liest neben
+  `reviewer.js`, im Repo also `src/`; eine Datei im Repo-Root wirkt seit dem
+  Umzug still nicht mehr. `staging/probe-config.mjs` belegt das (0,65 ohne,
+  0,50 mit Variablen).
+- **pplx war zweimal übersprungen:** Die Modellprüfung verglich gegen
+  `general.name`, das in der Datei `n/a` lautet. Rückfall auf den Dateinamen.
+
+## Work State
+- Geändert: `README.md`, `README_de.md`, `CHANGELOG.md`, `PLANUNG.md`,
+  `COMPACTIONS.md`. Kein Code.
+- Geprüft: Reviewer läuft mit `Kev-4B-Q4_K_M.gguf` (`/v1/models`), beide
+  geplanten Tasks `Ready`. Tabellen der neuen Abschnitte gleich breit
+  (`staging/check-tables.mjs`); ältere Tabellen bleiben unberührt.
+- Offen: Freigabe durch den Nutzer, Commit, Auslieferung.
+
+## Next Move
+1. Freigabe einholen, dann committen.
+2. Ausliefern mit `scripts/ship.ps1` (Nutzer).
+
+## Relevant Files
+- `staging/gegenprobe.ps1`: Gegenprobe über Env-Variablen, Kandidatenliste.
+- `staging/summarize.mjs`: Tabelle aus `staging/measure-*.json`.
+- `staging/probe-config.mjs`: belegt den Env-Override.
+- `staging/check-tables.mjs`: prüft gleiche Zeilenbreite je Tabelle.
+- `README.md`, `README_de.md`: Umgebungsvariablen, Ablageort, Messverfahren,
+  Nachmessungstabelle.
+
+## Important Context
+- `node -e` zählt als Rückfrage; zwei davon plus ein zusammengesetzter Befehl
+  lösten das Deny-Limit aus (3 in Folge). Einmal-Skripte deshalb als Datei
+  unter `staging/` anlegen.
+- Untracked bleiben: vier Screenshots, ein JPG und `review/`.
+
+
+=============== Compaction 21.11.2026 / 12:11 ================
+## Objective
+- **Current:** Session-Abschluss in permission-guard: Docs (ADR 0003, README±de,
+  CHANGELOG, PLANUNG-Nachtrag), diese Zusammenfassung, Commit und Push-Anleitung.
+- **Completed:** tmp_path-Workaround (Codex-Windows-Sandbox) inkl. Rollout in
+  allen `Python-Projekte`-Repos, Verankerung in Skill `python-project-init` und
+  in elf `AGENTS.md`, Gates in permission-guard grün (s. Work State).
+
+## Important Details
+- **Decisions:** Pytest-`tmp_path` ist in dieser Umgebung verboten (0o700-Ordner,
+  die der Sandbox-Token nicht mehr anfassen kann). Ersatz: Repo-lokale Fixture
+  in `tests/conftest.py` mit Root `tests/artifacts/` (+ `.gitignore`), pro Test
+  eigener Ordner ohne `mode`, `shutil.rmtree(..., ignore_errors=True)`, kein
+  `--basetemp`, kein `tmp_path_factory.mktemp`, kein
+  `tempfile.TemporaryDirectory`/`mkdtemp`. Trade-off: Artefakte liegen
+  vorübergehend im Repo (ignoriert). Details in
+  `docs/adr/0003-tmp-path-workaround-codex-sandbox.md`.
+- **Bug / Finding:** Ursache reproduzierbar isoliert: `Path.mkdir(mode=0o700)`
+  erzeugt die Störung, die Erfahrung hängt vom Zusammenspiel Pytest/Python
+  (restriktive Windows-ACL) mit dem Codex-Sandbox-Token ab (Token meldet den
+  Administrator als deny-only, kein Allow-ACE nach DACL-Ersatz). Damit ist es
+  ein Harness-/Pytest-Zusammenspiel, kein Projekt-Config-Fehler.
+- **Architektur:** keine Produktänderung; nur Test-Fixtures, `.gitignore` und
+  Konventions-Docs.
+
+## Work State
+### Completed
+- Rollout: 15 Repos mit `conftest`-Fixture (3 bestehende erweitert, Rest neu),
+  12 `.gitignore`-Einträge (davon 1 neu angelegt), Gates je Repo grün
+  (u. a. permission-guard 149 passed/1 skipped, Benchmarks je 43, Inspect-Evals
+  45 mit `.venv-inspect`, tabbyAPI 104 mit `exllamav3`-Venv, lmms-eval 9 mit
+  Repo-Venv). Verbleibende Fehler sind vorbestehende Umgebungslücken
+  (codex-picker: 2 fehlende Snapshot-Daten; tabbyAPI unter System-Python:
+  `loguru`; exllamav3: CUDA-Build).
+- Verankerung: `~/.agents/skills/python-project-init/SKILL.md` (Baseline-Bullet),
+  Template-`tests/conftest.py` (Smoke-Test grün), Template-`.gitignore`;
+  elf `AGENTS.md` mit der Konvention (codex-picker und Template auf Englisch).
+- permission-guard: sechs Pflicht-Gates grün (992/992, 13/13, 40/40, 149+1,
+  ruff ok, pyright 0 Fehler); ADR 0003, README±de, CHANGELOG, PLANUNG-Nachtrag
+  geschrieben.
+### Active
+- Commit in permission-guard (alle `git status`-Positionen, s. Relevant Files),
+  danach Push durch den Nutzer.
+### Blocked
+- Profil-`apply_patch`-Fix (einzeilig, `| Select-Object -First 1`) konnte hier
+  nicht gesetzt werden: Schreiben ins Profil-Verzeichnis ist in dieser Umgebung
+  blockiert. Sicherung liegt unter
+  `C:\Users\<name>\.codex\visualizations\2026\11\15\01a1e0a0-211d-7642-a259-574d1a9fdf6b\Microsoft.PowerShell_profile.ps1.bak-20261121`.
+- `apply_patch`-Update-Modus verlangt: `@@` = wörtliche Datei­zeile vor der
+  Änderung, Body nur Folge­zeilen (Experiment). Die `.bat` und die Codex-Funktion
+  bleiben unberührt.
+
+## Next Move
+1. Nutzer: `pwsh -NoProfile -File .\scripts\ship.ps1` aus dem Repo-Verzeichnis
+   ausführen (Branch+PR+Merge nach main, bricht bei roter Prüfung ab).
+2. Optional: Profil-Zeile 186 einzeilig fixen (Get-Command-Bug).
+
+## Relevant Files
+- `tests/conftest.py`: neue Fixture (Workaround).
+- `.gitignore`, `AGENTS.md`: `tests/artifacts/` + Konvention.
+- `docs/adr/0003-tmp-path-workaround-codex-sandbox.md`: Entscheidung.
+- `README.md`, `README_de.md`, `CHANGELOG.md`, `PLANUNG.md`: Doku-Stand.
+- `~/.agents/skills/python-project-init/SKILL.md` und Template: Baseline.
+- Untracked bleiben bewusst: Screenshots, `review/` (`.lnk` mit Benutzernamen,
+  Repo-Konvention aus `scripts/ship.ps1`).
+
+## Important Context
+- Hooks: `core.hooksPath=.githooks` ist gesetzt; Pre-Push läuft immer, Pre-Commit
+  nach `test-gate.conf`-Präfixen. Push bleibt beim Nutzer.
+- Inspect-Evals: `.venv-inspect` (nicht `.venv`), `tests/` Plural, dazu ein
+  vorbestehendes `pytest/artifacts` (per Ignore schon abgedeckt). lmms-eval
+  nutzt dagegen `test/` Singular.
+- Der vorbestehende Dirty State (METHODOLOGY*, alte Docs-Änderungen) wurde in
+  diesem Commit mitgezogen, weil der Nutzer „alle Änderungen" befahl.
+
+
+================ Compaction 21.11.2026 / 12:20 ================
+## Objective
+- **Current:** Die README-Aufteilung nachziehen: was der Commit `add47fd` noch
+  nicht enthielt, ergänzen und prüfen.
+- **Completed:** Lücke im Regelwerk geschlossen, `npm ci` in die README,
+  verstellte Querverweise korrigiert, alle Tabellen der vier Dateien
+  ausgerichtet, `CHANGELOG.md` und `PLANUNG.md` nachgezogen.
+
+## Important Details
+- **Der Commit kam aus einer parallelen Sitzung** und nahm den Arbeitsbaum mit.
+  Dadurch fehlten drei Dinge, die beim Aufteilen untergegangen waren:
+  - Der Abschnitt „Was erlaubt wird" hatte seine DetailListen (erlaubte Cmdlets,
+    `git`-Lesebefehle, Schreib-Tabelle, Löschregel) verloren — die README hatte
+    nur die Kurzfassung. Jetzt als „Was erlaubt wird: die Listen" in
+    `METHODOLOGY*`.
+  - `npm ci` / `npm run test:index` stand zwischen den beiden datierten Ständen
+    und wäre mit ihnen nach `PLANUNG.md` gewandert. Steht jetzt in der README
+    unter Installation.
+  - Zwei Querverweise zeigten auf den falschen Abschnitt (Codex-Einzelheiten
+    unter „Als eigenes Repository" statt unter „Zwei Implementierungen").
+- **Prüfverfahren statt Augenmaß:** `staging/coverage-lines.mjs` vergleicht jede
+  Zeile der alten README mit der neuen Fassung; übrig bleiben nur umformulierte
+  Stellen und die bewusst verschobenen Stände. `staging/whitespace-only.mjs`
+  belegt, dass das Tabellen-Ausrichten nur Leerzeichen geändert hat.
+- **Erster Formatierlauf war ein Fehlgriff:** Das Skript übergab Objekte statt
+  Zeilen an die Formatierung und schrieb `|  |` in jede Zeile. Über
+  `staging/backup-*.md` zurückgespielt, Skript korrigiert, danach erneut geprüft.
+
+## Work State
+- Geändert: `METHODOLOGY.md`, `METHODOLOGY_de.md`, `README.md`, `README_de.md`,
+  `PLANUNG.md`, `CHANGELOG.md`, `COMPACTIONS.md`. Kein Code.
+- Geprüft: alle vier Tabellen-Dateien ausgerichtet; Inhaltsvergleich gegen die
+  alte Fassung; `PLANUNG.md` enthält beide datierten Stände.
+- Offen: Freigabe, Commit, Auslieferung durch den Nutzer.
+
+## Next Move
+1. Freigabe einholen, dann committen.
+2. `scripts/ship.ps1` durch den Nutzer.
+
+## Relevant Files
+- `staging/coverage-lines.mjs`, `staging/coverage.mjs`: Verlustkontrolle.
+- `staging/align-tables.mjs`, `staging/check-tables.mjs`: Tabellen ausrichten
+  und prüfen.
+- `staging/whitespace-only.mjs`: belegt reine Leerzeichen-Änderungen.
+- `staging/split-methodology.mjs`, `staging/dumpblock.mjs`: Aufteilung.
+
+## Important Context
+- `METHODOLOGY*` und die kurzen READMEs sind seit `add47fd` versioniert; die
+  neuen Abschnitte kommen als Nachtrag dazu.
+- Untracked bleiben: Screenshots, ein JPG und `review/`.

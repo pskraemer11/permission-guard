@@ -36,3 +36,4 @@ desktop.ini
 # (Nutzerentscheidung 05.11.2026). Ein "git add -A" soll sie nicht erfassen.
 docs/Codex vs. OpenCode Vergleich bzgl Sicherheit.md
 docs/permission-guard Statistik 20261101.md
+tests/artifacts/

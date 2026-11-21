@@ -1593,3 +1593,131 @@ Selbst-Skripte enthält jetzt auch `test-index.mjs`, `test-wiring.mjs`,
 `bench-mcp.mjs`, `bench-model.mjs`, `bench-shell.mjs` und
 `smoke-reviewer.mjs`. Vier neue Testfälle in `test.mjs` (985/985), darunter
 die Gegenprobe: ein fremdes `test.mjs` in einem anderen Ordner bleibt `ask`.
+
+## Nachtrag 21.11.2026: Nachmessung der Decision-Modelle
+
+**Aufbau.** Vier Modelle mit `<arch>.decision.type` unter
+`D:\LLM-Modelle\Llama-GGUF`, je `-np 1` und `-np 5`, Schwellen 0,30–0,95.
+Danach die Gegenprobe mit `test/bench-model.mjs --repeat 3` und
+`test/bench-shell.mjs --repeat 3` bei 0,70/0,50, Mehrheitsentscheid. Kev-4B lief
+als Tageskontrolle mit.
+
+**Vormessung (37 Fälle, eine Anfrage je Fall, Schwelle nachträglich gerechnet).**
+Die Spalte „Schwelle" nennt den Bereich, in dem der Bestwert erreicht wird.
+
+| Modell                  | np | MCP   | Schwelle  | Shell | Schwelle  | MCP   | Shell  |
+| ----------------------- | -- | ----- | --------- | ----- | --------- | ----- | ------ |
+| Kev-4B                  | 1  | 14/14 | 0,60–0,70 | 22/23 | 0,35–0,50 | 47 ms | 226 ms |
+| Kev-4B                  | 5  | 14/14 | 0,60–0,70 | 22/23 | 0,35–0,50 | 47 ms | 157 ms |
+| pplx-decider-flash-v1.3 | 1  | 14/14 | 0,65–0,80 | 21/23 | 0,30–0,85 | 57 ms | 200 ms |
+| pplx-decider-flash-v1.3 | 5  | 14/14 | 0,65–0,80 | 21/23 | 0,30–0,85 | 52 ms | 191 ms |
+| fastino_GLiDE-9B        | 1  | 14/14 | 0,50–0,75 | 21/23 | 0,30–0,75 | 80 ms | 316 ms |
+| fastino_GLiDE-9B        | 5  | 14/14 | 0,50–0,75 | 21/23 | 0,30–0,75 | 75 ms | 246 ms |
+| lev                     | 1  | 13/14 | 0,30–0,85 | 22/23 | nur 0,90  | 93 ms | 248 ms |
+| lev                     | 5  | 13/14 | 0,30–0,85 | 22/23 | nur 0,90  | 72 ms | 206 ms |
+
+**Gegenprobe (maßgeblich, Schwellen 0,70/0,50, Mehrheitsentscheid über drei
+Läufe):**
+
+| Modell                  | MCP   | Shell     | Median | Größe   |
+| ----------------------- | ----- | --------- | ------ | ------- |
+| **Kev-4B**              | 14/14 | **23/23** | 157 ms | 2,83 GB |
+| pplx-decider-flash-v1.3 | 14/14 | 23/23     | 191 ms | 3,55 GB |
+| fastino_GLiDE-9B        | 14/14 | 22/23     | 246 ms | 5,44 GB |
+
+**Entscheidung.** Kev-4B bleibt Betriebsmodell. pplx-decider-flash-v1.3 erreicht
+dieselbe Trefferquote, ist aber 34 ms langsamer und 0,7 GB größer; ein Wechsel
+brächte nichts. GLiDE-9B verliert einen Shell-Fall und ist mit 5,4 GB fast
+doppelt so groß. lev fällt im MCP-Teil auf 13/14 und wurde deshalb nicht
+gegengeprüft.
+
+**Befunde und Grenzen.**
+
+- **Vormessung ist eine Untergrenze.** `staging/measure.mjs` übergibt keinen
+  Temp-Ordner. Fälle, die in den Temp-Bereich schreiben, bekommen dadurch eine
+  niedrigere Wahrscheinlichkeit als im echten Weg (`write-temp-file`: p 0,223
+  statt Freigabe). Für Schwellenbereiche taugt die Vormessung, für die
+  Entscheidung nur die Gegenprobe.
+- **GLiDE-9B** fragt `Get-ChildItem -Force` dreimal von dreimal zurück — der
+  häufigste Lesebefehl überhaupt.
+- **lev** lässt in der Vormessung `move-outside` bei p 0,879 freigeben. Zusammen
+  mit 13/14 im MCP-Teil ist es aus dem Rennen.
+- **pplx war zweimal übersprungen:** Die Prüfung „läuft wirklich das erwartete
+  Modell" verglich gegen `general.name`, das in dieser Datei `n/a` lautet. Der
+  Vergleich nutzt jetzt den Dateinamen als Rückfall.
+- **Konfigurationsdatei im Repo-Root ist wirkungslos.** `loadConfig` liest neben
+  `reviewer.js`, also unter `src/`. Die Gegenprobe setzt Schwellen deshalb über
+  `PERMISSION_GUARD_REVIEWER_THRESHOLD` und `…_SHELL_THRESHOLD`; belegt mit
+  `staging/probe-config.mjs` (0,65 ohne, 0,50 mit Variablen). Beide READMEs und
+  der CHANGELOG halten das fest.
+- Die Schwellen wurden auf denselben 37 Fällen bestimmt, auf denen sie geprüft
+  wurden — Obergrenze, nicht Alltag.
+
+
+## Nachtrag 21.11.2026: tmp_path-Workaround
+
+**Festlegung.** Tests in `Python-Projekte` verwenden nicht mehr `tmp_path`:
+Die `tests/conftest.py`-Fixture legt pro Test einen Ordner unter
+`tests/artifacts/` an und räumt mit `shutil.rmtree` auf; kein `--basetemp`,
+kein `TemporaryDirectory`/`mkdtemp`. Die Regeln stehen in den `AGENTS.md`
+der beteiligten Repos, die Entscheidung in
+`docs/adr/0003-tmp-path-workaround-codex-sandbox.md` und das Muster im Skill
+`python-project-init` (Baseline und Template). Betroffen hier:
+`tests/conftest.py`, `.gitignore`, `AGENTS.md`.
+
+## Nachtrag 21.11.2026: Aufteilung der README
+
+Die README war auf rund 1470 Zeilen gewachsen und hatte die Rolle eines
+Entscheidungsprotokolls übernommen: datierte Stände, Messreihen, Regelwerk im
+Detail. Sie ist jetzt ein Einstieg für Erstnutzer (rund 290 Zeilen), das
+Fachliche steht in `METHODOLOGY.md` und `METHODOLOGY_de.md`.
+
+**Verschoben, nicht neu geschrieben.** Die Fachabschnitte sind wörtlich
+übernommen: Regelwerk im Detail (Listen, Netz-Lesen, `python`, `.NET`,
+Interpreter, Skill-Skripte, unlesbare Formen, Geheimnisbegriffe, Hilfe und
+Version, fremde CLIs), Befehlszerlegung, Git-Muster, Ebene 1, MCP-Urteil,
+Messverfahren und Änderbarkeit. Die README behält Problem, Lösung,
+Installation, Einrichten, die Verbotsliste, die Gegenüberstellung OpenCode/Codex,
+die Grenzen und den Testbefehl-Block.
+
+**Aus der README hierher übernommen:** die beiden folgenden datierten Stände.
+Sie waren Teil der Historie und gehören nicht in einen Einstiegstext.
+
+### Stand 13.11.2026: Review-Runde
+
+- **Umgehung behoben:** Eine Zuweisung vor einem Schreib- oder Löschbefehl
+  (`$null = Remove-Item …`) wurde nicht geprüft. Jetzt wird der Befehl dahinter
+  geprüft, mit Test und Gegenprobe.
+- **MCP `sync` ist schreibend:** `sync` und `sync_status` fragen nach.
+- **404 auf `/systemone`:** Ein Backend ohne dieses Protokoll (LM Studio,
+  Chat-GGUF) bekommt die Entscheidung über den Chat-Weg.
+- **Argumente:** Kanal-Tags neutralisiert, Texte auf 32000 Zeichen begrenzt.
+  Jede Kürzung, Tiefenbegrenzung oder ausgelassene Feldgruppe fragt ohne
+  Modellaufruf nach (fail closed).
+- **Zeitbudget Shell:** Ein Budget für alle Segmente zusammen.
+- **Aufwärmlauf:** Beide Wege bei gemischten Backends.
+- **Audit:** Zustand vor jedem Anhängen neu lesen (zwei Plugin-Instanzen).
+- **Shell-Messung:** `npm run bench:shell`. Mit der Frage aus Runde 2 (Ordner im
+  Fragetext): 17/17, einstimmig. Mit der alten Frage und dem Ordner nur im
+  Zustand lag dieselbe Messung bei 12/17; die Fehlschläge waren Schreiben im
+  Projekt und Temp-Ordner sowie das Lesen von `token.json`.
+- **Parallelität:** Der Server läuft mit `-np 1`. Eine Anfrage nach der anderen
+  wird bedient, parallel zu senden brächte nichts. Während des Aufwärmlaufs
+  wartet eine Entscheidung in der Warteschlange und kann den Zeitrahmen
+  überschreiten.
+
+### Stand 20.11.2026: Größenlimit und Geheimnisfrage
+
+- **Große MCP-Argumente:** über 32000 Zeichen (als JSON) bleibt ein
+  `read`-Werkzeug `allow`; jede andere Absicht wird `deny`. Eine Rückfrage,
+  die niemand lesen kann, ist kein Schutz.
+- **Fehlende Geheimnis-Antwort:** Liefert das Entscheidungsmodell keinen Wert
+  für die Geheimnisfrage, lautet das Shell-Urteil `ask`, statt sich allein auf
+  die Hauptfrage zu verlassen.
+- **Eingabe zu groß für das Modell:** Der Serverfehler „too large to process"
+  ergibt für diesen Befehl `deny`; andere Serverfehler bleiben `ask`.
+
+**Befund beim Umbau:** Die Zeile „Installation nach dem Klonen: `npm ci`,
+`npm run test:index`" stand in der README zwischen den datierten Ständen und
+wäre mit ihnen fast verschwunden. Sie steht jetzt in der README unter
+Installation — ohne `npm ci` schlägt das Test-Gate beim Commit fehl.

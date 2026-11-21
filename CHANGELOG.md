@@ -139,6 +139,14 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 - **Skill-Baseline ergänzt (17.11.2026):** `hook-regeln.yml` prüft den Push-/PR-Bereich mit demselben `pre-push`-Hook lokal (gitleaks 8.30.1, `GITHOOKS_TEST_GATE=0`, fail closed bei unlesbaren Revisionen); der Verhaltensproben-Schritt des Eltern-Repositories entfällt, weil `tools/githooks-test/` hier nicht existiert. `scripts/enable-hooks.ps1` setzt `core.hooksPath .githooks` pro Klon. `requirements-dev.txt` pinnt `pip-audit==2.10.1`; `ci.yml` führt `pip_audit --strict` im Python-Job aus. Ruff prüft jetzt die Bandit-`S`-Regeln; `assert` (`S101`) und `subprocess` (`S603`) sind in `tests/*` ignoriert, der Produktivcode war schon sauber.
 
+- **`tmp_path`-Workaround, repo-übergreifend ausgerollt (21.11.2026):**
+  Pytest legt `tmp_path`-Verzeichnisse mit `mode=0o700` an; die
+  Codex-Windows-Sandbox kann danach nicht mehr darauf zugreifen. Die
+  `tests/conftest.py` überschreibt daher `tmp_path` und legt pro Test einen
+  Ordner unter `tests/artifacts/` (git-ignoriert) an. Die Konvention steht in
+  `AGENTS.md`, die Entscheidung in `docs/adr/0003-tmp-path-workaround-codex-sandbox.md`.
+  `tests/test_codex_guard.py`: 149 bestanden, 1 übersprungen.
+
 ### Geändert
 
 - **`ship.ps1` übersteht den Start der Prüfungen (21.11.2026):** Unmittelbar
@@ -741,6 +749,34 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Dokumentiert
 
+- **README als Einstieg, Fachliches nach `METHODOLOGY.md` (21.11.2026):** Die
+  README war auf rund 1470 Zeilen gewachsen und hatte die Rolle eines
+  Entscheidungsprotokolls übernommen. Neu: `METHODOLOGY.md` und
+  `METHODOLOGY_de.md` tragen das Fachliche (Regelwerk im Detail, Listen der
+  erlaubten Befehle, Befehlszerlegung, Git-Muster, Ebene 1, MCP-Urteil,
+  Messverfahren, Änderbarkeit, Codex-Gegenüberstellung). `README.md` und
+  `README_de.md` sind Einstieg für Erstnutzer (rund 290 Zeilen): Problem,
+  Lösung, Installation, Einrichten, Verbotsliste, Grenzen, Testbefehle,
+  Weiterlesen. Die datierten Stände vom 13.11. und 20.11. stehen jetzt in
+  `PLANUNG.md`. Inhalte wurden verschoben, nicht neu geschrieben; geprüft mit
+  einem Zeilenvergleich gegen die alte Fassung. Die Installationszeile
+  `npm ci` stand zwischen diesen Ständen und wäre fast mitgegangen — sie steht
+  jetzt in der README unter Installation. Alle Tabellen der vier Dateien sind
+  ausgerichtet (`staging/check-tables.mjs`). Kein Code geändert.
+- **Messschwellen über Umgebungsvariablen (21.11.2026):** `README.md` und
+  `README_de.md` nennen jetzt die vollständige Liste der Umgebungsvariablen —
+  ergänzt um `_BACKEND`, `_SHELL_BACKEND`, `_THRESHOLD` und `_SHELL_THRESHOLD`
+  samt zulässigem Band (0,5 bis unter 1,0, sonst wird der Wert verworfen). Neu
+  ist außerdem der Ablageort der Konfigurationsdatei: gelesen wird sie neben
+  `reviewer.js`, im Repository also unter `src/`. Eine Datei im Repo-Root bleibt
+  seit dem Umzug nach `src/` wirkungslos, und es gelten still die Vorgaben
+  0,70/0,65. Belegt mit `staging/probe-config.mjs`: ohne Variablen
+  `shellThreshold` 0,65, mit Variablen 0,50. Die Gegenprobe
+  `staging/gegenprobe.ps1` setzt ihre Schwellen deshalb über
+  `PERMISSION_GUARD_REVIEWER_THRESHOLD` und
+  `PERMISSION_GUARD_REVIEWER_SHELL_THRESHOLD` statt über eine Datei. Beide
+  READMEs beschreiben außerdem das Messverfahren (Vormessung und Gegenprobe) und
+  tragen die Nachmessung vom 21.11.2026. Kein Code geändert.
 - **Abschluss der Guard- und CPU-Arbeiten (17.11.2026):** `README.md` und
   `README_de.md` beschreiben nun auch die rekursive Blockprüfung,
   `scopeEdit()` samt physischer Link-Auflösung und das Nachwärmen nach einem

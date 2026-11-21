@@ -36,3 +36,27 @@ einzelne Dateien werden nicht dorthin geschrieben.
 
 `CHANGELOG.md` sagt, *was* sich dateiweise geändert hat; `COMPACTIONS.md` sagt,
 *warum*, mit Stand und nächstem Schritt. Beide nur anhängen.
+
+## Tests – tmp_path-Workaround (Codex-Windows-Sandbox)
+
+Pytest legt `tmp_path`- und Basetemp-Verzeichnisse mit `mode=0o700` an;
+die Codex-Sandbox kann danach nicht mehr darauf zugreifen. Daher gilt
+in diesem Repo:
+
+1. Ein dauerhaft vorhandener Repo-Ordner dient als Artefakt-Root, z. B.
+   `tests/artifacts/` (in `tests/conftest.py` angelegt).
+2. `tests/artifacts/` ist in `.gitignore` aufgenommen.
+3. Pro Test ein eigener Ordner unter `tests/artifacts/` mit `.mkdir()`
+   (ohne `mode`).
+4. Nach dem Test mit `shutil.rmtree(..., ignore_errors=True)` aufräumen.
+5. Kein `--basetemp`-Flag verwenden.
+
+Zu vermeiden:
+
+- `tmp_path` (Pytest)
+- `tmp_path_factory.mktemp`
+- `tempfile.TemporaryDirectory` / `tempfile.mkdtemp`
+  (auch diese erzeugen intern `0o700`-Ordner)
+
+Die Testartefakte liegen vorübergehend im Repo; da `tests/artifacts/`
+bereits ignoriert ist, ist das als Projektkonvention vertretbar.
