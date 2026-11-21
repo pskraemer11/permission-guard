@@ -589,15 +589,16 @@ allowed at p 0.879 — and was therefore not cross-checked.
 
 **Operational details.**
 
-The starter passes `-b 4096 -ub 4096`. That only
+The starter passes `-b 2048 -ub 2048`. That only
 applies to decision models: they run in embedding mode, where llama.cpp enforces
 `n_batch = n_ubatch`, and question plus answer options must fit into **one**
 batch. The values override the chat-suitable setting in
 `%APPDATA%\llama.cpp\config.ini` (`batch-size = 2048`, `ubatch-size = 1024`
-there), which stays correct for chat models. Measured on 20.11.2026 with
-Clef-Flash-Q4_K_M: 4096 answers 24000 characters, 1024 only 5000; the GPU uses
-7054 of 16283 MiB in the process. Whoever starts `llama-server` themselves must
-set both values; raising only one has no effect.
+there), which stays correct for chat models. Measured on 21.11.2026 with
+Kev-4B-Q4_K_M: 2048 answers 48000 characters (status 200, 2.3 s); the compute
+buffer drops from 4297 to 2149 MiB, the KV cache stays at 544 MiB for 32768
+tokens. Whoever starts `llama-server` themselves must set both values; raising
+only one has no effect.
 
 `-Cpu` sets `-ngl 0` and is meant for machines without an NVIDIA graphics card or
 for a pure CPU build. Measured on 17.11.2026 with Clef-Flash-Q4_K_M on eight CPU

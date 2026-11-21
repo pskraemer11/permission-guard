@@ -162,6 +162,13 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Stapel-Default in `start-reviewer.ps1` auf 2048 (21.11.2026):** `-Batch` und
+  `-Ubatch` stehen jetzt auf 2048 statt 4096. Mit Kev-4B gehen auch mit 2048
+  Eingaben bis 48.000 Zeichen durch (Status 200, 2,3 s), während der
+  Compute-Puffer von 4297 auf 2149 MiB fällt; der KV-Cache bleibt bei 544 MiB
+  für 32768 Token, weil `--kv-unified` einen gemeinsamen Puffer nutzt.
+  `README.md`, `README_de.md`, `METHODOLOGY.md`, `METHODOLOGY_de.md` und der
+  Nachtrag in `docs/adr/0002` nennen den neuen Wert.
 - **`deploy.ps1` übernimmt die Konfiguration aus dem Repo (21.11.2026):** Liegt
   `src/shell-reviewer.config.json` vor, wird sie wie die Module flach ins Ziel
   kopiert und in den SHA256-Vergleich aufgenommen. `-ShellThreshold` und

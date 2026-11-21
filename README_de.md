@@ -139,7 +139,7 @@ verlässlichere Weg: sie greifen unabhängig vom Ablageort.
 Der Standardweg nutzt CUDA mit `-ngl all`. `-Cpu` ist für Rechner ohne
 NVIDIA-Grafikkarte oder einen reinen CPU-Build gedacht; dort `timeoutMs` auf 8000
 setzen, weil eine Entscheidung dann rund 4 s dauert. Warum der Starter
-`-b 4096 -ub 4096` übergibt, steht in `METHODOLOGY_de.md` unter „Betriebsdetails".
+`-b 2048 -ub 2048` übergibt, steht in `METHODOLOGY_de.md` unter „Betriebsdetails".
 
 **Konfiguration wird beim Laden einmal gelesen.** `loadConfig()` läuft in
 `setup()`, also einmal pro Plugin-Instanz. Eine Änderung an

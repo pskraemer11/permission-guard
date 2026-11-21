@@ -47,7 +47,6 @@ Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
 | P1   | Dateiwerkzeuge prüfen               | `deny` blockt den `edit`-Pfad; die pauschalen `edit`-Freigaben sind gelöscht. Offen: Freigabe oder stille `ask`-Quittung? | S       | kontrollierter Test     |
 | P1   | Warmup-Kaltstart                    | Fehlerpfad belegt (5 Versuche, kein `TypeError`); der Kaltstart über den Dateiwatcher fehlt noch                          | S       | Dateiwatcher löst aus   |
 | P2   | `start-reviewer.ps1` ohne Zeitlimit | wartet 60 s auf `/health`, meldet dann Abbruch; bei belegter Log-Datei hängt der Start (21.11.2026)                       | S       | keine                   |
-| P2   | `-b`/`-ub` auf 2048 stellen         | gemessen: Compute-Puffer halbiert, 48.000 Zeichen gehen durch; Entscheidung über den Startskript-Default offen            | S       | keine                   |
 | P2   | Bench-Grundlage                     | `src/shell-reviewer.config.json` ist jetzt Quelle und wird deployt; Betrieb und Bench messen damit gleich                 | S       | Deploy durch den Nutzer |
 | P2   | G3 lokales Modell im Graubereich    | nur annotieren, nie blockieren; nur wenn G2 messbaren Nutzen zeigt                                                        | L       | Nutzen von G2 belegt    |
 | P3   | P1-03 Shell-Pfad                    | `deny` gewinnt im Edit-Pfad, im Shell-Pfad nicht                                                                          | M       | roter Fall              |
@@ -65,6 +64,7 @@ Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
 | P0-5 Prompt-Schärfung              | umgesetzt 20.11.2026: Frage und Nein-Seite geschärft, `bench-shell --repeat 3` 23/23                                                 |
 | Dreiweg-Antwort                    | gemessen 21.11.2026: 14/14 mit und ohne; „Unbestimmt" kommt in keinem der 14 Fälle vor                                               |
 | P0-11 Server-Stapel                | gemessen 21.11.2026: bis 48.000 Zeichen Status 200 mit `-ub 4096` und mit `-ub 2048`; kein „too large" im Betrieb                    |
+| `-b`/`-ub` 2048                    | Default in `start-reviewer.ps1` seit 21.11.2026; Compute-Puffer 4297 → 2149 MiB, KV-Cache unverändert                                |
 | S6: Parent-Workflow entfernen      | `AI+IDE-Hints/.github/workflows/permission-guard.yml` existiert nicht mehr                                                           |
 | P2: Beobachtung nach Aktivierung   | `src/mcp-report.mjs`: F-Kriterien erfüllt — Tage 13/7, Aufrufe 191/50, Werkzeuge 23/3, schreibend 1/1                                |
 | P3: Shell-Fälle festschreiben      | `test/shell-model-cases.jsonl` und `test/bench-shell.mjs`, 23 Fälle                                                                  |
@@ -123,8 +123,9 @@ Alle Status 200. Der Compute-Puffer halbiert sich mit 2048:
 | `-b/-ub 4096` | 4.297 MiB      | 417 MiB     | 544 MiB  |
 | `-b/-ub 2048` | 2.149 MiB      | 209 MiB     | 544 MiB  |
 
-Damit ist `-ub 2048` eine belegte Option; der Startskript-Default bleibt
-vorerst 4096. Bei 32.000 Zeichen liegt die Antwort bei 1,7–1,9 s und damit
+Damit ist `-ub 2048` eine belegte Option. Der Default in `start-reviewer.ps1`
+steht seit dem 21.11.2026 auf 2048 (`-Batch`/`-Ubatch`); die Messung oben ist
+der Beleg. Bei 32.000 Zeichen liegt die Antwort bei 1,7–1,9 s und damit
 innerhalb des Timeouts von 2.500 ms, aber ohne große Reserve.
 
 ### Bench-Grundlage

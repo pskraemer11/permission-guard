@@ -20,11 +20,12 @@ param(
   [string]$DraftPath = "",
   # Stapelgroesse fuer den Prompt. Entscheidungsmodelle laufen im
   # Embedding-Modus; dort erzwingt llama.cpp n_batch = n_ubatch, und Frage samt
-  # Antwortoptionen muss in EINEN Stapel passen. 4096 deckt gemessen 24000
-  # Zeichen (bei 1024 waren es 5000); die Werte hier uebersteuern die
+  # Antwortoptionen muss in EINEN Stapel passen. 2048 deckt gemessen 48000
+  # Zeichen (21.11.2026, Kev-4B) und halbiert den Compute-Puffer gegenueber
+  # 4096 (2149 statt 4297 MiB). Die Werte hier uebersteuern die
   # chat-taugliche Einstellung in %APPDATA%\llama.cpp\config.ini.
-  [int]$Batch = 4096,
-  [int]$Ubatch = 4096,
+  [int]$Batch = 2048,
+  [int]$Ubatch = 2048,
   # Slots. Ein Decision-Request mit mehreren Fragen erzeugt einen Task je Frage;
   # der gemeinsame Prefix wird nur zwischen Slots wiederverwendet. Vorgabe 5,
   # weil der Reviewer fuenf Fragen stellt: gemessen 20.11.2026 Kev-4B 236 ms
