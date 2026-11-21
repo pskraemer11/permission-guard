@@ -45,7 +45,6 @@ Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
 | Prio | Punkt                               | Was fehlt                                                                                                                 | Aufwand | Abhängigkeit            |
 | ---- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------- | ----------------------- |
 | P1   | Dateiwerkzeuge prüfen               | `deny` blockt den `edit`-Pfad; die pauschalen `edit`-Freigaben sind gelöscht. Offen: Freigabe oder stille `ask`-Quittung? | S       | kontrollierter Test     |
-| P1   | Warmup-Kaltstart                    | Fehlerpfad belegt (5 Versuche, kein `TypeError`); der Kaltstart über den Dateiwatcher fehlt noch                          | S       | Dateiwatcher löst aus   |
 | P2   | Bench-Grundlage                     | `src/shell-reviewer.config.json` ist jetzt Quelle und wird deployt; Betrieb und Bench messen damit gleich                 | S       | Deploy durch den Nutzer |
 | P2   | G3 lokales Modell im Graubereich    | nur annotieren, nie blockieren; setzt die Sichtung der 48 G2-Treffer voraus (Nachtrag 21.11.)                             | L       | G2-Treffer gesichtet    |
 | P3   | P1-03 Shell-Pfad                    | `deny` gewinnt im Edit-Pfad, im Shell-Pfad nicht                                                                          | M       | roter Fall              |
@@ -65,6 +64,7 @@ Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
 | `-b`/`-ub` 2048                    | Default in `start-reviewer.ps1` seit 21.11.2026; Compute-Puffer 4297 → 2149 MiB, KV-Cache unverändert                                                                                                                                                               |
 | `start-reviewer.ps1` Zeitlimit     | erkennt gehaltene Log-Dateien in 10 s und bricht mit Pfad und Hinweis ab; `/health`-Schleife mit 120-s-Budget (21.11.2026)                                                                                                                                          |
 | P0-9 pytest-Optionen               | `--junit-xml`, `--junitxml`, `--html`, `--log-file`, `--result-log`, `--cache-clear`, `--pastebin`, `-o`, `--override-ini` und die Datei-Varianten von `--cov-report` bleiben Rückfrage; `-p no:cacheprovider` und `--cov-report term` bleiben erlaubt (21.11.2026) |
+| Warmup-Kaltstart                   | Kaltstart live belegt: `Aufwaermlauf fehlgeschlagen 2007 ms (ECONNREFUSED)`, erste Entscheidung `TypeError`. Seitdem wiederholt `warmOne` bis `warmupTimeoutMs` statt fünfmal; `test.mjs` 1002/1002 (21.11.2026)                                                    |
 | S6: Parent-Workflow entfernen      | `AI+IDE-Hints/.github/workflows/permission-guard.yml` existiert nicht mehr                                                                                                                                                                                          |
 | P2: Beobachtung nach Aktivierung   | `src/mcp-report.mjs`: F-Kriterien erfüllt — Tage 13/7, Aufrufe 191/50, Werkzeuge 23/3, schreibend 1/1                                                                                                                                                               |
 | P3: Shell-Fälle festschreiben      | `test/shell-model-cases.jsonl` und `test/bench-shell.mjs`, 23 Fälle                                                                                                                                                                                                 |
@@ -1740,6 +1740,30 @@ bleibt die Berechtigungsprüfung.
 
 **Messung.** `test.mjs` 975/975 (acht neue Fälle), `test-index.mjs` 45/45
 (zwei neue Fälle).
+
+## Nachtrag 21.11.2026: Warmup-Kaltstart belegt — Lücke gefunden und geschlossen
+
+**Der Kaltstart ist belegt.** Nach einem OpenCode-Neustart mit ausgeschaltetem
+Server:
+
+| Zeit         | Zeile                                                                      |
+| ------------ | -------------------------------------------------------------------------- |
+| 21:32:00.666 | `setup: Server gestartet (Port 8080)`                                      |
+| 21:32:02.673 | `setup: Aufwaermlauf fehlgeschlagen 2007 ms (TypeError: ECONNREFUSED)`     |
+| 21:32:10.789 | `ask (reviewer) TypeError`                                                 |
+
+**Befund.** Der Fehlerpfad funktioniert — fünf Versuche, kein Absturz, klare
+Meldung, fail closed. Aber der Aufwärmlauf deckte nur 2 Sekunden ab. Der
+Kaltstart lädt 2,9 GB und braucht rund 34 Sekunden; die erste echte Entscheidung
+zahlte ihn und endete in `TypeError` → `ask`.
+
+**Behoben.** `warmOne` wiederholt nicht mehr fünfmal, sondern bis
+`warmupTimeoutMs` (Standard 90 s). Bei Erfolg oder einem nicht wiederholbaren
+Fehler endet die Schleife sofort. `test.mjs` 1002/1002 mit einem Fall, in dem
+der Server erst beim achten Versuch antwortet.
+
+**Offen:** Ein neuer Kaltstart-Lauf mit dem Fix steht aus; er braucht wieder
+einen Neustart von OpenCode.
 
 ## Nachtrag 21.11.2026: Ursache der hängenden Reviewer-Starts
 

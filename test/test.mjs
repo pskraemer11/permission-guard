@@ -1784,6 +1784,19 @@ const warmupChecks = []
   const withCause = await warmup(cfgChat)
   warmupChecks.push(["Fehlerursache steht im Grund", withCause.ok === false && /socket closed/.test(String(withCause.reason))])
 
+  // Kaltstart (Befund 21.11.2026): Der Server oeffnet den Port erst nach
+  // mehreren Sekunden. Fuenf Versuche a 500 ms deckten nur 2 s ab und der
+  // Aufwaermlauf gab auf ("fehlgeschlagen 2007 ms"). Jetzt entscheidet die
+  // Deadline aus warmupTimeoutMs.
+  calls = 0
+  globalThis.fetch = async () => {
+    calls++
+    if (calls < 8) throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ECONNREFUSED" } })
+    return { ok: true, arrayBuffer: async () => new ArrayBuffer(0), json: async () => ({}) }
+  }
+  const slowStart = await warmup({ ...cfgChat, warmupTimeoutMs: 5000 })
+  warmupChecks.push(["Kaltstart: mehr als fuenf Versuche", slowStart.ok === true && calls === 8])
+
   globalThis.fetch = realFetch2
 }
 for (const [name, ok] of warmupChecks) {

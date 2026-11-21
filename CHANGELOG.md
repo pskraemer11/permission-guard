@@ -162,6 +162,14 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Aufwärmlauf wiederholt bis zur Deadline (21.11.2026):** `warmOne` in
+  `reviewer.js` gab nach fünf Versuchen à 500 ms auf — 2 Sekunden. Der
+  Kaltstart lädt 2,9 GB und braucht rund 34 Sekunden; live belegt am 21.11.:
+  `setup: Aufwaermlauf fehlgeschlagen 2007 ms (TypeError: ECONNREFUSED)`,
+  danach `ask (reviewer) TypeError`. Jetzt läuft die Wiederholung bis
+  `warmupTimeoutMs` (Standard 90 s); bei Erfolg oder einem nicht wiederholbaren
+  Fehler endet sie sofort. `test.mjs` 1002/1002 (ein neuer Fall: Server
+  antwortet erst beim achten Versuch).
 - **pytest-Optionen mit Schreibwirkung (P0-9, 21.11.2026):** `guard.js` prüft
   `python -m pytest` jetzt auf alle Optionen, die Dateien anlegen oder löschen:
   `--basetemp`, `--junit-xml`, `--junitxml`, `--html`, `--log-file`,
