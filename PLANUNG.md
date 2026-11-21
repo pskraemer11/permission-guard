@@ -1,6 +1,6 @@
 # PLANUNG — permission-guard
 
-Stand: 20.11.2026
+Stand: 21.11.2026
 
 ## Wozu dieses Dokument
 
@@ -39,17 +39,167 @@ Ablageort.
 
 ## Offene Punkte, priorisiert
 
-| Prio | Punkt                                                                                     | Aufwand | Abhängigkeit                  |
-| ---- | ----------------------------------------------------------------------------------------- | ------- | ----------------------------- |
-| P1   | S6: Parent-Workflow entfernen, Verweise umstellen                                         | S       | CI grün (erfüllt), Zustimmung |
-| P2   | Beobachtung nach Aktivierung: 24 h Log und `mcp-report` prüfen                            | S       | läuft seit 05.11.             |
-| P3   | Shell-Fälle als `shell-cases.jsonl` und `bench-shell` festschreiben                       | S       | —                             |
-| P3   | G0/G1: Ergebnis-Form prüfen, Grenz-Markierung                                             | M       | D                             |
-| P3   | G2/G3: statische Injection-Prüfung, optional lokales Modell                               | M–L     | G1                            |
-| P3   | Dreiweg-Antwort „Unbestimmt" entscheiden                                                  | S       | Messung                       |
-| P3   | Warmup-`TypeError` diagnostizieren                                                        | S       | —                             |
-| P3   | Suchmuster mit Befehlsnamen (`iex`) löst Verweigerung aus                                 | S       | —                             |
-| P3   | Smoke braucht Warmup (Lessons learned 16.11.2026)                                         | S       | —                             |
+Stand: 21.11.2026. Die Liste vom 20.11. ist gegen die späteren Nachträge geprüft.
+Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
+
+| Prio | Punkt                               | Was fehlt                                                                                                                                                  | Aufwand | Abhängigkeit           |
+| ---- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ---------------------- |
+| P1   | Dateiwerkzeuge prüfen               | `edit`/`write` des Harness änderten `~/.config/opencode/opencode.jsonc` ohne Rückfrage und ohne Log-Zeile; der Shell-Aufruf auf denselben Pfad wird `deny` | M       | keine                  |
+| P1   | Warmup-Kaltstart                    | Fehlerpfad ist belegt (5 Versuche, kein `TypeError`); der vollständige Kaltstart über den Dateiwatcher fehlt noch                                          | S       | Dateiwatcher löst aus  |
+| P2   | `start-reviewer.ps1` ohne Zeitlimit | wartet unbegrenzt auf `/health`; scheitert der Start, hängt der Aufruf ohne Meldung (21.11.2026 zweimal beobachtet)                                        | S       | keine                  |
+| P2   | P0-5 Prompt-Schärfung               | Kriterien statt „harmlos?", zwei Negativbeispiele, Messung vorher/nachher                                                                                  | M       | keine (Text liegt vor) |
+| P2   | P0-11 Server-Stapel                 | große Argumente scheitern am physischen Stapel; `-ub`-Anhebung ungemessen                                                                                  | M       | Messplatz              |
+| P2   | Dreiweg-Antwort „Unbestimmt"        | eingebaut, aber aus (11/14); Entscheidung offen                                                                                                            | S       | Messung aus P0-5       |
+| P2   | G3 lokales Modell im Graubereich    | nur annotieren, nie blockieren; nur wenn G2 messbaren Nutzen zeigt                                                                                         | L       | Nutzen von G2 belegt   |
+| P3   | P1-03 Shell-Pfad                    | `deny` gewinnt im Edit-Pfad, im Shell-Pfad nicht                                                                                                           | M       | roter Fall             |
+| P3   | P0-9 weitere pytest-Optionen        | `-o`, `--junit-xml`, `--html`, `-p no:cacheprovider` unbewiesen                                                                                            | S       | eigene Probe           |
+| P3   | Smoke braucht Warmup                | `smoke-reviewer.mjs` wärmt nicht vor                                                                                                                       | S       | keine                  |
+| P3   | MMProj bei Clef-Flash               | nötig oder falsch verdrahtet? (~900 MB im Modell-Setup)                                                                                                    | S       | Auftrag                |
+| P3   | Weg B: Sandbox-ADR                  | eigener Entscheidungsauftrag, weniger `ask` bei gleicher Härte                                                                                             | M       | Auftrag                |
+| —    | Suchmuster mit Befehlsnamen         | `Select-String -Pattern 'iex'` wird verweigert; bewusst offen als Grenze des Klassifizierers                                                               | —       | keine                  |
+
+### Erledigt seit dem 20.11.2026
+
+| Punkt                              | Beleg                                                                                                                                |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| G1 live belegen                    | `webfetch allow -> allow lokales Ziel`, `shield annotate tool=execute`, Ergebnis trägt `[ud-…]`; externes Ziel `-> ask` (21.11.2026) |
+| S6: Parent-Workflow entfernen      | `AI+IDE-Hints/.github/workflows/permission-guard.yml` existiert nicht mehr                                                           |
+| P2: Beobachtung nach Aktivierung   | `src/mcp-report.mjs`: F-Kriterien erfüllt — Tage 13/7, Aufrufe 191/50, Werkzeuge 23/3, schreibend 1/1                                |
+| P3: Shell-Fälle festschreiben      | `test/shell-model-cases.jsonl` und `test/bench-shell.mjs`, 23 Fälle                                                                  |
+| P3: G0/G1 Ergebnis-Form            | Grenz-Markierung umgesetzt und im Code-Mode-Pfad nachgezogen; `test-index.mjs` 45/45                                                 |
+| P3: G2 statische Injection-Prüfung | sechs Format-Familien in `guard.js`; `test.mjs` 992/992                                                                              |
+| P3: Warmup-`TypeError`             | Ursache gefunden (`cause.cause`, `cause.errors`), Wiederholung bei `ECONNREFUSED`/`ECONNRESET` eingebaut                             |
+| ADR 0002, Offene Frage 1           | beantwortet durch „Stufe 3 umgesetzt (vier Achsen)"                                                                                  |
+| ADR 0002, Offene Frage 2           | beantwortet durch „Deny-Limits umgesetzt (Option B)"                                                                                 |
+
+### Reihenfolge
+
+1. **Warmup-Kaltstart** — der Fehlerpfad ist belegt, es fehlt nur der
+   vollständige Durchlauf über den Dateiwatcher.
+2. **Ein Messblock am Server: P0-5 → Dreiweg → P0-11.** Alle drei brauchen
+   Läufe gegen denselben Reviewer. P0-5 ändert den Prompt, die Dreiweg-Frage
+   die Antwortachse, P0-11 die Startparameter; wer sie trennt, misst dreimal
+   dieselbe Grundlage.
+3. **Entscheidungsabhängig danach:** G3 nur, wenn G2 messbaren Nutzen zeigt
+   (dafür fehlt bisher die Auswertung der markierten Ergebnisse); P1-03 nur mit
+   einem roten Fall aus dem Log — ohne Beleg kein Code-Eingriff.
+4. **Parallel, ohne Code:** MMProj-Frage klären (Modell-Setup ansehen), Weg B
+   als ADR-Entwurf, P0-9 als eigene Probe mit einem Testfall je Option.
+5. **Bewusst offen:** das `iex`-Suchmuster. Es ist eine Grenze, kein Fehler.
+
+## Nachtrag 21.11.2026: Dateiwerkzeuge schreiben ungeprüft in geschützte Pfade
+
+**Beobachtung.** Beim Eintragen des `open-knowledge`-Servers in
+`~/.config/opencode/opencode.jsonc` hat der `edit`-Pfad des Harness die Datei
+zweimal geändert. Beide Änderungen liefen durch: keine Rückfrage, kein `deny`,
+und **keine Zeile im `guard.log`**.
+
+**Gegenprobe.** Derselbe Pfad über die Shell ist geschützt:
+
+```text
+2026-11-21T14:17:41.970Z deny geschuetzter Pfad: c:\users\pskra\.config\opencode\opencode.jsonc
+```
+
+**Was das heißt.** Für Shell-Aufrufe greift die Regel „Schreiben in
+`~/.config/opencode` ist `deny`". Für die Dateiwerkzeuge des Harness greift sie
+in dieser Sitzung nicht — weder Protokoll noch Urteil. Die README beschreibt
+`scopeEdit()` als Prüfung für `edit`, `write` und `patch`; beobachtet ist davon
+nichts.
+
+**Offene Fragen.** Ob der Hook diese Werkzeuge unter anderen Namen sieht, ob die
+statische Regel vorher `allow` sagt (dann läuft `scopeEdit` nicht) oder ob der
+Harness sie gar nicht durch `permission.evaluate` schickt, ist ungeklärt. Ohne
+diese Klärung ist die Aussage „geschützte Pfade sind schreibgeschützt" nur für
+die Shell belegt.
+
+**Nicht ausgenutzt.** Nach dem Befund habe ich keine weiteren Schreibzugriffe
+über diesen Weg vorgenommen; die doppelte Serverdefinition habe ich mit
+demselben Werkzeug entfernt, weil der Nutzer es ausdrücklich verlangt hat.
+
+## Nachtrag 21.11.2026: `start-reviewer.ps1` wartet ohne Obergrenze
+
+Beim Neustart des Reviewers am 21.11.2026 blieben zwei Aufrufe hängen: Der
+Server kam nicht hoch, das Skript wartete weiter auf `/health` und meldete
+nichts. Erst ein dritter Lauf brachte ihn (PID 16816, `/health` ok). Im
+Reviewer-Log steht nur normaler Betrieb, keine Fehlerzeile — die Ursache ist
+offen.
+
+**Was fehlt.** Eine Obergrenze für die Warteschleife (etwa 120 s) mit klarer
+Meldung samt Pfad zum Log, damit ein gescheiterter Start sichtbar wird, statt
+einen Hintergrundprozess zu hinterlassen. Zusätzlich ein Hinweis, wenn der Port
+belegt ist, aber nicht der erwartete Server antwortet.
+
+**Nicht dringend.** Der Reviewer ist nicht Teil des Guards; ohne ihn bleibt es
+bei `ask` (fail closed). Es kostet nur Zeit und Verwirrung bei jedem Neustart.
+
+## Nachtrag 21.11.2026: `open-knowledge_exec` im Audit-Log
+
+`src/mcp-report.mjs` meldet `unknownIntent=80`, davon 75 mal
+`open-knowledge_exec`, alle über Ebene 3 entschieden. Geprüft mit
+`staging/audit-tool.mjs` gegen `%LOCALAPPDATA%\opencode\permission-guard\audit.jsonl`:
+
+- 152 Zeilen zum Werkzeug, **Zeitraum 18.11.2026 15:25 bis 21:00** — der
+  gesamte Bestand des Logs.
+- 150 `open-knowledge_exec`, 2 `open-knowledge_config`.
+- 76 Aufrufe mit Absicht `unknown` und Urteil `model/3`; die übrigen 76 sind die
+  `execute.after`-Datensätze ohne Absichtsfeld.
+
+**Damit ist der Befund historisch.** Die 76 Modellentscheidungen stammen alle
+vom 18.11., also von vor der Namensliste `MCP_READ_ONLY_TOOLS`
+(`src/guard.js`, seit 20.11.). Seitdem gilt `open-knowledge_exec` als `read`,
+belegt durch `test.mjs` (Zeile 1186: `cat` → `allow`) und die Gegenprobe
+(`fremdserver_exec` → `model`).
+
+**Offen bleibt die Beobachtung, nicht der Befund:** Das Audit-Log endet am
+18.11.2026, obwohl die Datei am 20.11. zuletzt geschrieben wurde. Entweder gab
+es seitdem keine MCP-Aufrufe oder das Audit ist abgeschaltet
+(`PERMISSION_GUARD_AUDIT=off`). Solange das nicht geklärt ist, sagt
+`mcp-report` nichts über den heutigen Betrieb.
+
+## Nachtrag 21.11.2026: G1 live belegt
+
+Zwei echte Abrufe über den Code-Mode-Pfad, Protokoll in `guard.log` (UTC):
+
+```text
+13:41:22.862Z webfetch allow -> allow lokales Ziel ziele=1
+13:41:22.867Z shield annotate tool=execute parts=1
+13:41:29.895Z webfetch allow -> ask Ziel ausserhalb von localhost ziele=1
+13:41:31.339Z shield annotate tool=execute parts=1
+```
+
+- **Lokales Ziel** (`localhost:8080/health`): `allow`, Antwort `{"status":"ok"}`.
+- **Externes Ziel** (`example.com`): Guard-Urteil `ask`. Die Antwort kam an, also
+  wurde die Rückfrage freigegeben — vom Nutzer oder über eine gespeicherte
+  Freigabe. Der Guard selbst hat gefragt; das ist seine Zusage.
+- **Grenz-Markierung:** Beide Ergebnisse trugen `[ud-<id>]…[/ud-<id>]`, der
+  Code-Mode-Pfad ist damit live bestätigt (vorher nur der direkte
+  Werkzeugweg).
+
+Damit ist der letzte offene Punkt aus dem Nachtrag vom 20.11. geschlossen.
+
+## Nachtrag 21.11.2026: Warmup-Fehlerpfad belegt, Kaltstart offen
+
+`staging/warmup-proof.mjs` ruft `warmup()` aus `src/reviewer.js` direkt auf,
+einmal gegen einen geschlossenen Port und einmal gegen den laufenden Server:
+
+| Fall                     | Ergebnis                                                              |
+| ------------------------ | --------------------------------------------------------------------- |
+| Port 8099, kein Server   | `ok=false`, 2069 ms, `reason=TypeError: ECONNREFUSED`, fünf Versuche  |
+| Port 8080, Server läuft  | `ok=true`, 68 ms                                                      |
+
+Der Fehlerpfad ist damit belegt: Der Code wird über `cause`/`cause.cause`/
+`cause.errors` gefunden, es wird fünfmal mit 500 ms Abstand wiederholt, und es
+fliegt kein `TypeError` mehr. Vorher brach derselbe Fall nach 0 ms ab.
+
+**Was noch fehlt:** der vollständige Kaltstart über das Plugin. Dafür müsste der
+Dateiwatcher das Plugin neu laden, während der Server aus ist. Ein `deploy.ps1`
+mit unveränderten Dateien löst ihn nicht aus (im `guard.log` steht keine neue
+`setup:`-Zeile), und ein Neustart von OpenCode beendet die laufende Sitzung.
+
+**Nebenbefund.** Während der Server aus war, urteilte der Guard
+`ask (reviewer) TypeError` — der Ausfall führt zu Rückfragen, nicht zu
+Freigaben. Das ist das gewünschte fail closed.
+
 
 ## Plan 1: Eigenständiges Repository
 
@@ -397,7 +547,8 @@ Festgelegt:
 | 4   | untracked Docs | nicht veröffentlichen, lokal behalten                            |
 | 5   | G              | zunächst nur annotieren                                          |
 | 6   | npm            | GitHub-only für v0.1.0, `"private": true` (05.11.2026)           |
-| 7   | Kriterien F    | 7 verschiedene Tage, ≥ 50 Aufrufe, ≥ 3 Werkzeuge, davon ≥ 1 schreibend (05.11.2026) |
+| 7   | Kriterien F    | 7 verschiedene Tage, ≥ 50 Aufrufe, ≥ 3 Werkzeuge,                |
+| ↳   |                | davon ≥ 1 schreibend (05.11.2026)                                |
 | 9   | Merge-Regel    | Pflicht-Checks bleiben, Zwang „Branch aktuell“ entfällt          |
 | 10  | Handle         | erlaubt (20.11.2026); E-Mail und Klarname bleiben verboten       |
 
