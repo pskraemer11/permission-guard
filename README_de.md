@@ -255,6 +255,16 @@ stehen in `METHODOLOGY_de.md` unter „Zwei Implementierungen: OpenCode und Code
 - **Das Entscheidungsmodell hat ein Stapellimit, keine Zeichengrenze.** Zu lange
   Anfragen beantwortet der Server mit einem Fehler, den der Guard für diesen
   Aufruf zu `deny` macht.
+- **Der Guard sieht nur, was OpenCode fragt.** Eine `deny`-Regel in
+  `opencode.jsonc` ist belastbar und wird nicht umgangen — belegt am 21.11.2026:
+  Nach Einbau von `{ "action": "edit", "resource": "~/.config/opencode/*",
+  "effect": "deny" }` verweigerte der Agent den Schreibzugriff auf dieselbe
+  Datei, die er kurz zuvor noch ändern konnte. Eine `allow`-Regel erzeugt
+  dagegen **keine Spur im Guard-Log**: Der Hook entscheidet und protokolliert
+  nur, wenn die statische Regel `ask` ergibt. Gespeicherte Freigaben („Allow
+  always") wandeln `ask` in `allow` um, bevor der Hook gefragt wird. Wer
+  mitlesen will, braucht deshalb Regeln, die nicht still erlauben —
+  `external_directory` auf `ask` ist der Schalter dafür.
 
 ## Selbst prüfen
 

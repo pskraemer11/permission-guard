@@ -42,21 +42,21 @@ Ablageort.
 Stand: 21.11.2026. Die Liste vom 20.11. ist gegen die späteren Nachträge geprüft.
 Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
 
-| Prio | Punkt                               | Was fehlt                                                                                                                                                  | Aufwand | Abhängigkeit           |
-| ---- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ---------------------- |
-| P1   | Dateiwerkzeuge prüfen               | `edit`/`write` des Harness änderten `~/.config/opencode/opencode.jsonc` ohne Rückfrage und ohne Log-Zeile; der Shell-Aufruf auf denselben Pfad wird `deny` | M       | keine                  |
-| P1   | Warmup-Kaltstart                    | Fehlerpfad ist belegt (5 Versuche, kein `TypeError`); der vollständige Kaltstart über den Dateiwatcher fehlt noch                                          | S       | Dateiwatcher löst aus  |
-| P2   | `start-reviewer.ps1` ohne Zeitlimit | wartet unbegrenzt auf `/health`; scheitert der Start, hängt der Aufruf ohne Meldung (21.11.2026 zweimal beobachtet)                                        | S       | keine                  |
-| P2   | P0-5 Prompt-Schärfung               | Kriterien statt „harmlos?", zwei Negativbeispiele, Messung vorher/nachher                                                                                  | M       | keine (Text liegt vor) |
-| P2   | P0-11 Server-Stapel                 | große Argumente scheitern am physischen Stapel; `-ub`-Anhebung ungemessen                                                                                  | M       | Messplatz              |
-| P2   | Dreiweg-Antwort „Unbestimmt"        | eingebaut, aber aus (11/14); Entscheidung offen                                                                                                            | S       | Messung aus P0-5       |
-| P2   | G3 lokales Modell im Graubereich    | nur annotieren, nie blockieren; nur wenn G2 messbaren Nutzen zeigt                                                                                         | L       | Nutzen von G2 belegt   |
-| P3   | P1-03 Shell-Pfad                    | `deny` gewinnt im Edit-Pfad, im Shell-Pfad nicht                                                                                                           | M       | roter Fall             |
-| P3   | P0-9 weitere pytest-Optionen        | `-o`, `--junit-xml`, `--html`, `-p no:cacheprovider` unbewiesen                                                                                            | S       | eigene Probe           |
-| P3   | Smoke braucht Warmup                | `smoke-reviewer.mjs` wärmt nicht vor                                                                                                                       | S       | keine                  |
-| P3   | MMProj bei Clef-Flash               | nötig oder falsch verdrahtet? (~900 MB im Modell-Setup)                                                                                                    | S       | Auftrag                |
-| P3   | Weg B: Sandbox-ADR                  | eigener Entscheidungsauftrag, weniger `ask` bei gleicher Härte                                                                                             | M       | Auftrag                |
-| —    | Suchmuster mit Befehlsnamen         | `Select-String -Pattern 'iex'` wird verweigert; bewusst offen als Grenze des Klassifizierers                                                               | —       | keine                  |
+| Prio | Punkt                               | Was fehlt                                                                                                                                                    | Aufwand | Abhängigkeit           |
+| ---- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------- | ---------------------- |
+| P1   | Dateiwerkzeuge prüfen               | die neue `deny`-Regel blockt den `edit`-Pfad; unklar bleibt, ob frühere Zugriffe über eine gespeicherte Freigabe oder eine stille `ask`-Quittung durchgingen | S       | kontrollierter Test    |
+| P1   | Warmup-Kaltstart                    | Fehlerpfad ist belegt (5 Versuche, kein `TypeError`); der vollständige Kaltstart über den Dateiwatcher fehlt noch                                            | S       | Dateiwatcher löst aus  |
+| P2   | `start-reviewer.ps1` ohne Zeitlimit | wartet unbegrenzt auf `/health`; scheitert der Start, hängt der Aufruf ohne Meldung (21.11.2026 zweimal beobachtet)                                          | S       | keine                  |
+| P2   | P0-5 Prompt-Schärfung               | Kriterien statt „harmlos?", zwei Negativbeispiele, Messung vorher/nachher                                                                                    | M       | keine (Text liegt vor) |
+| P2   | P0-11 Server-Stapel                 | große Argumente scheitern am physischen Stapel; `-ub`-Anhebung ungemessen                                                                                    | M       | Messplatz              |
+| P2   | Dreiweg-Antwort „Unbestimmt"        | eingebaut, aber aus (11/14); Entscheidung offen                                                                                                              | S       | Messung aus P0-5       |
+| P2   | G3 lokales Modell im Graubereich    | nur annotieren, nie blockieren; nur wenn G2 messbaren Nutzen zeigt                                                                                           | L       | Nutzen von G2 belegt   |
+| P3   | P1-03 Shell-Pfad                    | `deny` gewinnt im Edit-Pfad, im Shell-Pfad nicht                                                                                                             | M       | roter Fall             |
+| P3   | P0-9 weitere pytest-Optionen        | `-o`, `--junit-xml`, `--html`, `-p no:cacheprovider` unbewiesen                                                                                              | S       | eigene Probe           |
+| P3   | Smoke braucht Warmup                | `smoke-reviewer.mjs` wärmt nicht vor                                                                                                                         | S       | keine                  |
+| P3   | MMProj bei Clef-Flash               | nötig oder falsch verdrahtet? (~900 MB im Modell-Setup)                                                                                                      | S       | Auftrag                |
+| P3   | Weg B: Sandbox-ADR                  | eigener Entscheidungsauftrag, weniger `ask` bei gleicher Härte                                                                                               | M       | Auftrag                |
+| —    | Suchmuster mit Befehlsnamen         | `Select-String -Pattern 'iex'` wird verweigert; bewusst offen als Grenze des Klassifizierers                                                                 | —       | keine                  |
 
 ### Erledigt seit dem 20.11.2026
 
@@ -104,33 +104,34 @@ und **keine Zeile im `guard.log`**.
 `~/.config/opencode` ist `deny`". Für die Dateiwerkzeuge des Harness greift sie
 in dieser Sitzung nicht — weder Protokoll noch Urteil.
 
-**Ursache eingegrenzt.** Die statischen Regeln sind in Ordnung: Für `edit` gibt
-es `*` → `ask`, `~/Python-Projekte/*` → `allow` und einige Sonderfälle, aber
-**keine Regel für `~/.config/opencode`**. Damit wäre der Effekt `ask`, und
-`scopeEdit` hätte den geschützten Pfad verworfen. Dazu kommt es nicht, weil
-**kein `edit`-Ereignis beim Hook ankommt**: Im `guard.log` stehen für die
-gesamte Sitzung nur zwei `edit`-Blöcke (13:52 und 14:04), und beide tragen die
-Handschrift der Testsuite — jeweils ein `edit`-Paar unmittelbar vor einem
-`mcp … xlsx-tools-mcp_create_workbook`-Fall aus `test.mjs`. Die über zwanzig
-Dateiänderungen an `PLANUNG.md`, `README.md` und den Hooks haben keine einzige
-Zeile erzeugt.
+**Ursache eingegrenzt — und die erste Deutung war falsch.** Nach dem Einbau
+der Regel `{ "action": "edit", "resource": "~/.config/opencode/*", "effect":
+"deny" }` hat der Harness denselben Schreibzugriff **verweigert**
+(`Permission denied: edit`). Die Dateiwerkzeuge gehen also sehr wohl durch
+OpenCodes Rechteprüfung. Meine Zwischendeutung „der Harness schickt sie nicht
+durch" war damit widerlegt.
 
-**Schlussfolgerung.** Der Guard ist ein Torwächter *innerhalb* von OpenCode. Er
-sieht, was OpenCode durch `permission.evaluate` schickt: Shell-Aufrufe,
-MCP-Aufrufe und OpenCodes eigene Dateiwerkzeuge. Die Dateiwerkzeuge dieses
-Harness laufen an dieser Stelle vorbei — nicht weil eine Regel falsch wäre,
-sondern weil sie nie gefragt wird. Die Regel „`deny` ist nicht umgehbar" gilt
-deshalb nur für Aufrufe, die den Weg durch OpenCode nehmen.
+**Was dann erklärt, warum die früheren Schreibzugriffe durchgingen:** Der
+`guard.log` enthält für die gesamte Sitzung nur zwei `edit`-Blöcke (13:52 und
+14:28), beide mit der Handschrift der Testsuite — jeweils vier Entscheidungen in
+vier Millisekunden, unmittelbar vor einem `mcp … xlsx-tools-mcp_create_workbook`-
+Fall aus `test.mjs`. Die über zwanzig echten Dateiänderungen haben keine Zeile
+erzeugt. Der Hook entscheidet und protokolliert aber nur, wenn die statische
+Regel `ask` ergibt; bei `allow` kehrt er früh zurück. Für `~/.config/opencode`
+gab es keine Regel, also griff `*` → `ask` — und `ask` wird von gespeicherten
+Freigaben („Allow always") in ein `allow` umgewandelt, bevor der Hook gefragt
+wird. Diese Freigaben sind projektbezogen und dauerhaft; sie überstimmen keine
+konfigurierte `deny`-Regel, weshalb die neue Regel jetzt greift.
 
-**Offene Fragen.** Ob der Hook diese Werkzeuge unter anderen Namen sieht, ob die
-statische Regel vorher `allow` sagt (dann läuft `scopeEdit` nicht) oder ob der
-Harness sie gar nicht durch `permission.evaluate` schickt, ist damit beantwortet:
-Der Harness schickt sie nicht durch. Zu klären bleibt, ob eine Harness-Einstellung
-das erzwingen kann oder ob es eine Grenze der Architektur ist.
+**Nicht bewiesen:** ob es wirklich eine gespeicherte Freigabe war oder ob der
+Client die `ask`-Entscheidung ohne Rückfrage und ohne Log quittiert hat. Beides
+passt zu den Beobachtungen; unterscheiden ließe es sich nur mit einem
+kontrollierten Schreibversuch auf einen Pfad, der garantiert `ask` ergibt.
 
-**Nicht ausgenutzt.** Nach dem Befund habe ich keine weiteren Schreibzugriffe
-über diesen Weg vorgenommen; die doppelte Serverdefinition habe ich mit
-demselben Werkzeug entfernt, weil der Nutzer es ausdrücklich verlangt hat.
+**Was daraus folgt.** Eine `deny`-Regel ist belastbar. Eine `allow`-Regel —
+auch eine gespeicherte — erzeugt keine Spur im Guard-Log. Wer wissen will, was
+der Agent außerhalb des Workspace tut, braucht deshalb eine Regel, die nicht
+still erlaubt: `external_directory` auf `ask`.
 
 ## Nachtrag 21.11.2026: `start-reviewer.ps1` wartet ohne Obergrenze
 

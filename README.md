@@ -255,6 +255,16 @@ Details, the shared test cases and the differing deletion roots are in
 - **The decision model has a batch limit, not a character limit.** Over-long
   requests are answered by the server with an error that the guard turns into
   `deny` for that call.
+- **The guard only sees what OpenCode asks about.** A `deny` rule in
+  `opencode.jsonc` is dependable and is not bypassed — verified on 21.11.2026:
+  after adding `{ "action": "edit", "resource": "~/.config/opencode/*",
+  "effect": "deny" }`, the agent was refused write access to the very file it
+  had changed shortly before. An `allow` rule, by contrast, leaves **no trace in
+  the guard log**: the hook decides and logs only when the static rule yields
+  `ask`. Saved approvals ("Allow always") turn `ask` into `allow` before the
+  hook is consulted. If you want to watch what happens, you need rules that do
+  not allow silently — `external_directory` set to `ask` is the switch for
+  that.
 
 ## Checking it yourself
 
