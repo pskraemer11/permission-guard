@@ -48,7 +48,7 @@ Erledigte Punkte stehen darunter mit dem Beleg, der sie geschlossen hat.
 | P1   | Warmup-Kaltstart                    | Fehlerpfad belegt (5 Versuche, kein `TypeError`); der Kaltstart über den Dateiwatcher fehlt noch                          | S       | Dateiwatcher löst aus   |
 | P2   | `start-reviewer.ps1` ohne Zeitlimit | wartet 60 s auf `/health`, meldet dann Abbruch; bei belegter Log-Datei hängt der Start (21.11.2026)                       | S       | keine                   |
 | P2   | Bench-Grundlage                     | `src/shell-reviewer.config.json` ist jetzt Quelle und wird deployt; Betrieb und Bench messen damit gleich                 | S       | Deploy durch den Nutzer |
-| P2   | G3 lokales Modell im Graubereich    | nur annotieren, nie blockieren; nur wenn G2 messbaren Nutzen zeigt                                                        | L       | Nutzen von G2 belegt    |
+| P2   | G3 lokales Modell im Graubereich    | nur annotieren, nie blockieren; setzt die Sichtung der 45 G2-Treffer voraus (Nachtrag 21.11.)                             | L       | G2-Treffer gesichtet    |
 | P3   | P1-03 Shell-Pfad                    | `deny` gewinnt im Edit-Pfad, im Shell-Pfad nicht                                                                          | M       | roter Fall              |
 | P3   | P0-9 weitere pytest-Optionen        | `-o`, `--junit-xml`, `--html`, `-p no:cacheprovider` unbewiesen                                                           | S       | eigene Probe            |
 | P3   | Smoke braucht Warmup                | `smoke-reviewer.mjs` wärmt nicht vor                                                                                      | S       | keine                   |
@@ -151,8 +151,8 @@ mehr, solange die Repo-Datei die Quelle ist — das Skript weist darauf hin.
    Läufe gegen denselben Reviewer. P0-5 ändert den Prompt, die Dreiweg-Frage
    die Antwortachse, P0-11 die Startparameter; wer sie trennt, misst dreimal
    dieselbe Grundlage.
-3. **Entscheidungsabhängig danach:** G3 nur, wenn G2 messbaren Nutzen zeigt
-   (dafür fehlt bisher die Auswertung der markierten Ergebnisse); P1-03 nur mit
+3. **Entscheidungsabhängig danach:** G3 nur, wenn die G2-Treffer gesichtet sind
+   (45 im Debug-Log, überwiegend `rollenzeile`; Sichtung offen); P1-03 nur mit
    einem roten Fall aus dem Log — ohne Beleg kein Code-Eingriff.
 4. **Parallel, ohne Code:** MMProj-Frage klären (Modell-Setup ansehen), Weg B
    als ADR-Entwurf, P0-9 als eigene Probe mit einem Testfall je Option.
@@ -1740,6 +1740,35 @@ bleibt die Berechtigungsprüfung.
 
 **Messung.** `test.mjs` 975/975 (acht neue Fälle), `test-index.mjs` 45/45
 (zwei neue Fälle).
+
+## Nachtrag 21.11.2026: G2 im Betrieb — 45 Treffer, Sichtung offen
+
+`guard.log` (Debug-Log des Plugins) zählt für den Zeitraum 18.–21.11.2026:
+
+| Zeile                      | Anzahl |
+| -------------------------- | ------ |
+| `shield annotate`          | 172    |
+| davon mit `verdacht=`      | 45     |
+| `rollenzeile`              | 44     |
+| `chat-marker`              | 1      |
+
+G2 schlägt also in rund 26 % der annotierten Ergebnisse an. **Ob das echte
+Fälle sind, ist ungeprüft:** Das Audit-Log speichert nur `secret`, `oversized`,
+`unresolved` und `content`, nicht die G2-Familie; die steht ausschließlich im
+Debug-Log.
+
+**Regelbreite.** `rollenzeile` matcht jede Zeile, die mit `user:`,
+`assistant:`, `system:`, `human:` oder `### System:` beginnt. Eine
+Kontrollprobe mit vier harmlosen Notizzeilen (`staging/injection-probe.txt`)
+ergab vier Treffer — die Familie erkennt also auch normale Markdown- und
+Log-Zeilen. `staging/injection-sample.mjs <datei>` zeigt für eine beliebige
+Datei, welche Zeilen anschlagen.
+
+**Nächster Schritt.** Eine Stichprobe der 44 Treffer sichten. Fällt sie
+überwiegend auf normale Textzeilen, ist die Regel zu breit; dann wäre eine
+engere Fassung zu prüfen (nur `### System:` und Rollenzeilen nach einer
+Leerzeile), mit dem Risiko, echte Fälle zu verlieren. Solange das offen ist,
+bleibt G3 zurückgestellt.
 
 ## Nachtrag 20.11.2026: Entscheidungsmodelle gemessen, Kev-4B im Betrieb
 
