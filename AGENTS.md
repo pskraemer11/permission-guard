@@ -41,9 +41,10 @@ einzelne Dateien werden nicht dorthin geschrieben.
 
 **Hintergrund.** Pytest legt `tmp_path`- und Basetemp-Verzeichnisse mit
 `mode=0o700` an; die Codex-Sandbox kann danach nicht mehr darauf zugreifen. Das
-ist ein Fehler der Sandbox, kein Projektfehler — gemeldet und dort noch offen.
-Hier steht nur der Workaround, bis er entfällt. Vergleich und Begründung:
-`CHANGELOG.md` im Nachbar-Repo `../codex-picker`, ADR
+ist ein Fehler der Sandbox, kein Projektfehler — gemeldet unter
+<https://github.com/openai/codex/issues/19791> (dort als zusätzlicher Kommentar),
+noch offen. Hier steht nur der Workaround, bis er entfällt. Vergleich und
+Begründung: `CHANGELOG.md` im Nachbar-Repo `../codex-picker`, ADR
 `docs/adr/0003-tmp-path-workaround-codex-sandbox.md`.
 
 Die Fixture in `tests/conftest.py` überschreibt `tmp_path` deshalb:
