@@ -3463,13 +3463,13 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
 - Profil-`apply_patch`-Fix (einzeilig, `| Select-Object -First 1`) konnte hier
   nicht gesetzt werden: Schreiben ins Profil-Verzeichnis ist in dieser Umgebung
   blockiert. Sicherung liegt unter
-  `C:\Users\pskra\.codex\visualizations\2026\11\15\01a1e0a0-211d-7642-a259-574d1a9fdf6b\Microsoft.PowerShell_profile.ps1.bak-20261121`.
+  `C:\Users\<name>\.codex\visualizations\2026\11\15\01a1e0a0-211d-7642-a259-574d1a9fdf6b\Microsoft.PowerShell_profile.ps1.bak-20261121`.
 - `apply_patch`-Update-Modus verlangt: `@@` = wörtliche Datei­zeile vor der
   Änderung, Body nur Folge­zeilen (Experiment). Die `.bat` und die Codex-Funktion
   bleiben unberührt.
 
 ## Next Move
-1. Nutzer: `pwsh -NoProfile -File C:\Users\pskra\Python-Projekte\AI+IDE-Hints\tools\permission-guard\scripts\ship.ps1`
+1. Nutzer: `pwsh -NoProfile -File .\scripts\ship.ps1` aus dem Repo-Verzeichnis
    ausführen (Branch+PR+Merge nach main, bricht bei roter Prüfung ab).
 2. Optional: Profil-Zeile 186 einzeilig fixen (Get-Command-Bug).
 
