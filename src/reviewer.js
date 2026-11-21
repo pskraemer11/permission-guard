@@ -47,6 +47,7 @@
 // Ohne Netz und ohne OpenCode testbar: `node test/test.mjs`
 
 import fs from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import { spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
@@ -848,11 +849,28 @@ export async function ensureRunning(config) {
   }
 
   try {
+    // Ausgabe des Startskripts mitschreiben. Mit stdio "ignore" war am
+    // 21.11.2026 nicht zu sehen, dass es wegen einer gehaltenen Log-Datei
+    // abbrach; der Aufwaermlauf lief 90 s ins Leere.
+    const startLog = path.join(os.tmpdir(), "permission-guard-start.log")
+    let fd = null
+    try {
+      fd = fs.openSync(startLog, "a")
+    } catch {
+      // Ohne Log wird trotzdem gestartet; stdio bleibt dann "ignore".
+    }
     const child = spawn(
       "pwsh",
       ["-NoProfile", "-WindowStyle", "Hidden", "-File", starter, "-Port", port],
-      { detached: true, stdio: "ignore", windowsHide: true },
+      { detached: true, stdio: fd === null ? "ignore" : ["ignore", fd, fd], windowsHide: true },
     )
+    if (fd !== null) {
+      try {
+        fs.closeSync(fd)
+      } catch {
+        // Handle schon geschlossen: folgenlos.
+      }
+    }
     // Fehlt pwsh, meldet Node das asynchron als 'error'-Ereignis. Ohne Listener
     // beendet das den Prozess und mit ihm den OpenCode-Host.
     child.on("error", () => {})

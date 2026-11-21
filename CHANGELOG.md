@@ -162,6 +162,14 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **`start-reviewer.ps1` weicht bei belegter Log-Datei aus (21.11.2026):** Ist
+  `permission-guard-reviewer-<port>.log` noch von einem Vorgänger gehalten,
+  schreibt der Start nach `…<port>.<pid>.log`, statt abzubrechen. Am 21.11.
+  kostete der Abbruch den ganzen Kaltstart: Der Aufwärmlauf lief 90 s ins Leere,
+  der Watchdog startete erst zwei Minuten später. Zusätzlich schreibt
+  `ensureRunning` die Ausgabe des Startskripts nach
+  `%TEMP%\permission-guard-start.log`; vorher (`stdio: "ignore"`) war der
+  Abbruch nirgends zu sehen.
 - **Deploy nennt übersprungene Tests mit Grund (21.11.2026):** `deploy.ps1` und
   `deploy.sh` rufen pytest mit `-q -rs` auf. Die Kurzform `-q` zeigte nur das
   `s`; jetzt steht dabei, welcher Test übersprungen wurde und warum — derzeit

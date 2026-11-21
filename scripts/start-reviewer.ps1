@@ -118,9 +118,19 @@ for ($i = 0; $i -lt 40; $i++) {
   Start-Sleep -Milliseconds 250
 }
 if (-not $logFree) {
-  "Log-Datei wird noch gehalten: $log.err"
-  "Vorgaenger beenden (scripts/start-reviewer.ps1 -Stop) oder kurz warten."
-  exit 1
+  # Ausweichen statt abbrechen: Ein Server ohne Standard-Log ist besser als
+  # keiner. Der Abbruch kostete am 21.11.2026 den ganzen Kaltstart; der
+  # Aufwaermlauf lief 90 s ins Leere, der Watchdog startete erst Minuten spaeter.
+  $fallback = "$log.$PID"
+  if ((Test-FileWritable $fallback) -and (Test-FileWritable "$fallback.err")) {
+    $log = $fallback
+    "Log-Datei belegt, Ausweichdatei: $log"
+  }
+  else {
+    "Log-Datei wird noch gehalten: $log.err"
+    "Vorgaenger beenden (scripts/start-reviewer.ps1 -Stop) oder kurz warten."
+    exit 1
+  }
 }
 
 # Standard bleibt CUDA/GPU. -Cpu ist fuer einen separaten CPU-Build ohne CUDA
