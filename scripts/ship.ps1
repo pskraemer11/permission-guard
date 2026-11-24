@@ -1,24 +1,30 @@
 #Requires -Version 7
 <#
 .SYNOPSIS
-    Bringt den aktuellen Commit über Branch und Pull Request nach main.
+    Ships the current commit to the default branch via a branch and pull request.
 
 .DESCRIPTION
-    Ersetzt die sechs Schritte von Hand: Branch anlegen, main zuruecksetzen,
-    pushen, PR anlegen, Pruefungen abwarten, mergen, main nachziehen.
+    Replaces six manual steps: create a branch, reset the default branch,
+    push, open a PR, wait for checks, merge, pull the default branch.
 
-    Bricht ab, wenn eine Pruefung rot ist; der Branch bleibt dann stehen und
-    nichts wird gemergt. Ohne -Branch wird ein Name aus Datum und Uhrzeit
-    gebildet.
+    The default branch is read from origin/HEAD (fallback 'main').
 
-    Voraussetzung: sauberer Arbeitsbaum, aktueller Branch main, mindestens ein
-    Commit vor origin/main, gh angemeldet.
+    Aborts if the working tree is dirty or a check fails; the branch then
+    stays in place and nothing is merged. Without -Branch, a name is
+    generated from date and time.
+
+    Before pushing, the script shows 'git status' and waits for Enter;
+    anything else aborts without pushing anything.
+
+    Prerequisites: clean working tree, current default branch or a wave
+    branch ('welle-*'), at least one commit ahead of
+    origin/<default-branch>, gh authenticated.
 
 .PARAMETER Branch
-    Name des Arbeitszweigs. Ohne Angabe welle-<yyyyMMdd-HHmm>.
+    Name of the working branch. Without a value: welle-<yyyyMMdd-HHmm>.
 
 .PARAMETER DryRun
-    Zeigt nur, was geschehen wuerde.
+    Only shows what would happen (no prompt).
 
 .EXAMPLE
     pwsh -NoProfile -File .\scripts\ship.ps1
@@ -34,34 +40,51 @@ Push-Location $root
 try {
     function Invoke-Git([string[]]$Arguments) {
         $out = & git @Arguments 2>&1
-        if ($LASTEXITCODE -ne 0) { throw "git $($Arguments -join ' ') fehlgeschlagen:`n$out" }
+        if ($LASTEXITCODE -ne 0) { throw "git $($Arguments -join ' ') failed:`n$out" }
         return ($out | Out-String).Trim()
     }
 
-    # Nur verfolgte Aenderungen blockieren. Unversionierte Dateien (Screenshots,
-    # review/) bleiben unberuehrt und werden nur genannt - sie sind nicht Teil
-    # des Commits, und der Commit ist das, was hier ausgeliefert wird.
+    # Read the default branch from origin/HEAD; fall back to 'main' if
+    # origin/HEAD is missing (e.g. a nested-repo clone) or unreadable.
+    $defaultBranch = 'main'
+    try {
+        $head = Invoke-Git @('symbolic-ref', 'refs/remotes/origin/HEAD')
+        $candidate = ($head -replace 'refs/remotes/origin/', '').Trim()
+        if ($candidate -and $candidate -notmatch '\s') { $defaultBranch = $candidate }
+    } catch {
+        # origin/HEAD not set - keep fallback 'main'
+    }
+
+    # Show status first: the requested 'git status' view before anything
+    # happens.
+    Write-Host '--- git status ---'
+    Invoke-Git @('status', '--short', '--branch') | Write-Host
+
+    # Block only tracked changes. Untracked files (screenshots, review/)
+    # are left untouched and merely listed - they are not part of the
+    # commit, and the commit is what gets shipped here.
     $dirty = Invoke-Git @('status', '--porcelain', '--untracked-files=no')
-    if ($dirty) { throw "Arbeitsbaum ist nicht sauber:`n$dirty" }
+    if ($dirty) { throw "Working tree is not clean:`n$dirty" }
     $untracked = Invoke-Git @('ls-files', '--others', '--exclude-standard')
     if ($untracked) {
-        Write-Host 'Hinweis: unversionierte Dateien bleiben unberuehrt:'
+        Write-Host 'Note: untracked files are left untouched:'
         $untracked -split "`n" | ForEach-Object { Write-Host "  $_" }
     }
 
     $current = Invoke-Git @('rev-parse', '--abbrev-ref', 'HEAD')
-    $resume = $current -ne 'main'
+    $resume = $current -ne $defaultBranch
     if ($resume -and $current -notlike 'welle-*') {
-        throw "Aktueller Branch ist '$current', erwartet 'main' oder ein Wellen-Branch ('welle-*')."
+        throw "Current branch is '$current', expected '$defaultBranch' or a wave branch ('welle-*')."
     }
 
-    $ahead = [int](Invoke-Git @('rev-list', '--count', 'origin/main..HEAD'))
-    if ($ahead -lt 1) { throw 'Kein Commit vor origin/main - nichts zu liefern.' }
+    $ahead = [int](Invoke-Git @('rev-list', '--count', "origin/$defaultBranch..HEAD"))
+    if ($ahead -lt 1) { throw "No commit ahead of origin/$defaultBranch - nothing to ship." }
 
     if ($resume) {
-        # Fortsetzen: ein frueherer Lauf hat Branch, Reset und Push schon
-        # erledigt und ist an den Pruefungen oder am PR gescheitert. Ein zweiter
-        # Lauf darf weder den Branch neu anlegen noch main erneut zuruecksetzen.
+        # Resume: an earlier run already created the branch, reset the
+        # default branch, and pushed, then failed at the checks or the PR.
+        # A second run must neither recreate the branch nor reset the
+        # default branch again.
         $Branch = $current
     }
     elseif (-not $Branch) {
@@ -71,89 +94,95 @@ try {
     $steps = if ($resume) {
         @(
             "git push -u origin $Branch",
-            "gh pr list --head $Branch --state open (PR weiterverwenden, sonst anlegen)",
+            "gh pr list --head $Branch --state open (reuse PR, create one otherwise)",
             "gh pr checks --watch --required",
-            "gh pr checks --json state,name (Suche nach FAILURE)",
+            "gh pr checks --json state,name (look for FAILURE)",
             "gh pr merge --merge --delete-branch",
-            "git switch main",
+            "git switch $defaultBranch",
             "git pull --ff-only"
         )
     }
     else {
         @(
             "git branch $Branch",
-            "git reset --hard origin/main",
+            "git reset --hard origin/$defaultBranch",
             "git switch $Branch",
             "git push -u origin $Branch",
-            "gh pr create --base main --head $Branch --fill",
+            "gh pr create --base $defaultBranch --head $Branch --fill",
             "gh pr checks --watch --required",
-            "gh pr checks --json state,name (Suche nach FAILURE)",
+            "gh pr checks --json state,name (look for FAILURE)",
             "gh pr merge --merge --delete-branch",
-            "git switch main",
+            "git switch $defaultBranch",
             "git pull --ff-only"
         )
     }
     if ($DryRun) {
-        if ($resume) { "Setze fort auf $Branch ($ahead Commit(s) vor origin/main)" }
-        else { "Branch: $Branch ($ahead Commit(s))" }
+        if ($resume) { "Resuming on $Branch ($ahead commit(s) ahead of origin/$defaultBranch)" }
+        else { "Branch: $Branch ($ahead commit(s)) onto $defaultBranch" }
         $steps | ForEach-Object { "  $_" }
         return
     }
 
+    # Prompt: proceed only on Enter; anything else aborts without pushing
+    # anything.
+    $answer = Read-Host "Push and open a pull request on '$Branch'? [Enter = yes, anything else = abort]"
+    if ($answer -ne '') { throw 'Aborted by user. Nothing was pushed.' }
+
     if ($resume) {
-        "Setze fort auf $Branch ($ahead Commit(s) vor origin/main)."
+        "Resuming on $Branch ($ahead commit(s) ahead of origin/$defaultBranch)."
     }
     else {
         Invoke-Git @('branch', $Branch) | Out-Null
-        Invoke-Git @('reset', '--hard', 'origin/main') | Out-Null
+        Invoke-Git @('reset', '--hard', "origin/$defaultBranch") | Out-Null
         Invoke-Git @('switch', $Branch) | Out-Null
-        "Branch $Branch angelegt ($ahead Commit(s))."
+        "Branch $Branch created ($ahead commit(s))."
     }
 
     Invoke-Git @('push', '-u', 'origin', $Branch) | Out-Null
-    "Gepusht."
+    "Pushed."
 
-    # Ein vorhandener offener PR wird weiterverwendet; nur ohne PR wird einer
-    # angelegt. Sonst scheitert der zweite Lauf an "already exists".
+    # An existing open PR is reused; only without one is a new PR created.
+    # Otherwise the second run would fail with "already exists".
     $existing = (& gh pr list --head $Branch --state open --json number --jq '.[0].number' | Out-String).Trim()
     if ($existing) {
-        "PR #$existing wird weiterverwendet."
+        "Reusing PR #$existing."
     }
     else {
-        & gh pr create --base main --head $Branch --fill
-        if ($LASTEXITCODE -ne 0) { throw 'PR konnte nicht angelegt werden.' }
+        & gh pr create --base $defaultBranch --head $Branch --fill
+        if ($LASTEXITCODE -ne 0) { throw 'Could not create PR.' }
     }
 
-    # Nur die erforderlichen Pruefungen blockieren. GitHub laesst gelegentlich
-    # einen fertig gelaufenen Job auf "in_progress" stehen - Status und
-    # conclusion widersprechen sich dann, und --watch ohne --required wartet
-    # endlos (Vorfall 21.11.2026, Job "Zeilenenden und BOM"). Ein Fehlschlag
-    # unter den optionalen Pruefungen zaehlt weiterhin.
-    # Direkt nach dem Push sind die Pruefungen noch nicht registriert; gh meldet
-    # dann "no checks reported" und endet mit Exit 1. Das ist kein Fehlschlag,
-    # sondern zu frueh - deshalb warten und erneut versuchen (max. 3 Minuten).
-    # Jeder andere Exitcode ist ein echtes Ergebnis und bricht sofort ab.
+    # Only required checks block. GitHub occasionally leaves a finished
+    # job stuck on "in_progress" - status and conclusion contradict each
+    # other, and --watch without --required then waits forever (incident
+    # 2026-11-21, job "Zeilenenden und BOM"). A failure among the optional
+    # checks still counts.
+    # Right after the push the checks are not registered yet; gh then
+    # reports "no checks reported" (or with --required "no required checks
+    # reported") and exits 1. That is not a failure, just too early - so
+    # wait and retry (max. 3 minutes). Any other exit code is a real
+    # result and aborts immediately.
     $deadline = (Get-Date).AddMinutes(3)
     while ($true) {
         $report = (& gh pr checks --watch --required 2>&1 | Out-String)
         if ($LASTEXITCODE -eq 0) { break }
-        if ($report -notmatch 'no checks reported' -or (Get-Date) -gt $deadline) {
-            throw "Erforderliche Pruefungen nicht bestanden. Branch $Branch bleibt stehen; main ist unveraendert.`n$($report.Trim())"
+        if ($report -notmatch 'checks reported' -or (Get-Date) -gt $deadline) {
+            throw "Required checks did not pass. Branch $Branch is left in place; $defaultBranch is unchanged.`n$($report.Trim())"
         }
         Start-Sleep -Seconds 5
     }
 
     $failed = & gh pr checks --json state,name --jq '[.[] | select(.state == "FAILURE") | .name] | join(", ")'
     if ($failed) {
-        throw "Pruefung fehlgeschlagen: $failed. Branch $Branch bleibt stehen; main ist unveraendert."
+        throw "Check failed: $failed. Branch $Branch is left in place; $defaultBranch is unchanged."
     }
 
     & gh pr merge --merge --delete-branch
-    if ($LASTEXITCODE -ne 0) { throw 'Merge fehlgeschlagen.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Merge failed.' }
 
-    Invoke-Git @('switch', 'main') | Out-Null
+    Invoke-Git @('switch', $defaultBranch) | Out-Null
     Invoke-Git @('pull', '--ff-only') | Out-Null
-    "Fertig: $Branch gemergt, main nachgezogen."
+    "Done: $Branch merged, $defaultBranch pulled."
 } finally {
     Pop-Location
 }
