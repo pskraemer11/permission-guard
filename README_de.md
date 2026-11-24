@@ -103,13 +103,17 @@ Timeout stehen in `shell-reviewer.config.json` (beim Deploy aus
 | Feld         | Bedeutung                                                                                                |
 | ------------ | -------------------------------------------------------------------------------------------------------- |
 | `enabled`    | Reviewer ein/aus                                                                                         |
-| `baseUrl`    | OpenAI-kompatibler Endpunkt                                                                              |
+| `baseUrl`    | OpenAI-kompatibler Endpunkt (nur localhost, erzwungen)                                                   |
 | `model`      | Modellname: `kev-4b` für `systemone`; im Chat-Weg für Backends mit Pflichtangabe                         |
 | `apiKeyEnv`  | Name der Umgebungsvariable mit dem Key, nie der Key selbst                                               |
 | `timeoutMs`  | Obergrenze, danach `ask`                                                                                 |
 | `grammar`    | GBNF; leer nur für Backends, die sie ablehnen                                                            |
 | `gitShadow`  | `off` oder `shadow`; im Schattenmodus werden destruktive Git-Formen mit `effect=allow` nur protokolliert |
 | `extraRisky` | projektspezifische Muster, die nie freigegeben werden                                                    |
+
+Eine `baseUrl` außerhalb von localhost (Datei oder Umgebung) deaktiviert den
+Reviewer, statt aufgerufen zu werden; alles bleibt dann bei `ask`. `ask` ist
+eine Rückfrage, kein Verbot: Wer sie bestätigt, gibt die Aktion frei.
 
 Überschreibbar per Umgebung: `PERMISSION_GUARD_REVIEWER` (`0`/`1`), `_URL`,
 `_MODEL`, `_KEY_ENV`, `_TIMEOUT_MS`, `_BACKEND` (`mcpBackend`),
@@ -231,7 +235,9 @@ Derselbe Schutz existiert zweimal, mit getrenntem Code: das OpenCode-Plugin in
 `src/` (Node) und der Codex-Hook `codex_guard.py` (Python). Eine Änderung an der
 einen Umsetzung wirkt nicht auf die andere. Codex kennt kein `ask`; sein Hook
 kann nur verweigern oder durchlassen und deckt deshalb einen schmalen Katalog
-harter Fälle ab, den Rest die Sandbox. Beide Seiten lesen dieselben 40 Fälle aus
+harter Fälle ab, den Rest die Sandbox. Fehler im Hook (unlesbare Eingabe,
+innere Ausnahmen) verweigern statt durchzulassen; ein Hook, der gar nicht
+startet, ist Entscheidung des Hosts. Beide Seiten lesen dieselben 40 Fälle aus
 `test/shared-cases.jsonl`, damit sie nicht auseinanderlaufen.
 
 Einzelheiten, die gemeinsamen Testfälle und die unterschiedlichen Löschwurzeln

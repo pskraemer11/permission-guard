@@ -162,6 +162,35 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **`start-reviewer.ps1` startet nicht doppelt (21.11.2026):** Vor dem Start wird
+  geprüft, ob bereits ein `llama-server` mit demselben Modellpfad und Port läuft
+  (Kommandozeile). Wenn ja, wartet das Skript bis zu 120 s auf `/health` und
+  meldet das geladene Modell aus `/v1/models`, statt einen zweiten Server zu
+  starten. Am 21.11. hatten zwei Aufrufer im Abstand von 10 s je einen Server
+  gestartet; beide luden 3,6 GB, einer bekam keinen Port, zusammen 12,7 GB
+  Grafikspeicher. Beleg: Bei laufendem Server erkennt der zweite Aufruf
+  `llama-server laeuft bereits (PID …)`, und es bleibt bei einem Prozess.
+- **Antwortzeit des Servers berücksichtigt (21.11.2026):** `/health` und
+  `/v1/models` antworten auch im Leerlauf in rund 2 s. Die Prüfungen liefen
+  deshalb in einen 2-s-Timeout und hielten einen laufenden Server für
+  abwesend — das war die Ursache des Doppelstarts. `start-reviewer.ps1` prüft
+  jetzt mit 5 s, `ensureRunning` in `reviewer.js` mit 5000 ms statt 1500 ms.
+- **`ensureRunning` startet den Reviewer wirklich (21.11.2026):** `spawn` lief mit
+  `detached: true`. Unter Windows erzeugt das einen Prozess, der sofort wieder
+  endet — belegt mit einem Dummy-Skript in vier Varianten: `detached: true`
+  (mit `stdio: "ignore"` und mit Datei-Deskriptor) ergab keinen
+  Selbstnachweis, `detached: false` lief in beiden Fällen. Folge: Der Server
+  wurde nie vom Plugin gestartet, sondern immer erst vom Watchdog; der
+  Aufwärmlauf lief deshalb bei jedem Kaltstart ins Leere, unabhängig vom
+  Timeout. `detached` ist entfernt, `unref()` bleibt. `test.mjs` 1002/1002.
+- **`start-reviewer.ps1` weicht bei belegter Log-Datei aus (21.11.2026):** Ist
+  `permission-guard-reviewer-<port>.log` noch von einem Vorgänger gehalten,
+  schreibt der Start nach `…<port>.<pid>.log`, statt abzubrechen. Am 21.11.
+  kostete der Abbruch den ganzen Kaltstart: Der Aufwärmlauf lief 90 s ins Leere,
+  der Watchdog startete erst zwei Minuten später. Zusätzlich schreibt
+  `ensureRunning` die Ausgabe des Startskripts nach
+  `%TEMP%\permission-guard-start.log`; vorher (`stdio: "ignore"`) war der
+  Abbruch nirgends zu sehen.
 - **Deploy nennt übersprungene Tests mit Grund (21.11.2026):** `deploy.ps1` und
   `deploy.sh` rufen pytest mit `-q -rs` auf. Die Kurzform `-q` zeigte nur das
   `s`; jetzt steht dabei, welcher Test übersprungen wurde und warum — derzeit
@@ -616,6 +645,50 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   (575/575).
 
 ### Behoben
+
+- **Codex-Hook fail-closed und Reviewer nur localhost (23.11.2026):**
+  `codex_guard.py` ergibt bei unlesbarer Eingabe, fehlerhafter Eingabeform
+  und inneren Ausnahmen ein `deny` (`REASON_HOOK_ERROR`) statt stiller
+  Freigabe; nur erfolgreich ausgewertete Ereignisse ohne Grund bleiben
+  still. `src/reviewer.js` akzeptiert in `loadConfig` nur Loopback-`baseUrl`
+  (`localhost`, `127.0.0.0/8`, `::1`, http/https, ohne Zugangsdaten); eine
+  entfernte Adresse deaktiviert den Reviewer, Unbekanntes bleibt `ask`.
+  Tests: `tests/test_codex_guard.py` (4 neue Faelle), `test/test.mjs`
+  (16 neue Checks). Gates: pytest 153 bestanden, Ruff gruen, `bench-mcp`
+  40/40, `test.mjs` 1017/1018 (1 Vorbestands-Fehler), `test-wiring` 11/13
+  (2 Vorbestands-Fehler), Pyright 2 Vorbestands-Fehler (pytest-Import),
+  `bench-model` nicht ausfuehrbar (kein Modellserver).
+
+- **Audit-Kette gehaertet, ACL-Pruefung neu (23.11.2026):** `src/audit.js`
+  schreibt je Datensatz ein `mac` (HMAC-SHA256, Schluessel aus
+  `PERMISSION_GUARD_AUDIT_KEY` oder Schluesseldatei daneben, Modus 0600) und
+  einen Anker (`<datei>.anchor.json`) gegen Abschneiden am Ende.
+  `verify-audit.mjs` prueft MAC und Anker; alte Datensaetze ohne MAC zaehlen
+  als unschluesselnd (legacy), ohne Schluessel bleibt die Hash-Pruefung
+  rueckwärtskompatibel. Neu: `scripts/verify-runtime-acl.ps1` prueft, dass
+  nur Eigner, Administratoren und SYSTEM an den Laufzeitdateien schreiben
+  duerfen; `deploy.ps1` ruft es als Pflichtschritt. README (EN/DE):
+  Localhost-Zwang, Hook-Fehlerbehandlung und `ask` als Rueckfrage statt
+  Verbot sind benannt. Tests: 7 neue Audit-Checks (MAC, Anker, falscher
+  Schluessel, Abschneiden). Gates wie vorige Runde (1024/1025 in der
+  Sandbox, 1018/1018 eskaliert beim Deploy).
+
+- **Watchdog gilt fuer OpenCode und Codex (24.11.2026):**
+  `scripts/watchdog-reviewer.ps1` beendet den Reviewer nur noch, wenn weder
+  OpenCode noch Codex laeuft (Prozessname `codex`). Zuvor beendete er den
+  Server bei geschlossenem OpenCode auch dann, wenn Codex aktiv war - der
+  Reviewer blieb bei Codex-Nutzung ohne Server. Live belegt: Bei laufendem
+  Codex startete der Watchdog den Server (health 200). Das Skript liegt
+  nicht in der Deploy-Liste; der Task greift die Repo-Fassung direkt.
+
+- **Produktionsdefaults resultShield/gitShadow (24.11.2026, Variante A):**
+  Owner-entschieden: `resultShield=annotate`, `gitShadow=shadow`. Die
+  Vorlage (`shell-reviewer.config.example.json`) ist angeglichen; die
+  Policy nennt diese Defaults als Standard und vermerkt die Code-Fallbacks
+  (`off`/`off` ohne Datei) als Randfall. Codex-Scope ist entschieden: eine
+  `SECURITY.md` fuer beide Runtimes. Veralteter `MCP_GATING_MODE`-Kommentar
+  in `src/guard.js` korrigiert (`active` ist die Vorgabe, `shadow` die
+  Alternative) und deployt.
 
 - **minimatch-Override deklariert (18.11.2026):** `package.json` führt neu
   `"overrides": { "minimatch": "11.0.9", "glob": "14.0.6" }` hinter

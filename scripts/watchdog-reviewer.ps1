@@ -10,10 +10,13 @@
     nichts neu, wenn der Prozess spaeter endet - dann bleibt jede nicht
     einordenbare Anfrage bei "ask", ohne dass es auffaellt.
 
-    Zweite Aufgabe (Nutzerentscheid 26.10.2026): Laeuft kein OpenCode, wird der
-    Server beendet. Das Modell soll nur im Speicher liegen, solange der Reviewer
-    gebraucht wird. Der Start liegt beim Plugin (ensureRunning in reviewer.js),
-    das beim Laden der Sitzung hochfaehrt, was fehlt.
+    Zweite Aufgabe (Nutzerentscheid 26.10.2026, erweitert 24.11.2026): Laeuft
+    weder OpenCode noch Codex, wird der Server beendet. Das Modell soll nur im
+    Speicher liegen, solange der Reviewer gebraucht wird. Der Start liegt beim
+    Plugin (ensureRunning in reviewer.js), das beim Laden der Sitzung
+    hochfaehrt, was fehlt. Der Codex-Hook (codex_guard.py) nutzt den Reviewer
+    nicht selbst, aber solange Codex laeuft, bleibt der Server bereit - der
+    Nutzer nutzt beide Hosts abwechselnd und will keinen Kaltstart.
 
     Idempotent: Laeuft der Reviewer, passiert nichts. Ist der Port belegt, aber
     /health stumm, wird nicht doppelt gestartet.
@@ -45,20 +48,22 @@ function Write-Status([string]$message) {
     if (-not $Quiet) { Write-Host $message }
 }
 
-# Ohne OpenCode gibt es nichts zu entscheiden - dann belegt der Reviewer nur
-# Speicher. Der Task laeuft alle fuenf Minuten, damit ist der Server spaetestens
-# fuenf Minuten nach dem Schliessen beendet. Beim naechsten Start faehrt ihn das
-# Plugin ueber ensureRunning wieder hoch.
+# Ohne OpenCode und ohne Codex gibt es nichts zu entscheiden - dann belegt der
+# Reviewer nur Speicher. Der Task laeuft alle fuenf Minuten, damit ist der
+# Server spaetestens fuenf Minuten nach dem Schliessen beider Hosts beendet.
+# Beim naechsten Start faehrt ihn das Plugin ueber ensureRunning wieder hoch.
+# Codex-Pfad: die Desktop-App laeuft als codex.exe (Prozessname "codex").
 $openCode = Get-Process -Name "OpenCode", "opencode-cli" -ErrorAction SilentlyContinue
-if (-not $openCode) {
+$codex = Get-Process -Name "codex" -ErrorAction SilentlyContinue
+if (-not $openCode -and -not $codex) {
     $listening = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
     if ($listening) {
         $listening | Select-Object -ExpandProperty OwningProcess -Unique |
             ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
-        Write-Status "Kein OpenCode aktiv - Reviewer beendet (Port $Port)."
+        Write-Status "Kein OpenCode und kein Codex aktiv - Reviewer beendet (Port $Port)."
     }
     else {
-        Write-Status "Kein OpenCode aktiv, Reviewer laeuft nicht."
+        Write-Status "Kein OpenCode und kein Codex aktiv, Reviewer laeuft nicht."
     }
     exit 0
 }

@@ -8,6 +8,7 @@ Die Negativfaelle stammen aus echten Befehlen des Eltern-Repositories.
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import os
 import subprocess
@@ -231,6 +232,64 @@ def test_hook_json_over_stdin_denies_ampersand_push() -> None:
 def test_hook_json_over_stdin_stays_silent_without_reason() -> None:
     out = run_hook({"tool_name": "Bash", "tool_input": {"command": "git status --short"}})
     assert out.strip() == ""
+
+
+def test_hook_json_invalid_input_denies() -> None:
+    """Fail-closed (23.11.2026): Unlesbare Eingabe ergibt deny, kein Schweigen."""
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT)],
+        input="kein json",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)["hookSpecificOutput"]
+    assert output["permissionDecision"] == "deny"
+    assert output["permissionDecisionReason"] == guard.REASON_HOOK_ERROR
+
+
+def test_hook_json_non_dict_denies() -> None:
+    """Fail-closed: Gueltiges JSON ohne Objektform ergibt deny."""
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT)],
+        input="[1, 2]",
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    output = json.loads(result.stdout)["hookSpecificOutput"]
+    assert output["permissionDecision"] == "deny"
+    assert output["permissionDecisionReason"] == guard.REASON_HOOK_ERROR
+
+
+def test_decide_malformed_bash_denies() -> None:
+    """Fail-closed: Bash ohne auswertbare Eingabe ergibt deny."""
+    for payload in ({"tool_name": "Bash"}, {"tool_name": "Bash", "tool_input": {}}):
+        decision = guard.decide(payload)
+        assert decision is not None
+        output = decision["hookSpecificOutput"]
+        assert output["permissionDecision"] == "deny"
+        assert output["permissionDecisionReason"] == guard.REASON_HOOK_ERROR
+
+
+def test_main_internal_error_denies(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    """Fail-closed: Eine innere Ausnahme im Hook ergibt deny."""
+
+    def boom(payload: dict[str, object]) -> None:
+        raise RuntimeError("kaputt")
+
+    monkeypatch.setattr(guard, "decide", boom)
+    monkeypatch.setattr(
+        sys,
+        "stdin",
+        io.StringIO(json.dumps({"tool_name": "Bash", "tool_input": {"command": "git status"}})),
+    )
+    assert guard.main() == 0
+    output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+    assert output["permissionDecision"] == "deny"
+    assert output["permissionDecisionReason"] == guard.REASON_HOOK_ERROR
 
 
 def test_delete_uses_project_root() -> None:

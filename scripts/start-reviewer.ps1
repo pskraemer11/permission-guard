@@ -82,7 +82,7 @@ if (-not (Test-Path -LiteralPath $ModelPath)) { "Modell nicht gefunden: $ModelPa
 
 $alive = $false
 try {
-  $h = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/health" -TimeoutSec 2 -ErrorAction Stop
+  $h = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/health" -TimeoutSec 5 -ErrorAction Stop
   $alive = $h.StatusCode -eq 200
 } catch { }
 if ($alive) { "Port $Port ist bereits belegt - laeuft der Reviewer schon?"; exit 0 }
@@ -94,6 +94,44 @@ $log = Join-Path $env:TEMP "permission-guard-reviewer-$Port.log"
 # Skript merkte es nicht und blockierte beim Oeffnen der Log-Datei.
 $startBudgetSeconds = 120
 $deadline = (Get-Date).AddSeconds($startBudgetSeconds)
+
+# Laeuft unser Server bereits, aber laedt noch, dann warten statt einen
+# zweiten zu starten. Am 21.11.2026 starteten zwei Aufrufer im Abstand von
+# 10 s je einen Server; beide luden 3,6 GB, einer bekam keinen Port und
+# belegte den Grafikspeicher umsonst.
+# Erkannt wird der eigene Server an Modellpfad und Port in der Kommandozeile;
+# ein fremder llama-server auf anderem Port wird nicht als "unserer" gezaehlt.
+$eigene = @(
+  Get-CimInstance Win32_Process -Filter "Name='llama-server.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -and $_.CommandLine.Contains($ModelPath) -and $_.CommandLine.Contains("--port $Port") }
+)
+if ($eigene.Count -gt 0) {
+  $ids = ($eigene | Select-Object -ExpandProperty ProcessId) -join ', '
+  "llama-server laeuft bereits (PID $ids) - warte auf geladenes Modell"
+  $letzterFehler = "keine Antwort"
+  while ((Get-Date) -lt $deadline) {
+    Start-Sleep -Milliseconds 500
+    try {
+      $h = Invoke-WebRequest -Uri "http://[IP_ADDRESS]:$Port/health" -TimeoutSec 5 -ErrorAction Stop
+      if ($h.StatusCode -eq 200) {
+        $model = "unbekannt"
+        try {
+          $models = Invoke-RestMethod -Uri "http://[IP_ADDRESS]:$Port/v1/models" -TimeoutSec 5 -ErrorAction Stop
+          $loaded = @($models.data)[0].id
+          if ($loaded) { $model = $loaded }
+        } catch { }
+        "Reviewer bereit: http://[IP_ADDRESS]:$Port/v1 (bereits gestartet, Modell: $model)"
+        exit 0
+      }
+    } catch {
+      $letzterFehler = $_.Exception.Message
+    }
+  }
+  "llama-server laeuft (PID $ids), meldet aber nach $startBudgetSeconds s kein geladenes Modell"
+  "Letzter Fehler: $letzterFehler"
+  "Nicht doppelt starten. Pruefen mit: scripts/start-reviewer.ps1 -Stop, dann neu starten."
+  exit 1
+}
 
 function Test-FileWritable {
   param([string]$Path)
@@ -118,9 +156,19 @@ for ($i = 0; $i -lt 40; $i++) {
   Start-Sleep -Milliseconds 250
 }
 if (-not $logFree) {
-  "Log-Datei wird noch gehalten: $log.err"
-  "Vorgaenger beenden (scripts/start-reviewer.ps1 -Stop) oder kurz warten."
-  exit 1
+  # Ausweichen statt abbrechen: Ein Server ohne Standard-Log ist besser als
+  # keiner. Der Abbruch kostete am 21.11.2026 den ganzen Kaltstart; der
+  # Aufwaermlauf lief 90 s ins Leere, der Watchdog startete erst Minuten spaeter.
+  $fallback = "$log.$PID"
+  if ((Test-FileWritable $fallback) -and (Test-FileWritable "$fallback.err")) {
+    $log = $fallback
+    "Log-Datei belegt, Ausweichdatei: $log"
+  }
+  else {
+    "Log-Datei wird noch gehalten: $log.err"
+    "Vorgaenger beenden (scripts/start-reviewer.ps1 -Stop) oder kurz warten."
+    exit 1
+  }
 }
 
 # Standard bleibt CUDA/GPU. -Cpu ist fuer einen separaten CPU-Build ohne CUDA
@@ -143,7 +191,7 @@ if ($startSeconds -gt 10) { "Hinweis: Start-Process brauchte $startSeconds s - L
 while ((Get-Date) -lt $deadline) {
   Start-Sleep -Milliseconds 500
   try {
-    $h = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/health" -TimeoutSec 2 -ErrorAction Stop
+    $h = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/health" -TimeoutSec 5 -ErrorAction Stop
     if ($h.StatusCode -eq 200) { "Reviewer bereit: http://127.0.0.1:$Port/v1 (Log: $log)"; exit 0 }
   } catch { }
 }

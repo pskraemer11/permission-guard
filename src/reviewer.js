@@ -47,6 +47,7 @@
 // Ohne Netz und ohne OpenCode testbar: `node test/test.mjs`
 
 import fs from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import { spawn } from "node:child_process"
 import { fileURLToPath } from "node:url"
@@ -374,6 +375,25 @@ export function sanitizeSwitches(source) {
   return out
 }
 
+// Nur localhost: Der Reviewer soll nie Daten an einen entfernten Endpunkt
+// schicken (Entscheidung 23.11.2026). Jede baseUrl, die nicht auf den
+// eigenen Rechner zeigt, deaktiviert den Reviewer - Unbekanntes bleibt ask.
+function isLoopbackHost(hostname) {
+  const host = String(hostname ?? "").toLowerCase()
+  return host === "localhost" || host === "[::1]" || host === "::1" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)
+}
+export function isLoopbackBaseUrl(value) {
+  let url
+  try {
+    url = new URL(String(value ?? "").trim())
+  } catch {
+    return false
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false
+  if (url.username || url.password) return false
+  return isLoopbackHost(url.hostname)
+}
+
 export function loadConfig(overrides = {}) {
   let fromFile = {}
   try {
@@ -427,6 +447,9 @@ export function loadConfig(overrides = {}) {
     const n = Number(env[name])
     if (Number.isFinite(n) && SWITCH_BOUNDS[key](n)) config[key] = n
   }
+  // Localhost-Zwang: Eine entfernte baseUrl (Datei oder Umgebung) darf den
+  // Reviewer nie aktivieren. Statt still zu telefonieren, bleibt alles ask.
+  if (!isLoopbackBaseUrl(config.baseUrl)) config.enabled = false
   return config
 }
 
@@ -830,8 +853,12 @@ export async function ensureRunning(config) {
   if (typeof fetch !== "function") return { ok: false, reason: "kein fetch" }
 
   const base = String(cfg.baseUrl).replace(/\/+$/, "").replace(/\/v1$/, "")
+  // 5 s statt 1,5 s: Der Server antwortet auch im Leerlauf gemessen in rund
+  // 2 s (21.11.2026, /health wie /v1/models). Mit 1,5 s galt ein laufender
+  // Server als fehlend, und ensureRunning startete einen zweiten - der
+  // Doppelstart mit 12,7 GB Grafikspeicher.
   try {
-    const response = await fetch(`${base}/health`, { signal: AbortSignal.timeout(1500) })
+    const response = await fetch(`${base}/health`, { signal: AbortSignal.timeout(5000) })
     if (response.ok) return { ok: true, already: true }
   } catch {
     // nicht erreichbar - unten starten
@@ -848,11 +875,34 @@ export async function ensureRunning(config) {
   }
 
   try {
+    // Ausgabe des Startskripts mitschreiben. Mit stdio "ignore" war am
+    // 21.11.2026 nicht zu sehen, dass es wegen einer gehaltenen Log-Datei
+    // abbrach; der Aufwaermlauf lief 90 s ins Leere.
+    const startLog = path.join(os.tmpdir(), "permission-guard-start.log")
+    let fd = null
+    try {
+      fd = fs.openSync(startLog, "a")
+    } catch {
+      // Ohne Log wird trotzdem gestartet; stdio bleibt dann "ignore".
+    }
+    // Kein `detached: true` (Befund 21.11.2026): Unter Windows erzeugte
+    // spawn damit einen Prozess, der sofort wieder endete - mit und ohne
+    // Ausgabeumleitung. Belegt mit einem Dummy-Skript: detached true = kein
+    // Selbstnachweis, detached false = laeuft. Deshalb kam der Server nie vom
+    // Plugin, sondern immer erst vom Watchdog. `unref()` genuegt, damit Node
+    // nicht auf das Kind wartet; es laeuft nach dem Ende des Hosts weiter.
     const child = spawn(
       "pwsh",
       ["-NoProfile", "-WindowStyle", "Hidden", "-File", starter, "-Port", port],
-      { detached: true, stdio: "ignore", windowsHide: true },
+      { stdio: fd === null ? "ignore" : ["ignore", fd, fd], windowsHide: true },
     )
+    if (fd !== null) {
+      try {
+        fs.closeSync(fd)
+      } catch {
+        // Handle schon geschlossen: folgenlos.
+      }
+    }
     // Fehlt pwsh, meldet Node das asynchron als 'error'-Ereignis. Ohne Listener
     // beendet das den Prozess und mit ihm den OpenCode-Host.
     child.on("error", () => {})
