@@ -42,13 +42,12 @@ No exclusions, accepted risks, or severity context have been owner-confirmed in 
 - `[ud-…]`/`[verdacht: …]` marking is a model hint, not a boundary (existing `SECURITY.md` guidance, preserved).
 - Oversized/unverifiable MCP arguments (>32000 characters as JSON) produce `deny` with reason `unpruefbar` except proven read intent without secret suspicion; a model-server "input too large" response produces `deny` for that call; an MCP `write`/`destructive` call targeting outside project and temp produces `deny`, inside stays `ask` (existing guidance, preserved).
 - Webfetch to non-localhost targets prompts (`ask`) rather than blocking; localhost runs without a prompt (`src/guard.js:2375`).
-- Effective-config discrepancy: runtime `resultShield=annotate`/`gitShadow=shadow` (`src/shell-reviewer.config.json:24`, `src/shell-reviewer.config.json:26`) vs. example `off`/`off` (`shell-reviewer.config.example.json:24`, `shell-reviewer.config.example.json:28`). No default is stated until the owner confirms intent.
+- Production defaults (owner-confirmed 24.11.2026): `resultShield=annotate` and `gitShadow=shadow`, as set in the versioned runtime config (`src/shell-reviewer.config.json:24`, `src/shell-reviewer.config.json:26`) and the example template (`shell-reviewer.config.example.json:24`, `shell-reviewer.config.example.json:28`). Without any config file the code fallbacks in `src/reviewer.js` are `off`/`off`; the deployed config file is the source of truth.
 
 ## Open Decisions (Owner Review Required)
 
-- Codex hook scope: extend this policy to `codex_guard.py`, split policy, or explicitly exclude it — owner decision required.
-- Audit description: update to the implemented HMAC + anchor design (`src/audit.js:11`) and define where the audit key and anchor are protected/backed up — owner decision required.
-- Production defaults for `resultShield`/`gitShadow` and MCP gating mode — owner decision required.
+Decided 24.11.2026: this policy covers both runtimes (OpenCode plugin and Codex hook); the audit description follows the implemented HMAC + anchor design (`src/audit.js:11`); production defaults are `resultShield=annotate` and `gitShadow=shadow` with MCP gating mode `active` (`src/guard.js:1545`).
+
 - Supported deployment matrix (OS, OpenCode/Codex versions) and Windows runtime-directory protection — owner decision required.
 - Local model server trust and model-weight provenance/updates — owner decision required.
 - Security contact/owner beyond GitHub Private Advisory, and supported versions beyond 0.1.x — owner decision required.

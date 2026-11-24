@@ -681,6 +681,15 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   Codex startete der Watchdog den Server (health 200). Das Skript liegt
   nicht in der Deploy-Liste; der Task greift die Repo-Fassung direkt.
 
+- **Produktionsdefaults resultShield/gitShadow (24.11.2026, Variante A):**
+  Owner-entschieden: `resultShield=annotate`, `gitShadow=shadow`. Die
+  Vorlage (`shell-reviewer.config.example.json`) ist angeglichen; die
+  Policy nennt diese Defaults als Standard und vermerkt die Code-Fallbacks
+  (`off`/`off` ohne Datei) als Randfall. Codex-Scope ist entschieden: eine
+  `SECURITY.md` fuer beide Runtimes. Veralteter `MCP_GATING_MODE`-Kommentar
+  in `src/guard.js` korrigiert (`active` ist die Vorgabe, `shadow` die
+  Alternative) und deployt.
+
 - **minimatch-Override deklariert (18.11.2026):** `package.json` führt neu
   `"overrides": { "minimatch": "11.0.9", "glob": "14.0.6" }` hinter
   `devDependencies`. Damit sollen `GHSA-g3hv-75wg-m249` (minimatch

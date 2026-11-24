@@ -3936,3 +3936,48 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
 - Prozessnamen pruefen, bevor man Host-Logik aendert: `Get-Process -Name`
   trifft ohne Endung und grosszuegig bei Gross-/Kleinschreibung.
 
+## Compaction 24.11.2026: Produktionsdefaults entschieden (Variante A), Policy abgeschlossen
+
+### Objective
+- Die drei offenen Policy-Punkte entscheiden (Codex-Scope, Shield-/Shadow-
+  Defaults, MCP-Kommentar) und die permission-guard-Policy als
+  `SECURITY.md` fuer beide Runtimes abschliessen.
+
+### Important Details
+- **Codex-Scope entschieden:** Eine `SECURITY.md` gilt fuer OpenCode-Plugin
+  und Codex-Hook gemeinsam (gleicher Komponenten-Scope).
+- **Defaults entschieden (Variante A):** `resultShield=annotate`,
+  `gitShadow=shadow` aus der versionierten Laufzeitkonfiguration sind die
+  Produktionsstandards. Die Vorlage ist angeglichen; die Policy nennt die
+  Code-Fallbacks (`off`/`off` ohne Datei) als Randfall, nicht als Standard.
+  Grund: Die Laufzeit ist die gemessene Konfiguration (Bench 14/14, Smoke,
+  Live-Messung); eine abweichende Vorlage wuerde Neuinstallationen still
+  schwaecher machen.
+- **Kommentar korrigiert:** `MCP_GATING_MODE` in `src/guard.js` - `active`
+  ist die Vorgabe, `shadow` die Alternative (vorher stand es umgekehrt im
+  Kommentar). Deployt am selben Tag.
+- **Policy uebernommen:** Entwurf Runde 2 (7.756 Bytes) nach `SECURITY.md`
+  kopiert, danach die Defaults-Entscheidung in den Text eingearbeitet
+  (Known Limitations + Open Decisions). Verblieben offen: Deployment-Matrix,
+  Modell-Vertrauen, Meldekontakt/Versionen.
+
+### Work State
+- Geaendert: shell-reviewer.config.example.json, SECURITY.md,
+  src/guard.js (Kommentar, deployt), CHANGELOG.md, COMPACTIONS.md.
+- Belegt: JSON der Vorlage gueltig; Deploy fuer den Kommentar fehlerfrei
+  (Tests + ACL-Gate im Deploy). Commit `101dd98` enthaelt die Policy und alle
+  Fixes; dieser Nachtrag folgt als eigener Commit.
+- Offen: Deployment-Matrix, Modell-Vertrauen, Meldekontakt/Versionen;
+  Root-`SECURITY.md` fuer AI+IDE-Hints (Phase 3-5 der Gesamtplanung).
+
+### Next Move
+1. Offene Policy-Punkte (Matrix, Vertrauen, Kontakt) bei Gelegenheit
+   entscheiden.
+2. Root-Policy fuer AI+IDE-Hints neu versuchen, dann Phase 3
+   (OpenCode-Verdrahtung), Phase 4 (Enforcement-Matrix), Phase 5 (Mini-Eval).
+
+### Important Context
+- Die Vorlage ist Repo-only (kein Deploy-Artefakt): deploy.ps1 kopiert nur
+  die Laufzeitkonfiguration aus `src/`. Vorlagen-Aenderungen brauchen
+  deshalb keinen Redeploy, aber einen Commit.
+
