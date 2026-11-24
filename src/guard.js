@@ -1511,22 +1511,23 @@ export function mcpVerdict(criteria, input, scope = {}) {
     return { decision: "allow", layer: 1, reason: `nur lesend (${criteria.action?.verb || "read"})` }
   }
   if (intent === "write") {
-    // Schreiben ausserhalb von Projekt und Temp ist in der Shell ein "deny";
-    // fuer MCP gilt dieselbe Grenze (Entscheidung 20.11.2026). Innerhalb
-    // bleibt es bei "ask": ein MCP-Schreibwerkzeug kann mehr tun als eine
-    // Datei anzulegen, deshalb wird daraus keine stille Freigabe.
+    // G-01 (24.11.2026): Echte Schreibzugriffe werden verboten, nicht nur
+    // gefragt. Ein ask ist keine Schutzmassnahme, weil es bei Gewöhnung
+    // weggeklickt wird. Schreiben ausserhalb von Projekt und Temp bleiben
+    // ohnehin deny; auch innerhalb der Grenzen gilt jetzt deny. Lesen
+    // (intent read oben) bleibt erlaubt.
     const outside = mcpOutsidePaths(input, scope)
     if (outside.length) {
       return { decision: "deny", layer: 1, reason: `schreibend ausserhalb des Projekts (${outside.length})` }
     }
-    return { decision: "ask", layer: 1, reason: `schreibend oder oeffentlich (${criteria.action?.verb || "write"})` }
+    return { decision: "deny", layer: 1, reason: `schreibend verboten (${criteria.action?.verb || "write"})` }
   }
   if (intent === "destructive") {
     const outside = mcpOutsidePaths(input, scope)
     if (outside.length) {
       return { decision: "deny", layer: 1, reason: `loeschend ausserhalb des Projekts (${outside.length})` }
     }
-    return { decision: "ask", layer: 1, reason: `loeschend (${criteria.action?.verb || "delete"})` }
+    return { decision: "deny", layer: 1, reason: `loeschend verboten (${criteria.action?.verb || "delete"})` }
   }
   return { decision: "model", layer: 3, reason: "Absicht nicht einordenbar" }
 }

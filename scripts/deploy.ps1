@@ -241,7 +241,7 @@ if ($mismatch -gt 0) {
     throw "$mismatch Datei(en) weichen ab."
 }
 
-# 5. Dateirechte: Nur Eigner, Administratoren und SYSTEM duerfen schreiben.
+# 5. Dateirechte (G-04/A10: bei jedem Deploy, auch -Check, und bricht bei FAIL): Nur Eigner, Administratoren und SYSTEM duerfen schreiben.
 Write-Host "`n== Dateirechte =="
 & (Join-Path $PSScriptRoot "verify-runtime-acl.ps1") -Target $Target -CodexTarget $CodexTarget
 

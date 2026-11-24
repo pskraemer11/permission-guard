@@ -40,7 +40,7 @@ No exclusions, accepted risks, or severity context have been owner-confirmed in 
 
 - Not a sandbox: allowed commands run with user rights (`src/index.js:439`).
 - `[ud-…]`/`[verdacht: …]` marking is a model hint, not a boundary (existing `SECURITY.md` guidance, preserved).
-- Oversized/unverifiable MCP arguments (>32000 characters as JSON) produce `deny` with reason `unpruefbar` except proven read intent without secret suspicion; a model-server "input too large" response produces `deny` for that call; an MCP `write`/`destructive` call targeting outside project and temp produces `deny`, inside stays `ask` (existing guidance, preserved).
+- Oversized/unverifiable MCP arguments (>32000 characters as JSON) produce `deny` with reason `unpruefbar` except proven read intent without secret suspicion; a model-server "input too large" response produces `deny` for that call; an MCP `write`/`destructive` call produces `deny` both outside and inside project and temp since 24.11.2026 (G-01); read-only calls stay `allow`, unknown stays `ask`/`model`.
 - Webfetch to non-localhost targets prompts (`ask`) rather than blocking; localhost runs without a prompt (`src/guard.js:2375`).
 - Production defaults (owner-confirmed 24.11.2026): `resultShield=annotate` and `gitShadow=shadow`, as set in the versioned runtime config (`src/shell-reviewer.config.json:24`, `src/shell-reviewer.config.json:26`) and the example template (`shell-reviewer.config.example.json:24`, `shell-reviewer.config.example.json:28`). Without any config file the code fallbacks in `src/reviewer.js` are `off`/`off`; the deployed config file is the source of truth.
 
