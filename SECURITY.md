@@ -1,80 +1,64 @@
 # Security Policy
 
-## Was dieses Projekt ist
+## System and Scope
 
-Ein Klassifizierer für Werkzeugaufrufe in OpenCode. Er hebt `ask` auf `allow`,
-wenn ein Shell-Befehl nachweislich nur liest, und er beurteilt MCP-Aufrufe in
-drei Schichten. Er ist **keine Sandbox** und keine Isolationsgrenze: ein
-erlaubter Befehl läuft mit den Rechten des angemeldeten Benutzers.
+`opencode-permission-guard` v0.1.0 (`package.json:2`, `package.json:3`) is a fail-closed permission classifier for OpenCode. It registers a `permission.evaluate` hook (`src/index.js:111`, `src/index.js:257`), elevates a static-rule `ask` to `allow` only when a shell script provably only reads or only writes into trusted folders, and never overrides a static `allow`/`deny` (`src/index.js:439`, `src/guard.js:3267`). It is **not a sandbox** and not an isolation boundary: an allowed command runs with the rights of the logged-in user.
 
-## Bedrohungsmodell
+Verification: Scope confirmed as the selected component only; tests and offline reporting CLIs are not production decision paths. The Codex runtime below is inside the selected component scope, but whether it is intended to be covered by this policy is unresolved (see Open Decisions).
 
-Angenommen wird ein Agent, der Befehle vorschlägt, und ein Nutzer, der
-Rückfragen nicht bei jedem Schritt beantworten will. Der Guard verhindert, dass
-lesende Befehle nachfragen, und dass schreibende ohne Nachfrage laufen. Er
-schützt **nicht** gegen:
+## Threat Model and Trust Boundaries
 
-- einen Befehl, der als lesend erkannt wird, aber über einen Umweg schreibt,
-- ein manipuliertes Modell, das einen Graubereich freigibt,
-- einen Angreifer mit Schreibrechten auf das Plugin oder die Konfiguration,
-- Datenabfluss durch ein Werkzeug, das der Guard nicht sieht,
-- Prompt-Injection in Werkzeugergebnissen. Die Grenz-Markierung `[ud-…]` um
-  MCP-Antworten und `execute`-Ergebnisse ist ein Hinweis an das Modell, keine
-  Grenze. Dasselbe gilt für den Zusatz `[verdacht: …]`: Er benennt
-  Formatkollisionen (Chat-Marker, Rollenzeilen, Werkzeug-Rahmen, unsichtbare
-  Steuerzeichen) und erkennt keine Bedeutung. Ein überredender Satz bleibt
-  unmarkiert.
+Assumed: an agent proposes commands/MCP calls; a user does not want to answer prompts at every step. The guard prevents read-only commands from prompting and writing commands from running without a prompt. It does not protect against a command classified as read-only that writes via an indirect route, a manipulated model that approves a grey-area call, an attacker with write access to the plugin or configuration, exfiltration through a tool the guard does not see, or prompt injection in tool results. The `[ud-…]` boundary marking around MCP/`execute` results and the `[verdacht: …]` note name format collisions only and recognise no meaning; both are hints to the model, not a boundary.
 
-Fehler führen bewusst zur Rückfrage, nicht zur Freigabe (`fail closed`). Ein
-`deny` der statischen Regeln wird nie überschrieben.
+Boundaries implemented in source:
 
-**Ausnahme seit 20.11.2026:** Was niemand prüfen kann, wird verweigert statt
-gefragt. Drei Fälle sind belegt:
+- Agent/model → guard: static classification for shell (`src/guard.js:3267`), file edits with physically resolved targets (`src/guard.js:2278`), webfetch (`src/guard.js:2375`), and MCP criteria/verdict. Trusted write roots are the project directory and the temp `opencode` folder (`src/index.js:100`, `src/index.js:104`).
+- Guard → local model server: only loopback endpoints are used; a non-loopback `baseUrl` disables the reviewer instead of sending data remotely (`src/reviewer.js:385`, `src/reviewer.js:452`). A static `RISKY` pre-filter runs before any model call (`src/reviewer.js:1218`). Reviewer errors/timeouts return `ask` (`src/reviewer.js:1214`).
+- Guard → audit/log storage: audit records contain field names, resource kinds, flags, decisions and hashes, never argument values or result content (`src/audit.js:8`).
+- Codex host → hook: `codex_guard.py` reads hook JSON on stdin and emits `deny` for destructive/history-loss/`--no-verify`/mass-deletion/protected-patch cases (`codex_guard.py:489`, `codex_guard.py:509`). Unreadable input and internal exceptions produce `deny` (`codex_guard.py:512`).
 
-- MCP-Argumente über 32000 Zeichen (als JSON) ergeben `deny`, außer der
-  Werkzeugname belegt eine Leseabsicht und es gibt keinen Geheimnisverdacht.
-- Meldet der Modellserver „input … is too large to process", ergibt das für
-  genau diesen Aufruf `deny`.
-- Ein MCP-`write`/`destructive`-Aufruf, dessen Zielpfad außerhalb von Projekt
-  und Temp liegt, ergibt `deny` — dieselbe Grenze wie bei Shell-Befehlen.
-  Innerhalb bleibt es bei `ask`.
+Caller/operator obligations: the host must supply the static permission rules and show `ask` prompts; the guard depends on static `deny` rules it never overrides (`src/index.js:439`). The operator must protect the deployed plugin copy, its configuration, the audit chain/anchor/key, and the environment variable named by `apiKeyEnv`. The local model server and its weights are assumed trusted; the guard cannot verify model integrity. Deployment assumptions not confirmed by the owner: supported operating systems and OpenCode/Codex versions, and how runtime-directory write protection is enforced on Windows where `chmod` is not ACL-effective (`src/diagnostics.js:42`).
 
-Eine Rückfrage mit 30000 Zeichen Text ist kein Schutz: Sie ist im
-Freigabefenster nicht lesbar und wird reflexhaft bestätigt. Ein
-Größenlimit ist weiterhin **kein Fund**; die Begründung im Protokoll lautet
-`unpruefbar`, nicht `destruktiv`. Andere Fehler (Zeitüberschreitung, anderer
-HTTP-Fehler) bleiben `ask`.
+## Security Invariants
 
-**Webabrufe (seit 20.11.2026):** Der Code-Mode-Interpreter darf jede Adresse
-abrufen, und die statische Regel erlaubt `webfetch` pauschal. Der Guard fragt
-deshalb jedes Ziel außerhalb von localhost nach. Das ist eine Rückfrage, keine
-Grenze: Wer sie bestätigt, gibt den Abruf frei. Lokale Adressen laufen ohne
-Rückfrage; ein `deny` der statischen Regeln wird nie überschrieben.
+- Fail closed: unknown/unclassifiable → `ask`; errors → `ask` (`src/guard.js:3267`, `src/reviewer.js:1214`); static `deny` is never overwritten (`src/index.js:439`).
+- Only an eligible `ask` may be elevated to `allow` (`src/index.js:439`).
+- No raw command text, argument values, URLs, or results in logs/audit; only names, hashes, and field names (`src/audit.js:8`).
+- Audit integrity (implemented design): SHA256 hash chain plus HMAC-SHA256 (`mac`) plus an anchor file detecting tail truncation while the anchor is intact (`src/audit.js:11`, `src/audit.js:76`, `src/audit.js:95`, `src/audit.js:103`). Whoever can write chain, anchor, and key can forge records; the chain is not a signature (`src/audit.js:18`).
+- Credentials are referenced only by environment-variable name (`apiKeyEnv`); no key is read from a file in the plugin (`src/shell-reviewer.config.json:14`).
+- MCP gating mode is `active` in code (`src/guard.js:1545`); any shadow-by-default comment is stale and must be corrected regardless of the policy decision.
 
-## Grenzen der Audit-Kette
+## Reportable Findings and Severity Context
 
-`src/audit.js` schreibt eine SHA256-Kette über MCP-Entscheidungen. Sie erkennt
-Veränderung und Umordnung, aber **kein Abschneiden am Ende** ohne externen
-Anker. Sie ist keine Signatur. Wer Schreibrechte auf die Datei hat, kann sie
-neu aufbauen.
+Reportable: a bypass that lets a writing/destructive call run as `allow` without a prompt, any overwrite of a static `deny`, disclosure of argument values/results/URLs/credentials in audit or logs, activation of a non-loopback model endpoint, or a Codex-hook fail-open on malformed input. Severity ratings have not been owner-confirmed; assess by realistic reachability and impact (unauthorised write/execution, credential or data disclosure, or loss of audit integrity) rather than by an invented rating.
 
-## Zugangsdaten
+## Out of Scope, Exclusions, and Accepted Risk
 
-Das Plugin liest keinen Schlüssel aus einer Datei. Die Konfiguration nennt nur
-den **Namen** einer Umgebungsvariablen (`apiKeyEnv`); der Wert bleibt außerhalb
-des Repositories. Das Audit enthält keine Argumentwerte und keine Resultate.
+No exclusions, accepted risks, or severity context have been owner-confirmed in the supplied material. None are encoded here. Tests, benchmarks, fixtures, and offline reporting CLIs are not production decision paths; that is a scope observation, not an owner-confirmed exclusion, and must not be used to suppress a finding in a production path.
 
-## Eine Sicherheitslücke melden
+## Known Limitations and Compensating Controls
 
-Über die GitHub-Funktion **Security → Report a vulnerability** (Private
-Advisory) des Repositories. Bitte keine öffentlichen Issues für
-Sicherheitsfragen und keine Adressen in Meldungen oder Logs.
+- Not a sandbox: allowed commands run with user rights (`src/index.js:439`).
+- `[ud-…]`/`[verdacht: …]` marking is a model hint, not a boundary (existing `SECURITY.md` guidance, preserved).
+- Oversized/unverifiable MCP arguments (>32000 characters as JSON) produce `deny` with reason `unpruefbar` except proven read intent without secret suspicion; a model-server "input too large" response produces `deny` for that call; an MCP `write`/`destructive` call targeting outside project and temp produces `deny`, inside stays `ask` (existing guidance, preserved).
+- Webfetch to non-localhost targets prompts (`ask`) rather than blocking; localhost runs without a prompt (`src/guard.js:2375`).
+- Effective-config discrepancy: runtime `resultShield=annotate`/`gitShadow=shadow` (`src/shell-reviewer.config.json:24`, `src/shell-reviewer.config.json:26`) vs. example `off`/`off` (`shell-reviewer.config.example.json:24`, `shell-reviewer.config.example.json:28`). No default is stated until the owner confirms intent.
 
-Bitte angeben: betroffene Version, Betriebssystem, der auslösende Befehl oder
-MCP-Aufruf, erwartetes und tatsächliches Urteil. Keine echten Zugangsdaten.
+## Open Decisions (Owner Review Required)
 
-## Unterstützte Versionen
+- Codex hook scope: extend this policy to `codex_guard.py`, split policy, or explicitly exclude it — owner decision required.
+- Audit description: update to the implemented HMAC + anchor design (`src/audit.js:11`) and define where the audit key and anchor are protected/backed up — owner decision required.
+- Production defaults for `resultShield`/`gitShadow` and MCP gating mode — owner decision required.
+- Supported deployment matrix (OS, OpenCode/Codex versions) and Windows runtime-directory protection — owner decision required.
+- Local model server trust and model-weight provenance/updates — owner decision required.
+- Security contact/owner beyond GitHub Private Advisory, and supported versions beyond 0.1.x — owner decision required.
+
+## Reporting a Vulnerability
+
+Report via the repository's GitHub **Security → Report a vulnerability** (Private Advisory) function. Please do not open public issues for security questions and do not put addresses in reports or logs. Please include: affected version, operating system, the triggering command or MCP call, and the expected vs. actual verdict. No real credentials.
+
+## Supported Versions
 
 | Version | Status |
 | --- | --- |
-| 0.1.x | unterstützt |
+| 0.1.x | Supported |

@@ -1,10 +1,10 @@
 // Testtabelle fuer src/guard.js. Ausfuehren mit: node test/test.mjs
 import { contextScope, evaluate, gitShadowRecord, injectionHits, mcpAction, mcpCriteria, mcpObservation, mcpVerdict, scopeEdit } from "../src/guard.js"
-import { appendRecord, canonicalJson, hashRecord, parseLines, verifyChain } from "../src/audit.js"
+import { appendRecord, canonicalJson, checkAnchor, hashRecord, parseLines, readAuditKey, verifyChain } from "../src/audit.js"
 import { summarizeShadow } from "../src/git-shadow-report.mjs"
 import { shadowPath } from "../src/shadow.js"
 import { summarizeAudit } from "../src/mcp-report.mjs"
-import { buildMcpMessages, buildMessages, neverAutoApprove, parseAnswer, parseMcpAnswer, review, reviewMcp, scheduleWarmup, segments, warmup } from "../src/reviewer.js"
+import { buildMcpMessages, buildMessages, isLoopbackBaseUrl, loadConfig, neverAutoApprove, parseAnswer, parseMcpAnswer, review, reviewMcp, scheduleWarmup, segments, warmup } from "../src/reviewer.js"
 import { buildShellSystemoneRequest, buildSystemoneRequest, sanitizeArguments, sanitizeSwitches, sanitizeThresholds, systemoneVerdict } from "../src/reviewer.js"
 import { parseLine, summarize } from "../src/stats.mjs"
 import { createHash } from "node:crypto"
@@ -1586,6 +1586,18 @@ const auditChecks = []
   const second = verifyChain(current.records, first.last, first.count + 1)
   auditChecks.push(["Rotation bricht die Kette nicht", first.ok && second.ok && old.records.length === 1])
 
+  // Haertung (23.11.2026): MAC mit Schluessel, Anker gegen Abschneiden.
+  const key = readAuditKey(file)
+  auditChecks.push(["Schluesseldatei erzeugt", typeof key === "string" && key.length >= 32])
+  auditChecks.push(["Datensaetze tragen MAC", records.every((r) => typeof r.mac === "string")])
+  auditChecks.push(["Kette mit Schluessel intakt", verifyChain(records, "genesis", 1, { key }).ok])
+  const tampered = structuredClone(records)
+  tampered[1].decision = "deny"
+  auditChecks.push(["MAC erkennt Veraenderung", !verifyChain(tampered, "genesis", 1, { key }).ok])
+  auditChecks.push(["falscher Schluessel erkannt", !verifyChain(records, "genesis", 1, { key: "falscher-schluessel" }).ok])
+  auditChecks.push(["Anker passt zur letzten Zeile", checkAnchor(file, records).ok])
+  auditChecks.push(["abgeschnittene Kette gegen Anker erkannt", !checkAnchor(file, records.slice(0, 2)).ok])
+
   rmSync(dir, { recursive: true, force: true })
   rmSync(rotDir, { recursive: true, force: true })
 }
@@ -2473,6 +2485,42 @@ for (const [name, ok, detail] of injectionChecks) {
 }
 console.log("-- G2: statische Formatkollisionen\n")
 
+// --- Localhost-Zwang (23.11.2026): Reviewer bleibt lokal --------------------
+const localhostChecks = []
+const loopCases = [
+  ["localhost erlaubt", "http://localhost:8080/v1", true],
+  ["127.0.0.1 erlaubt", "http://127.0.0.1:8080/v1", true],
+  ["IPv6-Loopback erlaubt", "http://[::1]:8080/v1", true],
+  ["https localhost erlaubt", "https://localhost:8080/v1", true],
+  ["fremder Host abgelehnt", "https://example.com/v1", false],
+  ["LAN-Adresse abgelehnt", "http://192.168.1.10:8080/v1", false],
+  ["0.0.0.0 abgelehnt", "http://0.0.0.0:8080/v1", false],
+  ["andere Protokolle abgelehnt", "ftp://localhost:8080/v1", false],
+  ["Zugangsdaten in URL abgelehnt", "http://user:pw@localhost:8080/v1", false],
+  ["localhost. abgelehnt", "http://localhost.:8080/v1", false],
+  ["kein URL-Text abgelehnt", "keine-url", false],
+  ["leer abgelehnt", "", false],
+]
+for (const [name, url, want] of loopCases) localhostChecks.push([name, isLoopbackBaseUrl(url) === want])
+localhostChecks.push(["loadConfig mit Loopback bleibt an", loadConfig({ enabled: true, baseUrl: "http://127.0.0.1:8080/v1" }).enabled === true])
+localhostChecks.push(["loadConfig mit Fremd-URL wird aus", loadConfig({ enabled: true, baseUrl: "https://example.com/v1" }).enabled === false])
+{
+  const savedUrl = process.env.PERMISSION_GUARD_REVIEWER_URL
+  process.env.PERMISSION_GUARD_REVIEWER_URL = "https://example.com/v1"
+  localhostChecks.push(["loadConfig mit Fremd-URL aus Umgebung wird aus", loadConfig({ enabled: true }).enabled === false])
+  if (savedUrl === undefined) delete process.env.PERMISSION_GUARD_REVIEWER_URL
+  else process.env.PERMISSION_GUARD_REVIEWER_URL = savedUrl
+}
+{
+  const blocked = await review({ commands: ["Get-Content data.txt"], project: "P", temp: "T", config: loadConfig({ enabled: true, baseUrl: "https://example.com/v1" }) })
+  localhostChecks.push(["review mit Fremd-URL bleibt ask ohne Aufruf", blocked.decision === "ask"])
+}
+for (const [name, ok] of localhostChecks) {
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${name}`)
+}
+console.log("-- Localhost-Zwang (23.11.2026)\n")
+
 const total =
   base.length + scoped.length + gitGuardrails.length + cli.length + helpVersion.length + gitleaks.length +
   readOnlyCli.length +
@@ -2484,7 +2532,7 @@ const total =
   mcpCritIntentChecks.length + mcpCritResourceChecks.length + mcpCritChecks.length +
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
-  mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length +
+  mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length + localhostChecks.length +
   reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + thresholdChecks.length + warmupChecks.length + abortWarmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + reviewBlock.length + pipelineBlocks.length + blockReasons.length + 1 + secretsChecks.length + fourAxesChecks.length + editCases.length + injectionChecks.length + 2 + 11 + 3 + 3 + 1
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

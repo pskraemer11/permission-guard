@@ -3751,3 +3751,188 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
 - Der Guard zaehlt Rueckfragen: Nach mehreren abgelehnten Aufrufen greift das
   Deny-Limit und blockiert auch harmlose Befehle zeitweise.
 
+## Compaction 23.11.2026: Codex-Hook fail-closed, Reviewer nur localhost
+
+### Objective
+- Zwei aus dem Policy-Entwurf offene Punkte schliessen: Der Codex-Hook darf
+  bei eigenen Fehlern nicht still freigeben, und der Reviewer darf nie Daten
+  an einen entfernten Endpunkt schicken (Nutzerentscheidung 23.11.2026).
+
+### Important Details
+- **Hook fail-closed:** `main()` in `codex_guard.py` gab bei unlesbarer
+  Eingabe still nach (Rueckgabe 0) und liess innere Ausnahmen abstuerzen -
+  beides fuehrte zu Ausfuehrung ohne Pruefung. Jetzt ergibt beides ein
+  `deny` mit `REASON_HOOK_ERROR`; fehlerhafte `Bash`/`apply_patch`-Eingaben
+  (fehlendes `tool_input`/`command`) ebenfalls. Nur erfolgreich
+  ausgewertete Ereignisse ohne Grund bleiben still.
+- **Restrisiko ehrlich benannt:** Startet das Skript selbst nicht (Interpreter
+  fehlt, Datei defekt), entscheidet der Host Codex. Das kann der Hook nicht
+  beeinflussen; der Deploy prueft den Start per Smoke-Test. Die Policy darf
+  hier kein Fail-closed versprechen, das es nicht gibt.
+- **Localhost-Zwang:** `isLoopbackBaseUrl` in `src/reviewer.js` akzeptiert nur
+  `localhost`, Loopback-Bereich und `::1` (http/https, ohne Zugangsdaten in
+  der URL). `loadConfig` deaktiviert den Reviewer bei jeder anderen Adresse
+  (Datei oder Umgebung), Unbekanntes bleibt `ask`. Alle Produktivaufrufe in
+  `index.js` gehen ueber `loadConfig`; deshalb sitzt die Sperre dort und
+  nicht in den einzelnen Aufruffenktionen (Direkt-Configs aus Tests und
+  Benches bleiben unveraendert nutzbar).
+- **Tests:** 4 neue Python-Faelle (ungueltiges JSON, Nicht-Objekt, fehlerhafte
+  Bash-Eingabe, innere Ausnahme) und 16 neue JS-Checks (URL-Formen,
+  `loadConfig`-Pfad, `review`-Pfad ueber `loadConfig`).
+
+### Work State
+- Geaendert: codex_guard.py, src/reviewer.js, tests/test_codex_guard.py,
+  test/test.mjs, CHANGELOG.md, COMPACTIONS.md.
+- Belegt: pytest 153 bestanden (1 uebersprungen), Ruff gruen, `bench-mcp`
+  40/40, `test.mjs` 1017/1018, `test-wiring` 11/13. Die drei Restfehler sind
+  per Stash-Vergleich als Vorbestand nachgewiesen (1 + 2 + 2 Pyright).
+- Offen: `bench-model --repeat 3` war nicht ausfuehrbar (kein Modellserver
+  auf Port 8080). Deploy und Policy-Neugenerierung stehen aus.
+
+### Next Move
+1. `bench-model --repeat 3` nachholen, sobald ein Modellserver laeuft.
+2. Deploy ueber `deploy.ps1` (beide Laufzeitkopien, SHA256-Vergleich).
+3. `codex-security policy` im Sub-Repo neu laufen lassen und den Entwurf
+   gegen die Review-Notizen pruefen (Fail-open-Diskrepanz muss entfallen).
+
+### Important Context
+- IP-Literale in Patch-Eingaben werden von der Werkzeug-Anzeige maskiert;
+  im Code steht die Loopback-Pruefung deshalb als Regex (127/8) statt als
+  Voll-Literal. Bei kuenftigen Patches mit IP-Literalen die Suite laufen
+  lassen, statt der Anzeige zu glauben.
+
+## Compaction 23.11.2026: Audit-Kette gehaertet, ACL-Pruefung
+
+### Objective
+- Die restlichen Policy-Punkte schliessen: Das Audit-Protokoll soll
+  Veraenderung, Umordnung und Abschneiden erkennen (einschliesslich
+  Faelschung ohne Schluessel), und die Laufzeitdateien sollen beweisbar nur
+  von Eigner, Administratoren und SYSTEM schreibbar sein.
+
+### Important Details
+- **MAC:** Jeder Datensatz traegt `mac` (HMAC-SHA256 ueber den kanonischen
+  Datensatz). Schluessel aus `PERMISSION_GUARD_AUDIT_KEY` oder aus
+  `<datei>.key` (32 Byte hex, Modus 0600, beim ersten Schreiben erzeugt).
+  `hashRecord` schliesst `mac` aus, damit Hash und MAC sich nicht
+  gegenseitig brechen (erstes Test-Fehlschlagen genau dadurch).
+- **Anker:** Jeder Anhang schreibt `<datei>.anchor.json` mit seq und Hash
+  der letzten Zeile. `checkAnchor` vergleicht; ein Abschneiden am Ende
+  faellt auf. Anker- und Schluesseldatei liegen neben der Auditdatei -
+  wer alle drei schreiben kann, kann faelschen. Das steht ehrlich im
+  Dateikopf und faellt in die Policy.
+- **Rueckwärtskompatibel:** `verifyChain` ohne Schluessel prueft nur die
+  Hash-Kette (Bestandstests unveraendert); mit Schluessel zaehlen Datensaetze
+  ohne MAC als legacy. `verify-audit.mjs` laedt den Schluessel immer und
+  meldet legacy-Anteile als Hinweis.
+- **ACL-Pruefung:** `scripts/verify-runtime-acl.ps1` vergleicht SIDs
+  (Eigner, SYSTEM, Administratoren) statt lokalisierter Namen; `OwnerSid`
+  ist unter PowerShell 7 leer, deshalb Fallback ueber den Owner-Namen.
+  Ist-Zustand auf diesem Rechner: alle 17 Laufzeitdateien bestehen.
+  `deploy.ps1` fuehrt die Pruefung als Pflichtschritt nach dem
+  SHA256-Vergleich aus.
+- **README (EN/DE synchron):** Localhost-Zwang, Hook-Fehlerbehandlung und
+  `ask` als Rueckfrage statt Verbot sind benannt; keine Audit-Ueberbehauptung
+  gefunden, die zu korrigieren waere.
+
+### Work State
+- Geaendert: src/audit.js, src/verify-audit.mjs, test/test.mjs,
+  scripts/verify-runtime-acl.ps1 (neu), scripts/deploy.ps1, README.md,
+  README_de.md, CHANGELOG.md, COMPACTIONS.md.
+- Belegt: `test.mjs` 1024/1025 (1 Sandbox-EPERM-Vorbestand), `bench-mcp`
+  40/40, pytest 153, Ruff gruen, Wiring/Pyright wie bekannt. ACL-Pruefung
+  standalone bestanden.
+- Offen: Erneuter Deploy (Audit, README, ACL-Gate im Deploy), danach
+  Policy-Neugenerierung im Sub-Repo.
+
+### Next Move
+1. Deploy eskaliert ausfuehren (Tests ausserhalb der Sandbox, ACL-Gate im
+   Deploy).
+2. `codex-security policy` im Sub-Repo neu laufen lassen; Review-Notizen
+   gegen die drei Fixes pruefen (Fail-open, Endpoint-Vertrauen, Audit).
+3. Entwurf sichten, erst dann nach `SECURITY.md` kopieren und committen.
+
+### Important Context
+- Der Deploy-Testlauf braucht die Sandbox nicht: In der Sandbox schlaegt der
+  `spawnSync`-Probe-Test mit EPERM fehl, eskaliert sind es 1018/1018
+  (Runde 1). Deploy deshalb eskaliert ausfuehren, nicht mit `-SkipTests`.
+
+## Compaction 24.11.2026: Live-Messung mit Reviewer (Kaltstart, Bench, Smoke)
+
+### Objective
+- Das offene Gate `bench-model --repeat 3` gegen ein echtes Modell nachholen,
+  nachdem der Reviewer geladen ist (Nutzerbeobachtung: kein VRAM-Verbrauch
+  beim letzten Test, weil kein Server lief).
+
+### Important Details
+- **Kaltstart:** `scripts/start-reviewer.ps1` meldete nach 5 s `bereit`
+  (Modell Kev-4B-Q4_K_M, Port 8080, PID 5380, 6.569 MiB VRAM belegt).
+  Zweiter Start am selben Tag ebenfalls 5 s - der NVMe-Cache war warm;
+  der 34-s-Wert aus dem Kommentar galt fuer den Cache-Verlust.
+- **Bench Ebene 3:** `node test/bench-model.mjs --repeat 3` ergab 14/14
+  getroffen, 14/14 einstimmig, 34 bis 56 ms je Fall. Grundlage ist
+  `src/shell-reviewer.config.json` (systemone, Schwelle mcp 0,7).
+- **Smoke Ebene 1:** `node test/smoke-reviewer.mjs` bestand alle Faelle:
+  `rg` allow p=0,788, `fd` allow p=0,889, Select-String info ask
+  (Secrets-Achse 0,403 ueber der Grenze 0,35, wie dokumentiert),
+  Get-Command info allow p=0,778, statische Faelle ask in 0 ms,
+  toter Backend-Port ask (TypeError = fail closed).
+- **Watchdog-Verhalten beobachtet:** Zwischen Bench und Smoke war der Server
+  weg (ECONNREFUSED, kein Prozess). Der Watchdog beendet den Server, wenn
+  kein OpenCode laeuft - Messungen deshalb Start und Test in einem Aufruf
+  hintereinander ausfuehren.
+
+### Work State
+- Geaendert: nur COMPACTIONS.md (diese Notiz). Kein Code, kein Deploy.
+- Belegt: Live-Modell Kev-4B auf Port 8080, Bench 14/14, Smoke alle Faelle.
+- Offen: Nichts am Gate; die Policy-Neugenerierung (Runde 2) liegt als
+  Entwurf vor und wartet auf Sichtung und Freigabe.
+
+### Next Move
+1. Policy-Entwurf (Runde 2) sichten, offene Entscheidungen klaeren
+   (Codex-Scope, Shield-/Shadow-Defaults), dann nach `SECURITY.md`
+   kopieren und committen.
+2. Veralteten `MCP_GATING_MODE`-Kommentar in `src/guard.js` korrigieren
+   und erneut deployen.
+
+### Important Context
+- Der Reviewer ist nur sichtbar, solange er laeuft: VRAM im Task-Manager
+  pruefen, wenn die Messung angeblich mit Modell lief. Ohne Server bleibt
+  alles `ask` - das ist kein Fehler, sondern fail closed.
+
+## Compaction 24.11.2026: Watchdog gilt fuer OpenCode und Codex
+
+### Objective
+- Der Watchdog beendete den Reviewer, sobald OpenCode geschlossen war -
+  auch dann, wenn Codex aktiv war. Der Reviewer sollte bei beiden Hosts
+  laufen (Nutzerentscheid 24.11.2026).
+
+### Important Details
+- **Ursache:** `scripts/watchdog-reviewer.ps1` pruefte nur
+  `OpenCode`/`opencode-cli`. Ohne Treffer beendete er den Prozess auf
+  Port 8080 und kehrte zurueck - Codex (`codex.exe`, Prozessname `codex`)
+  kam nicht vor. Der Guard war nachtraeglich fuer Codex erweitert worden,
+  der Watchdog nicht.
+- **Fix:** Zusaetzliche Pruefung auf Prozessname `codex`; Beenden nur,
+  wenn weder OpenCode noch Codex laeuft. Meldetexte entsprechend.
+- **Live belegt:** Bei laufendem Codex (und ohne OpenCode) startete der
+  Watchdog den Server (health 200, PID 7280). Der Stopp-Fall (beide Hosts
+  zu) ist live nicht pruefbar, solange Codex laeuft - die Logik ist
+  symmetrisch und unveraendert einfach.
+- **Deploy:** Das Skript steht nicht in der Deploy-Liste; der geplante Task
+  (alle fuenf Minuten) greift die Repo-Fassung direkt. Kein Redeploy noetig.
+
+### Work State
+- Geaendert: scripts/watchdog-reviewer.ps1, CHANGELOG.md, COMPACTIONS.md.
+- Belegt: Watchdog-Start bei nur-Codex-laufend (health 200).
+- Offen: Policy-Entwurf (Runde 2) wartet weiter auf Sichtung und Freigabe;
+  `MCP_GATING_MODE`-Kommentar in `src/guard.js` noch zu korrigieren.
+
+### Next Move
+1. Policy-Entwurf sichten, offene Entscheidungen klaeren, nach
+   `SECURITY.md` kopieren und committen.
+2. `MCP_GATING_MODE`-Kommentar korrigieren und erneut deployen.
+
+### Important Context
+- Prozessnamen pruefen, bevor man Host-Logik aendert: `Get-Process -Name`
+  trifft ohne Endung und grosszuegig bei Gross-/Kleinschreibung.
+

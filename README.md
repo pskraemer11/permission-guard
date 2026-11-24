@@ -104,13 +104,17 @@ afterwards):
 | Field        | Meaning                                                                                     |
 | ------------ | ------------------------------------------------------------------------------------------- |
 | `enabled`    | reviewer on/off                                                                             |
-| `baseUrl`    | OpenAI-compatible endpoint                                                                  |
+| `baseUrl`    | OpenAI-compatible endpoint (localhost only, enforced)                                       |
 | `model`      | model name: `kev-4b` for `systemone`; in the chat path for backends that require it         |
 | `apiKeyEnv`  | name of the environment variable with the key, never the key itself                         |
 | `timeoutMs`  | upper bound, then `ask`                                                                     |
 | `grammar`    | GBNF; empty only for backends that reject it                                                |
 | `gitShadow`  | `off` or `shadow`; in shadow mode destructive Git forms with `effect=allow` are only logged |
 | `extraRisky` | project-specific patterns that are never allowed                                            |
+
+A non-localhost `baseUrl` (file or environment) disables the reviewer instead
+of being called; everything then stays at `ask`. `ask` is a prompt, not a
+block: confirming it frees the action.
 
 Overridable via environment: `PERMISSION_GUARD_REVIEWER` (`0`/`1`), `_URL`,
 `_MODEL`, `_KEY_ENV`, `_TIMEOUT_MS`, `_BACKEND` (`mcpBackend`),
@@ -231,7 +235,9 @@ The same protection exists twice, with separate code: the OpenCode plugin in
 `src/` (Node) and the Codex hook `codex_guard.py` (Python). A change to one
 implementation does not affect the other. Codex has no `ask`; its hook can only
 deny or let through, so it covers a narrow catalogue of hard cases and leaves
-the rest to the sandbox. Both sides read the same 40 cases from
+the rest to the sandbox. Hook errors (unreadable input, internal failures)
+deny instead of letting through; a hook that cannot start at all is the
+host's decision. Both sides read the same 40 cases from
 `test/shared-cases.jsonl` so they cannot drift apart.
 
 Details, the shared test cases and the differing deletion roots are in

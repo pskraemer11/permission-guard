@@ -8,11 +8,20 @@
 // Der Datensatz enthaelt niemals Argumentwerte, Resultatinhalte, URLs oder
 // Pfade: nur Feldnamen, Zielarten, Flags, Entscheidungen und Hashes.
 //
-// Grenze: Eine Hash-Kette erkennt Veraenderung und Umordnung, aber kein
-// Abschneiden am Ende ohne externen Anker. Sie ist keine Signatur.
+// Haertung (23.11.2026): Jeder Datensatz traegt zusaetzlich ein `mac`
+// (HMAC-SHA256 mit einem Schluessel aus `PERMISSION_GUARD_AUDIT_KEY` oder
+// der Schluesseldatei daneben, Modus 0600). Daneben schreibt jeder Anhang
+// einen Anker (`<datei>.anchor.json` mit seq und Hash des letzten
+// Datensatzes). Damit erkennt die Pruefung auch ein Abschneiden am Ende,
+// solange die Ankerdatei intakt ist.
+//
+// Grenze: Wer die Kette, den Anker und den Schluessel schreiben kann, kann
+// auch faelschen. Bei vollem Zugriff auf alle drei Dateien ist die Kette
+// keine Signatur und kein Schutz. Sie schuetzt vor Veraenderung, Umordnung
+// und Abschneiden durch jemanden, der nur die Auditdatei schreiben kann.
 
-import { createHash } from "node:crypto"
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync } from "node:fs"
+import { createHash, createHmac, randomBytes } from "node:crypto"
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 
@@ -35,8 +44,77 @@ export function canonicalJson(value) {
 }
 
 export function hashRecord(record) {
-  const { hash, ...rest } = record
+  const { hash, mac, ...rest } = record
   return sha256(canonicalJson(rest))
+}
+
+// Schluessel und Anker liegen direkt daneben: `<datei>.key` beziehungsweise
+// `<datei>.anchor.json`. Die Schluesseldatei enthaelt nur Hex-Zeug, nie
+// Datensatzinhalte.
+export function keyPathFor(file) {
+  return `${file}.key`
+}
+
+export function anchorPathFor(file) {
+  return `${file}.anchor.json`
+}
+
+// Liest den Schluessel nur (fuer die Pruefung). Erzeugt nichts.
+export function readAuditKey(file, env = process.env) {
+  if (env.PERMISSION_GUARD_AUDIT_KEY) return env.PERMISSION_GUARD_AUDIT_KEY
+  try {
+    const key = readFileSync(keyPathFor(file), "utf8").trim()
+    return key || null
+  } catch {
+    return null
+  }
+}
+
+// Ermittelt den Schluessel zum Schreiben und erzeugt ihn beim ersten Mal.
+// Schreibfehler beim Erzeugen bleiben folgenlos: Dann wird ohne MAC
+// geschrieben und die Pruefung meldet die Datensaetze als unschluesselnd.
+export function ensureAuditKey(file, env = process.env) {
+  const existing = readAuditKey(file, env)
+  if (existing) return existing
+  if (env.PERMISSION_GUARD_AUDIT_KEY) return env.PERMISSION_GUARD_AUDIT_KEY
+  const key = randomBytes(32).toString("hex")
+  try {
+    mkdirSync(dirname(file), { recursive: true })
+    writeFileSync(keyPathFor(file), `${key}\n`, { mode: 0o600 })
+    try {
+      chmodSync(keyPathFor(file), 0o600)
+    } catch {
+      // Die Rechte sind bestmoeglich, nicht garantiert.
+    }
+  } catch {
+    return null
+  }
+  return key
+}
+
+export function macRecord(record, key) {
+  const { mac, ...rest } = record
+  return createHmac("sha256", key).update(canonicalJson(rest)).digest("hex")
+}
+
+// Prueft den Anker gegen den letzten Datensatz einer Datei. Ohne Anker ist
+// alles in Ordnung (alte Ablage); mit Anker muss die letzte Zeile exakt
+// zum Anker passen, sonst wurde am Ende abgeschnitten oder ersetzt.
+export function checkAnchor(file, records) {
+  const path = anchorPathFor(file)
+  if (!existsSync(path)) return { ok: true, anchored: false }
+  let anchor
+  try {
+    anchor = JSON.parse(readFileSync(path, "utf8"))
+  } catch {
+    return { ok: false, error: "Ankerdatei unlesbar" }
+  }
+  const last = records[records.length - 1]
+  if (!last) return { ok: false, error: "Anker vorhanden, aber keine Datensaetze" }
+  if (Number(anchor.seq) !== Number(last.seq) || String(anchor.hash) !== String(last.hash)) {
+    return { ok: false, error: "Anker weicht ab (moegliches Abschneiden am Ende)" }
+  }
+  return { ok: true, anchored: true }
 }
 
 // Schluessel fuer die Zusammenfuehrung von decision und result.
@@ -95,7 +173,14 @@ export function appendRecord(file, fields, state, options = {}) {
       prev: state.prev,
     }
     record.hash = hashRecord(record)
+    const key = ensureAuditKey(file, options.env ?? process.env)
+    if (key) record.mac = macRecord(record, key)
     appendFileSync(file, `${canonicalJson(record)}\n`)
+    try {
+      writeFileSync(anchorPathFor(file), `${JSON.stringify({ seq: record.seq, hash: record.hash })}\n`)
+    } catch (error) {
+      options.onError?.(error)
+    }
     return { prev: record.hash, seq: record.seq }
   } catch (error) {
     options.onError?.(error)
@@ -105,9 +190,13 @@ export function appendRecord(file, fields, state, options = {}) {
 
 // Prueft eine Folge von Datensaetzen. startPrev erlaubt die Fortsetzung ueber
 // eine Rotation hinweg (erster Datensatz der neuen Generation).
-export function verifyChain(records, startPrev = GENESIS, startSeq = 1) {
+// options.key: Mit Schluessel werden MACs geprueft; Datensaetze ohne MAC
+// zaehlen als unschluesselnd (legacy). Ohne Schluessel wird nur die
+// Hash-Kette geprueft (Rueckwärtskompatibilitaet, keine Sicherheitspruefung).
+export function verifyChain(records, startPrev = GENESIS, startSeq = 1, options = {}) {
   let prev = startPrev
   let expectedSeq = startSeq
+  let legacy = 0
   for (let index = 0; index < records.length; index++) {
     const record = records[index]
     if (!record || typeof record !== "object") {
@@ -125,10 +214,17 @@ export function verifyChain(records, startPrev = GENESIS, startSeq = 1) {
     if (record.hash !== hashRecord(record)) {
       return { ok: false, count: index, error: `Datensatz ${index + 1}: Hash weicht ab` }
     }
+    if (record.mac !== undefined) {
+      if (options.key && macRecord(record, options.key) !== record.mac) {
+        return { ok: false, count: index, error: `Datensatz ${index + 1}: MAC weicht ab` }
+      }
+    } else if (options.key) {
+      legacy += 1
+    }
     prev = record.hash
     expectedSeq += 1
   }
-  return { ok: true, count: records.length, last: records.length ? prev : startPrev }
+  return { ok: true, count: records.length, last: records.length ? prev : startPrev, legacy }
 }
 
 // Liest eine Datei zeilenweise als Datensaetze. Defekte Zeilen werden als

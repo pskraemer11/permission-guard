@@ -22,8 +22,10 @@ Geprüft werden vier Kategorien:
 Grenze: Der Guard liest Text, er führt nichts aus. ``apply_patch``-Löschungen,
 ``Start-Process``, ``xargs``, fremde Skripte und Aliase bleiben unsichtbar. Ein
 Symlink-Rennen kann den aufgelösten Pfad verändern, nachdem er geprüft wurde.
-Fehler im Hook sind fail-open: Startet das Skript nicht, führt Codex den Befehl
-aus.
+Fehler *im* Hook sind fail-closed (23.11.2026): Unlesbare Eingabe und innere
+Ausnahmen ergeben ein ``deny`` statt stiller Freigabe. Startet das Skript
+selbst nicht, entscheidet der Host Codex - darauf hat der Hook keinen
+Einfluss; der Deploy prüft den Start per Smoke-Test.
 
 Aufruf durch Codex (stdin: Hook-JSON, stdout: Entscheidung):
 
@@ -78,6 +80,10 @@ REASON_PATCH_PROTECTED = (
 )
 REASON_PATCH_BULK = (
     f"Der Patch löscht mehr als {MAX_PATCH_DELETIONS} Dateien. Umfang prüfen, dann vom Nutzer ausführen lassen."
+)
+REASON_HOOK_ERROR = (
+    "Der Hook konnte die Anfrage nicht auswerten (Fehler im Hook). "
+    "Fail-closed: Bitte vom Nutzer prüfen und ausführen lassen."
 )
 
 
@@ -469,23 +475,8 @@ def hook_root(payload: dict[str, object]) -> Path | None:
         return None
 
 
-def decide(payload: dict[str, object]) -> dict[str, object] | None:
-    """Liefert die Ablehnung fuer ein Hook-Ereignis oder ``None``."""
-    tool_name = payload.get("tool_name")
-    tool_input = payload.get("tool_input")
-    if not isinstance(tool_input, dict):
-        return None
-    command = tool_input.get("command")
-    if not isinstance(command, str):
-        return None
-    if tool_name == "Bash":
-        reason = first_reason(command, root=hook_root(payload))
-    elif tool_name == "apply_patch":
-        reason = patch_reason(command)
-    else:
-        return None
-    if reason is None:
-        return None
+def deny_decision(reason: str) -> dict[str, object]:
+    """Baut die Ablehnungsantwort im Codex-Hook-Format."""
     return {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
@@ -495,16 +486,47 @@ def decide(payload: dict[str, object]) -> dict[str, object] | None:
     }
 
 
+def decide(payload: dict[str, object]) -> dict[str, object] | None:
+    """Liefert die Ablehnung fuer ein Hook-Ereignis oder ``None``."""
+    tool_name = payload.get("tool_name")
+    tool_input = payload.get("tool_input")
+    if tool_name not in ("Bash", "apply_patch"):
+        return None
+    if not isinstance(tool_input, dict):
+        return deny_decision(REASON_HOOK_ERROR)
+    command = tool_input.get("command")
+    if not isinstance(command, str):
+        return deny_decision(REASON_HOOK_ERROR)
+    if tool_name == "Bash":
+        reason = first_reason(command, root=hook_root(payload))
+    elif tool_name == "apply_patch":
+        reason = patch_reason(command)
+    if reason is None:
+        return None
+    return deny_decision(reason)
+
+
 def main() -> int:
-    """Liest das Hook-JSON und schreibt gegebenenfalls die Ablehnung."""
-    raw = sys.stdin.read()
+    """Liest das Hook-JSON und schreibt gegebenenfalls die Ablehnung.
+
+    Fail-closed (23.11.2026): Unlesbare Eingabe und innere Ausnahmen ergeben
+    ein ``deny`` statt stiller Freigabe. Nur ein erfolgreich ausgewertetes
+    Ereignis ohne Grund bleibt still (kein Einwand).
+    """
     try:
+        raw = sys.stdin.read()
         payload = json.loads(raw)
-    except json.JSONDecodeError:
+    except (ValueError, OSError):
+        print(json.dumps(deny_decision(REASON_HOOK_ERROR)))
         return 0
     if not isinstance(payload, dict):
+        print(json.dumps(deny_decision(REASON_HOOK_ERROR)))
         return 0
-    decision = decide(payload)
+    try:
+        decision = decide(payload)
+    except Exception:
+        print(json.dumps(deny_decision(REASON_HOOK_ERROR)))
+        return 0
     if decision is not None:
         print(json.dumps(decision))
     return 0

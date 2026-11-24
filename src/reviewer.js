@@ -375,6 +375,25 @@ export function sanitizeSwitches(source) {
   return out
 }
 
+// Nur localhost: Der Reviewer soll nie Daten an einen entfernten Endpunkt
+// schicken (Entscheidung 23.11.2026). Jede baseUrl, die nicht auf den
+// eigenen Rechner zeigt, deaktiviert den Reviewer - Unbekanntes bleibt ask.
+function isLoopbackHost(hostname) {
+  const host = String(hostname ?? "").toLowerCase()
+  return host === "localhost" || host === "[::1]" || host === "::1" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)
+}
+export function isLoopbackBaseUrl(value) {
+  let url
+  try {
+    url = new URL(String(value ?? "").trim())
+  } catch {
+    return false
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false
+  if (url.username || url.password) return false
+  return isLoopbackHost(url.hostname)
+}
+
 export function loadConfig(overrides = {}) {
   let fromFile = {}
   try {
@@ -428,6 +447,9 @@ export function loadConfig(overrides = {}) {
     const n = Number(env[name])
     if (Number.isFinite(n) && SWITCH_BOUNDS[key](n)) config[key] = n
   }
+  // Localhost-Zwang: Eine entfernte baseUrl (Datei oder Umgebung) darf den
+  // Reviewer nie aktivieren. Statt still zu telefonieren, bleibt alles ask.
+  if (!isLoopbackBaseUrl(config.baseUrl)) config.enabled = false
   return config
 }
 

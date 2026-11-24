@@ -1533,10 +1533,10 @@ export function mcpVerdict(criteria, input, scope = {}) {
 
 // Schalter fuer die MCP-Entscheidung (Schritt C, 04.11.2026).
 //
-// "shadow" (Vorgabe): urteilen, protokollieren, nichts aendern.
-// "active":           Urteil auf Aufrufe anwenden, die die statischen Regeln
+// "active" (Vorgabe): Urteil auf Aufrufe anwenden, die die statischen Regeln
 //                     mit "ask" beantworten. "allow"/"deny" der Konfiguration
 //                     und gespeicherte Freigaben werden nie angefasst.
+// "shadow":            urteilen, protokollieren, nichts aendern.
 //
 // Bewusst ein Quelltext-Schalter statt einer Umgebungsvariablen: Aktivieren
 // ist ein eigener, pruefbarer Schritt (Testregime E vorher gruen), kein

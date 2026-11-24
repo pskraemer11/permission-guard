@@ -646,6 +646,41 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Behoben
 
+- **Codex-Hook fail-closed und Reviewer nur localhost (23.11.2026):**
+  `codex_guard.py` ergibt bei unlesbarer Eingabe, fehlerhafter Eingabeform
+  und inneren Ausnahmen ein `deny` (`REASON_HOOK_ERROR`) statt stiller
+  Freigabe; nur erfolgreich ausgewertete Ereignisse ohne Grund bleiben
+  still. `src/reviewer.js` akzeptiert in `loadConfig` nur Loopback-`baseUrl`
+  (`localhost`, `127.0.0.0/8`, `::1`, http/https, ohne Zugangsdaten); eine
+  entfernte Adresse deaktiviert den Reviewer, Unbekanntes bleibt `ask`.
+  Tests: `tests/test_codex_guard.py` (4 neue Faelle), `test/test.mjs`
+  (16 neue Checks). Gates: pytest 153 bestanden, Ruff gruen, `bench-mcp`
+  40/40, `test.mjs` 1017/1018 (1 Vorbestands-Fehler), `test-wiring` 11/13
+  (2 Vorbestands-Fehler), Pyright 2 Vorbestands-Fehler (pytest-Import),
+  `bench-model` nicht ausfuehrbar (kein Modellserver).
+
+- **Audit-Kette gehaertet, ACL-Pruefung neu (23.11.2026):** `src/audit.js`
+  schreibt je Datensatz ein `mac` (HMAC-SHA256, Schluessel aus
+  `PERMISSION_GUARD_AUDIT_KEY` oder Schluesseldatei daneben, Modus 0600) und
+  einen Anker (`<datei>.anchor.json`) gegen Abschneiden am Ende.
+  `verify-audit.mjs` prueft MAC und Anker; alte Datensaetze ohne MAC zaehlen
+  als unschluesselnd (legacy), ohne Schluessel bleibt die Hash-Pruefung
+  rueckwärtskompatibel. Neu: `scripts/verify-runtime-acl.ps1` prueft, dass
+  nur Eigner, Administratoren und SYSTEM an den Laufzeitdateien schreiben
+  duerfen; `deploy.ps1` ruft es als Pflichtschritt. README (EN/DE):
+  Localhost-Zwang, Hook-Fehlerbehandlung und `ask` als Rueckfrage statt
+  Verbot sind benannt. Tests: 7 neue Audit-Checks (MAC, Anker, falscher
+  Schluessel, Abschneiden). Gates wie vorige Runde (1024/1025 in der
+  Sandbox, 1018/1018 eskaliert beim Deploy).
+
+- **Watchdog gilt fuer OpenCode und Codex (24.11.2026):**
+  `scripts/watchdog-reviewer.ps1` beendet den Reviewer nur noch, wenn weder
+  OpenCode noch Codex laeuft (Prozessname `codex`). Zuvor beendete er den
+  Server bei geschlossenem OpenCode auch dann, wenn Codex aktiv war - der
+  Reviewer blieb bei Codex-Nutzung ohne Server. Live belegt: Bei laufendem
+  Codex startete der Watchdog den Server (health 200). Das Skript liegt
+  nicht in der Deploy-Liste; der Task greift die Repo-Fassung direkt.
+
 - **minimatch-Override deklariert (18.11.2026):** `package.json` führt neu
   `"overrides": { "minimatch": "11.0.9", "glob": "14.0.6" }` hinter
   `devDependencies`. Damit sollen `GHSA-g3hv-75wg-m249` (minimatch
