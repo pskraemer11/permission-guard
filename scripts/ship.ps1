@@ -162,11 +162,34 @@ try {
     # reported") and exits 1. That is not a failure, just too early - so
     # wait and retry (max. 3 minutes). Any other exit code is a real
     # result and aborts immediately.
+    # If required-checks resolution is unavailable (plan limit on private
+    # repos: rulesets need a paid plan; or token scope), fall back to
+    # watching all checks - a superset, never weaker.
     $deadline = (Get-Date).AddMinutes(3)
+    $requiredGrace = (Get-Date).AddSeconds(60)
+    $useAllChecks = $false
     while ($true) {
-        $report = (& gh pr checks --watch --required 2>&1 | Out-String)
+        $watchArgs = @('pr', 'checks', '--watch')
+        if (-not $useAllChecks) { $watchArgs += '--required' }
+        $report = (& gh @watchArgs 2>&1 | Out-String)
         if ($LASTEXITCODE -eq 0) { break }
-        if ($report -notmatch 'checks reported' -or (Get-Date) -gt $deadline) {
+        $checksUnavailable = $report -match 'Resource not accessible|Upgrade to GitHub Pro'
+        if ($checksUnavailable -and -not $useAllChecks) {
+            $useAllChecks = $true
+            Write-Host 'Required-checks resolution unavailable; watching all checks instead.'
+        }
+        # Persistently "no required checks reported" past the grace window
+        # means the repo has no required checks configured (e.g. a private
+        # repo on the free plan, where rulesets are unavailable) - fall
+        # back to watching all checks, a superset that is never weaker.
+        if (-not $useAllChecks -and ($report -match 'no required checks reported') -and ((Get-Date) -gt $requiredGrace)) {
+            $useAllChecks = $true
+            Write-Host 'No required checks configured; watching all checks instead.'
+        }
+        # Transient network errors (connect timeouts, resets, EOF) are not
+        # results - retry them within the deadline like 'checks reported'.
+        $transient = $report -match 'dial tcp|connection reset|EOF|TLS handshake|timed out|timeout|server misbehaving|no such host'
+        if ((($report -notmatch 'checks reported') -and (-not $checksUnavailable) -and (-not $transient)) -or ((Get-Date) -gt $deadline)) {
             throw "Required checks did not pass. Branch $Branch is left in place; $defaultBranch is unchanged.`n$($report.Trim())"
         }
         Start-Sleep -Seconds 5
