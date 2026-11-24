@@ -2142,3 +2142,46 @@ Sie waren Teil der Historie und gehören nicht in einen Einstiegstext.
 `npm run test:index`" stand in der README zwischen den datierten Ständen und
 wäre mit ihnen fast verschwunden. Sie steht jetzt in der README unter
 Installation — ohne `npm ci` schlägt das Test-Gate beim Commit fehl.
+
+## Nachtrag 24.11.2026: Kaltstart über den Plugin-Pfad belegt
+
+Der am 21.11. offen gebliebene Punkt ist geschlossen. Belegt wurde nicht mehr
+das Startskript allein, sondern `ensureRunning` aus dem **deployten**
+`reviewer.js` — genau der Pfad, den `index.js` beim Plugin-Start aufruft.
+
+**Aufbau.** Watchdog-Task `permission-guard reviewer watchdog` deaktiviert,
+damit er den Start nicht vorwegnimmt; `llama-server` (PID 7280) beendet;
+`staging/kaltstart-proof.mjs` importiert `ensureRunning` und `loadConfig` aus
+`~/.config/opencode/plugins/permission-guard/reviewer.js`, ruft
+`ensureRunning` auf und fragt `/health` und `/v1/models` ab. Danach den
+Watchdog wieder aktiviert.
+
+**Messung** (24.11.2026, 17:09):
+
+| Prüfung         | Ergebnis                     |
+| --------------- | ---------------------------- |
+| `ensureRunning` | `started` in 26 ms           |
+| `/health`       | `ok` nach 5059 ms            |
+| `/v1/models`    | `Kev-4B-Q4_K_M.gguf`         |
+| Start-Log       | `Reviewer bereit: …:8080/v1` |
+| Prozesse        | ein Prozess, PID 17984       |
+| `.pid`          | 17984                        |
+
+Gegenprobe Doppelstart: Der zweite Aufruf bei laufendem Server meldet
+`{"ok":true,"already":true}` nach 21 ms, danach läuft weiterhin genau ein
+Prozess.
+
+**Schluss.** `spawn` ohne `detached` startet `start-reviewer.ps1`, das Skript
+startet den Server und beendet sich nach der Bereitschaft; `ensureRunning`
+kehrt vorher zurück. Für den Start braucht es den Watchdog nicht mehr; er
+bleibt als Absicherung gegen Abstürze sinnvoll.
+
+**Grenzen.**
+- Die 5,1 s bis `/health` sind kein Kaltstart von der Platte: Die GGUF lag aus
+  dem vorherigen Lauf im Windows-Dateicache. Der früher gemessene Kaltstart
+  (~34 s) bleibt der Worst Case und ist von `warmupTimeoutMs` (90 s) gedeckt.
+- Die Zeile `setup: Server gestartet` aus `index.js` ist noch nicht live
+  gesehen; sie entsteht nur beim Plugin-Start und damit beim nächsten
+  OpenCode-Neustart. Der Pfad dahinter ist belegt, die Logzeile selbst nicht.
+- `staging/kaltstart-proof.mjs` und `staging/doppelstart-check.mjs` sind
+  Hilfsskripte und bleiben unversioniert (`staging/` ist ignoriert).

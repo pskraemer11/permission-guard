@@ -903,6 +903,15 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Dokumentiert
 
+- **Kaltstart über den Plugin-Pfad belegt (24.11.2026):** `ensureRunning` aus
+  dem deployten `reviewer.js` aufgerufen, nachdem Watchdog und Server aus
+  waren: `started` nach 26 ms, `/health` ok nach 5059 ms, `/v1/models` nennt
+  `Kev-4B-Q4_K_M.gguf`, Start-Log „Reviewer bereit", genau ein Prozess
+  (PID 17984). Gegenprobe bei laufendem Server: `already` nach 21 ms, kein
+  zweiter Prozess. Die 5,1 s sind Dateicache, kein Kaltstart von der Platte;
+  `warmupTimeoutMs` 90 s deckt den gemessenen Worst Case (~34 s). Die Zeile
+  `setup: Server gestartet` aus `index.js` braucht den nächsten
+  OpenCode-Neustart. Kein Code geändert; Details in `PLANUNG.md`.
 - **G2 im Betrieb ausgezählt (21.11.2026):** `guard.log` enthält 181
   `shield annotate`-Zeilen, davon 48 mit `verdacht=` (47 × `rollenzeile`,
   1 × `chat-marker`). Ob das echte Fälle sind, ist offen — das Audit-Log
