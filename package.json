@@ -76,7 +76,7 @@
     "bench:shell": "node test/bench-shell.mjs --repeat 3"
   },
   "devDependencies": {
-    "@opencode/plugin": "^2.3.0"
+    "@opencode/plugin": "^2.4.0"
   },
   "overrides": {
     "minimatch": "11.0.9",
