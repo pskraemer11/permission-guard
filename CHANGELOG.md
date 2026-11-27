@@ -167,6 +167,11 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Deploy-Gate um `bench-mcp` erweitert (27.11.2026):** `deploy.ps1` und
+  `deploy.sh` führen nach `test.mjs` auch `bench-mcp.mjs` aus und brechen bei
+  Exitcode 1 ab. Eine veraltete MCP-Erwartung fällt damit vor dem Kopieren auf,
+  nicht erst in der CI. Der Bench läuft ohne Netz und Modell in unter einer
+  Sekunde; README und AGENTS nennen den Schritt.
 - **Skriptinhalt hinter `pwsh -File` (27.11.2026, Weg 2):** `src/guard.js`
   liest die `.ps1`/`.psm1`-Datei (bis 256 KiB, gültiges UTF-8, keine NUL-Bytes)
   und bewertet den Inhalt rekursiv mit denselben Pfadregeln wie einen sichtbaren

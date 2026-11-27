@@ -2302,3 +2302,11 @@ Die Richtlinie nannte Codestellen als `datei:zeile`. Nach dem Wachstum von
 `neverAutoApprove()`, `decide()`, `main()`, `hashRecord()`, `appendRecord()`,
 `checkAnchor()`, `verifyChain()`); bei Konfigurationswerten stehen die
 Schlüssel (`apiKeyEnv`, `resultShield`, `gitShadow`).
+
+## Nachtrag 27.11.2026: Deploy-Gate um `bench-mcp` erweitert
+
+`deploy.ps1` und `deploy.sh` prüften bisher `test.mjs` und die Python-Tests,
+aber nicht den MCP-Bench. Eine veraltete Erwartung wie im G-01-Fall wäre damit
+erst in der CI aufgefallen, nicht vor dem Kopieren. Beide Skripte rufen jetzt
+zusätzlich `node test/bench-mcp.mjs` auf; der Lauf braucht weder Netz noch
+Modell. README, README_de und AGENTS nennen den Schritt.

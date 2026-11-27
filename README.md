@@ -75,9 +75,9 @@ cd tools/permission-guard
 ./scripts/deploy.sh --check    # compare only
 ```
 
-Neither deploy script deploys when `node test/test.mjs` or
-`python -m pytest tests -q` fails, and both report every byte difference between
-source and runtime. Do not link the directory by junction or symlink: the guard
+Neither deploy script deploys when `node test/test.mjs`,
+`node test/bench-mcp.mjs` or `python -m pytest tests -q` fails, and both report
+every byte difference between source and runtime. Do not link the directory by junction or symlink: the guard
 would then sit in a folder with write permission, and the self-protection
 boundary would be gone.
 

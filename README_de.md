@@ -74,9 +74,9 @@ cd tools/permission-guard
 ./scripts/deploy.sh --check    # nur vergleichen
 ```
 
-Beide Deploy-Skripte deployen nicht, wenn `node test/test.mjs` oder
-`python -m pytest tests -q` fehlschlägt, und melden jede Byte-Abweichung
-zwischen Quelle und Laufzeit. Nicht per Junction oder Symlink verbinden: dann
+Beide Deploy-Skripte deployen nicht, wenn `node test/test.mjs`,
+`node test/bench-mcp.mjs` oder `python -m pytest tests -q` fehlschlägt, und
+melden jede Byte-Abweichung zwischen Quelle und Laufzeit. Nicht per Junction oder Symlink verbinden: dann
 läge der Guard in einem Ordner mit Schreibfreigabe und die Selbstschutzgrenze
 wäre weg.
 

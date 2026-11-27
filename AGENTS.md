@@ -20,8 +20,8 @@ laufendes Modell messen.
 
 ## Deploy
 
-Nur über `deploy.ps1` (Windows) oder `deploy.sh`. Das Skript prüft die Tests,
-kopiert und vergleicht SHA256. Es gibt zwei Ziele:
+Nur über `deploy.ps1` (Windows) oder `deploy.sh`. Das Skript prüft `test.mjs`,
+`bench-mcp.mjs` und die Python-Tests, kopiert und vergleicht SHA256. Es gibt zwei Ziele:
 `~/.config/opencode/plugins/permission-guard` (OpenCode-Plugin) und
 `~/.codex/hooks` (Codex-Guard). Beide Laufzeitkopien sind schreibgeschützt;
 einzelne Dateien werden nicht dorthin geschrieben.
