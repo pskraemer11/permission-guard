@@ -8,6 +8,11 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **`opencode.json` versioniert (27.11.2026):** Die Datei war lokal vorhanden,
+  aber nie aufgenommen. Sie lädt `SECURITY.md`, die globale
+  `~/.agents/references/harness-threat-model.md` und die harness-spezifische
+  `~/.config/opencode/SECURITY-OPENCODE.md` in den Workspace-Kontext. Nur
+  Schema-Verweis und `instructions`-Liste, keine Zugangsdaten.
 - **`src/shell-reviewer.config.json` als versionierte Quelle (21.11.2026):**
   Die Laufzeitkonfiguration des Reviewers lag bisher nur unter
   `~/.config/opencode/plugins/permission-guard/` und war damit nicht prüfbar.

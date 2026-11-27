@@ -2285,3 +2285,11 @@ tatsächliche Verhalten. Das ist eine Verschärfung der Erwartungen, keine
 Abschwächung: G-01 bleibt unverändert.
 
 **Prüfung.** `node test/bench-mcp.mjs` 40/40, `--change` Exit 0.
+
+## Nachtrag 27.11.2026: `opencode.json` versioniert
+
+Die Datei war lokal vorhanden, aber nie in Git aufgenommen. Sie lädt
+`SECURITY.md` und die harness-übergreifenden Sicherheitsreferenzen
+(`~/.agents/references/harness-threat-model.md`,
+`~/.config/opencode/SECURITY-OPENCODE.md`) in den Workspace-Kontext. Inhalt:
+Schema-Verweis und `instructions`-Liste, keine Zugangsdaten oder lokalen Pfade.
