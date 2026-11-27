@@ -2317,3 +2317,22 @@ Modell. README, README_de und AGENTS nennen den Schritt.
 Slot-Erklärung ist angepasst, Trailing Whitespace entfernt. Ohne neue Messreihe
 übernommen. `.gitignore` hält außerdem die lokalen Notizen, Screenshots und die
 `review/`-Verknüpfung aus dem Repository; die Dateien bleiben auf der Platte.
+
+## Technische Schuld 27.11.2026: Actions nicht SHA-gepinnt (hohe Priorität)
+
+**Priorität: hoch.** `zizmor 1.33.1` meldet für `permission-guard` 20 Befunde,
+davon 9 hohe: `actions/checkout@v7`, `actions/setup-node@v7`,
+`actions/setup-python@v7` und weitere Actions sind mit beweglichen Tags statt
+mit einem Commit-SHA gepinnt. 6 niedrige Befunde betreffen fehlendes
+`persist-credentials: false` in `hook-regeln.yml`. Ein beweglicher Tag kann
+nachträglich auf fremden Code zeigen; SHA-Pinning ist die im Skill geforderte
+Gegenmaßnahme.
+
+**Folge.** zizmor kann erst Required Check werden, wenn die Actions gepinnt
+sind; vorher blockiert der Check jeden PR oder rauscht. Bis dahin läuft er
+beratend (`continue-on-error`).
+
+**Nächster Schritt.** Alle `uses:` in `.github/workflows/` auf volle
+Commit-SHAs ziehen (`checkout`, `setup-node`, `setup-python`, `codeql-action`,
+…), `persist-credentials: false` setzen, danach zizmor required schalten. Gilt
+für dieses Repo, das Template und die übrigen Repositories.
