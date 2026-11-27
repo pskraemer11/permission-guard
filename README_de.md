@@ -74,9 +74,9 @@ cd tools/permission-guard
 ./scripts/deploy.sh --check    # nur vergleichen
 ```
 
-Beide Deploy-Skripte deployen nicht, wenn `node test/test.mjs` oder
-`python -m pytest tests -q` fehlschlägt, und melden jede Byte-Abweichung
-zwischen Quelle und Laufzeit. Nicht per Junction oder Symlink verbinden: dann
+Beide Deploy-Skripte deployen nicht, wenn `node test/test.mjs`,
+`node test/bench-mcp.mjs` oder `python -m pytest tests -q` fehlschlägt, und
+melden jede Byte-Abweichung zwischen Quelle und Laufzeit. Nicht per Junction oder Symlink verbinden: dann
 läge der Guard in einem Ordner mit Schreibfreigabe und die Selbstschutzgrenze
 wäre weg.
 
@@ -176,6 +176,15 @@ Hilfe- oder Versionsaufrufe mit genau einem Hilfewort. Kontrollblöcke (`if`,
 `Get-ChildItem | ForEach-Object { Remove-Item -Recurse -Force C:\Windows\x }`
 als „nur lesend".
 
+**Skriptdateien sind eigener Code.** Bei `pwsh -File`/`-Fi` liest der Guard die
+`.ps1`/`.psm1`-Datei (bis 256 KiB, gültiges UTF-8, keine NUL-Bytes) und bewertet
+ihren Inhalt mit denselben Regeln wie einen sichtbaren Befehl. Relative Pfade
+gelten für den Arbeitsordner des Aufrufs, nie für das Skriptverzeichnis;
+`$PSScriptRoot` bleibt unauflösbar, `-WorkingDirectory` bleibt `ask`.
+Skriptaufrufe werden bis drei Ebenen tief verfolgt; ein Zyklus oder eine tiefere
+Kette bleibt `ask`. `.cmd`, `.bat`, `.sh` und `.py` haben eine andere Syntax und
+bleiben `ask`.
+
 **Schreibend im Projekt:** Erlaubt, wenn jedes Ziel auflösbar ist und innerhalb
 eines vertrauten Ordners liegt — `Set-Content`, `Add-Content`, `Out-File`,
 `New-Item`, `Copy-Item`, `Move-Item`, `Rename-Item`, Umleitungen in eine Datei,
@@ -217,7 +226,8 @@ Die vollständigen Listen, alle Ausnahmen und ihre Begründung stehen in
 | `git config <key> <value>`                                                      | `ask`                                           |
 | Registry, Aufgabenplanung, `Set-ExecutionPolicy`, `Set-Acl`                     | `ask`                                           |
 | `python` außerhalb der Freigabe, `node` außerhalb der Selbst-Skripte,           | `ask`                                           |
-| `pwsh -File`                                                                    |                                                 |
+| `pwsh -File` auf `.cmd`, `.bat`, `.sh`, `.py` oder mit nicht lesbarem Skript    | `ask`                                           |
+| `pwsh -File` mit Zyklus, tiefer als drei Skripte oder über 256 KiB              | `ask`                                           |
 | `& <befehl>`, Dot-Sourcing (Ziel in Variablen)                                  | `deny` (Entscheidung 3)                         |
 | `Invoke-Expression`, `iex`, `-EncodedCommand`, `powershell -e`                  | `deny` (Entscheidung 25.10.2026)                |
 | Geheimnispfade: `.env`, `.ssh`, `auth.json`, `*.pem`, `*.key`, `.npmrc`, `.aws` | `ask`                                           |
@@ -256,7 +266,9 @@ stehen in `METHODOLOGY_de.md` unter „Zwei Implementierungen: OpenCode und Code
   Laufzeit berechnet und nicht sicher auflösbar ist (`Join-Path` mit unbekanntem
   Teil, Schleifenvariable), wird `deny`.
 - **`python` und `node` laufen nur innerhalb der Freigaben**, sonst `ask`.
-  Interpreter führen beliebigen Code aus; `pwsh -File` bleibt `ask`.
+  Interpreter führen beliebigen Code aus. Ein Skript hinter `pwsh -File` wird
+  erst erlaubt, wenn sein Inhalt gelesen und bewertet wurde; eine nicht lesbare
+  Datei bleibt `ask`.
 - **Ein `cd` in ein anderes Laufwerk** macht relative Ziele unklar → `deny`.
 - **Das Entscheidungsmodell hat ein Stapellimit, keine Zeichengrenze.** Zu lange
   Anfragen beantwortet der Server mit einem Fehler, den der Guard für diesen
@@ -275,10 +287,10 @@ stehen in `METHODOLOGY_de.md` unter „Zwei Implementierungen: OpenCode und Code
 ## Selbst prüfen
 
 ```powershell
-node test/test.mjs                  # 992 Unit-Tests, Klassifizierer und Reviewer
+node test/test.mjs                  # 1063 Unit-Tests, Klassifizierer und Reviewer
 node test/test-wiring.mjs           # Fake-git: deny verhindert Ausführung
 node test/test-index.mjs            # Plugin-Verdrahtung, Fake-OpenCode
-node test/bench-mcp.mjs             # 40 feste MCP-Fälle, 15 davon Verbote
+node test/bench-mcp.mjs             # 40 feste MCP-Fälle, 25 davon Verbote
 node test/smoke-reviewer.mjs        # 9 Fälle gegen die laufende Konfiguration
 python -m pytest tests -q           # Codex-Guard
 python -m ruff check .              # Python-Lint

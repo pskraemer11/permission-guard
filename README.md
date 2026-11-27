@@ -75,9 +75,9 @@ cd tools/permission-guard
 ./scripts/deploy.sh --check    # compare only
 ```
 
-Neither deploy script deploys when `node test/test.mjs` or
-`python -m pytest tests -q` fails, and both report every byte difference between
-source and runtime. Do not link the directory by junction or symlink: the guard
+Neither deploy script deploys when `node test/test.mjs`,
+`node test/bench-mcp.mjs` or `python -m pytest tests -q` fails, and both report
+every byte difference between source and runtime. Do not link the directory by junction or symlink: the guard
 would then sit in a folder with write permission, and the self-protection
 boundary would be gone.
 
@@ -176,6 +176,14 @@ and `deny` are passed through with their reason. Before that,
 `Get-ChildItem | ForEach-Object { Remove-Item -Recurse -Force C:\Windows\x }`
 counted as "read-only".
 
+**Script files are code of their own.** For `pwsh -File`/`-Fi` the guard reads
+the `.ps1`/`.psm1` file (up to 256 KiB, valid UTF-8, no NUL bytes) and judges
+its content with the same rules as a visible command. Relative paths resolve
+against the working folder of the call, never against the script's folder;
+`$PSScriptRoot` stays unresolvable, and `-WorkingDirectory` stays `ask`. Nested
+script calls are followed up to three levels; a cycle or a deeper chain stays
+`ask`. `.cmd`, `.bat`, `.sh` and `.py` have a different syntax and stay `ask`.
+
 **Writing inside the project:** allowed when every target is resolvable and lies
 inside a trusted folder — `Set-Content`, `Add-Content`, `Out-File`, `New-Item`,
 `Copy-Item`, `Move-Item`, `Rename-Item`, redirection into a file,
@@ -217,7 +225,8 @@ under "Regelwerk im Detail".
 | `git config <key> <value>`                                                    | `ask`                                           |
 | registry, task scheduler, `Set-ExecutionPolicy`, `Set-Acl`                    | `ask`                                           |
 | `python` outside the allowance, `node` outside the self scripts,              | `ask`                                           |
-| `pwsh -File`                                                                  |                                                 |
+| `pwsh -File` on `.cmd`, `.bat`, `.sh`, `.py`, or with an unreadable script    | `ask`                                           |
+| `pwsh -File` with a cycle, deeper than three scripts, or over 256 KiB         | `ask`                                           |
 | `& <command>`, dot-sourcing (target in variables)                             | `deny` (decision 3)                             |
 | `Invoke-Expression`, `iex`, `-EncodedCommand`, `powershell -e`                | `deny` (decision 25.10.2026)                    |
 | secret paths: `.env`, `.ssh`, `auth.json`, `*.pem`, `*.key`, `.npmrc`, `.aws` | `ask`                                           |
@@ -256,7 +265,9 @@ Details, the shared test cases and the differing deletion roots are in
   only at runtime and cannot be resolved safely (`Join-Path` with an unknown
   part, loop variable) becomes `deny`.
 - **`python` and `node` run only inside the allowances**, otherwise `ask`.
-  Interpreters execute arbitrary code; `pwsh -File` stays `ask`.
+  Interpreters execute arbitrary code. A script behind `pwsh -File` is allowed
+  only after its content was read and judged; a file that cannot be read stays
+  `ask`.
 - **A `cd` into another drive** makes relative targets unclear → `deny`.
 - **The decision model has a batch limit, not a character limit.** Over-long
   requests are answered by the server with an error that the guard turns into
@@ -275,10 +286,10 @@ Details, the shared test cases and the differing deletion roots are in
 ## Checking it yourself
 
 ```powershell
-node test/test.mjs                  # 992 unit tests, classifier and reviewer
+node test/test.mjs                  # 1063 unit tests, classifier and reviewer
 node test/test-wiring.mjs           # fake git: deny prevents execution
 node test/test-index.mjs            # plugin wiring, fake OpenCode
-node test/bench-mcp.mjs             # 40 fixed MCP cases, 15 of them denials
+node test/bench-mcp.mjs             # 40 fixed MCP cases, 25 of them denials
 node test/smoke-reviewer.mjs        # 9 cases against the running configuration
 python -m pytest tests -q           # Codex guard
 python -m ruff check .              # Python lint

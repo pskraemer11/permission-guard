@@ -194,6 +194,12 @@ if (-not $Check -and -not $SkipTests) {
     if ($LASTEXITCODE -ne 0) {
         throw "Tests fehlgeschlagen (Exitcode $LASTEXITCODE) - kein Deploy."
     }
+    # MCP-Bench: prueft die Weiterleitung und den 40-Faelle-Bestand. Ohne
+    # diesen Lauf koennte eine veraltete Erwartung erst in der CI auffallen.
+    & node (Join-Path $source "test\bench-mcp.mjs")
+    if ($LASTEXITCODE -ne 0) {
+        throw "MCP-Bench fehlgeschlagen (Exitcode $LASTEXITCODE) - kein Deploy."
+    }
     & python -m pytest (Join-Path $source "tests") -q -rs
     if ($LASTEXITCODE -ne 0) {
         throw "Python-Tests fehlgeschlagen (Exitcode $LASTEXITCODE) - kein Deploy."
@@ -241,7 +247,7 @@ if ($mismatch -gt 0) {
     throw "$mismatch Datei(en) weichen ab."
 }
 
-# 5. Dateirechte: Nur Eigner, Administratoren und SYSTEM duerfen schreiben.
+# 5. Dateirechte (G-04/A10: bei jedem Deploy, auch -Check, und bricht bei FAIL): Nur Eigner, Administratoren und SYSTEM duerfen schreiben.
 Write-Host "`n== Dateirechte =="
 & (Join-Path $PSScriptRoot "verify-runtime-acl.ps1") -Target $Target -CodexTarget $CodexTarget
 

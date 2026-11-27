@@ -1,0 +1,11 @@
+# G-08 (24.11.2026): Zweitblick bei Regel-Aenderungen. Wer diese Dateien
+# aendert, braucht einen Review von @pskraemer11. Durchgesetzt wird das ueber
+# den Branch-Schutz auf main (GitHub-Einstellung, Pull Request mit Review).
+/SECURITY.md @pskraemer11
+/src/** @pskraemer11
+/scripts/** @pskraemer11
+/codex_guard.py @pskraemer11
+/.github/workflows/** @pskraemer11
+/test/** @pskraemer11
+/tests/** @pskraemer11
+'*'

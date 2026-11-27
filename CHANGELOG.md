@@ -8,6 +8,11 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Hinzugefügt
 
+- **`opencode.json` versioniert (27.11.2026):** Die Datei war lokal vorhanden,
+  aber nie aufgenommen. Sie lädt `SECURITY.md`, die globale
+  `~/.agents/references/harness-threat-model.md` und die harness-spezifische
+  `~/.config/opencode/SECURITY-OPENCODE.md` in den Workspace-Kontext. Nur
+  Schema-Verweis und `instructions`-Liste, keine Zugangsdaten.
 - **`src/shell-reviewer.config.json` als versionierte Quelle (21.11.2026):**
   Die Laufzeitkonfiguration des Reviewers lag bisher nur unter
   `~/.config/opencode/plugins/permission-guard/` und war damit nicht prüfbar.
@@ -162,6 +167,34 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Deploy-Gate um `bench-mcp` erweitert (27.11.2026):** `deploy.ps1` und
+  `deploy.sh` führen nach `test.mjs` auch `bench-mcp.mjs` aus und brechen bei
+  Exitcode 1 ab. Eine veraltete MCP-Erwartung fällt damit vor dem Kopieren auf,
+  nicht erst in der CI. Der Bench läuft ohne Netz und Modell in unter einer
+  Sekunde; README und AGENTS nennen den Schritt.
+- **`start-reviewer.ps1` mit 16384 Kontext und ohne Cache (27.11.2026):**
+  `-c` sinkt von 32768 auf 16384, `-cram 0` begrenzt den Cache-RAM für
+  Entscheidungsmodelle auf 0 MiB. Die Slot-Erklärung nennt jetzt 16384;
+  Trailing Whitespace in den Kommentaren entfernt. Ohne neue Messreihe
+  übernommen.
+- **Lokale Notizen und Review-Artefakte ignoriert (27.11.2026):** `.gitignore`
+  nimmt `docs/Anfangsprompt*.md`, `docs/Screenshot*.png`, die
+  Satyajit-Abbildungen und `review/` auf; die Dateien bleiben auf der Platte.
+- **Skriptinhalt hinter `pwsh -File` (27.11.2026, Weg 2):** `src/guard.js`
+  liest die `.ps1`/`.psm1`-Datei (bis 256 KiB, gültiges UTF-8, keine NUL-Bytes)
+  und bewertet den Inhalt rekursiv mit denselben Pfadregeln wie einen sichtbaren
+  Befehl. Relativ gilt der Arbeitsordner des Aufrufs, nicht das
+  Skriptverzeichnis; `$PSScriptRoot` bleibt unauflösbar. Ein inneres `allow`
+  ergibt `skriptausfuehrung: Inhalt geprueft`, ein inneres `deny`/`ask` wird
+  durchgereicht. Rekursion bis drei Skripte mit Zykluserkennung über
+  `realpath`, danach `ask`; unlesbare, zu große, binäre oder nicht UTF-8-kodierte
+  Dateien ebenfalls `ask`. `.cmd`, `.bat`, `.sh` und `.py` bleiben `ask`;
+  `pwsh -Command` bleibt unverändert. `-WorkingDirectory` bei `-File` bleibt
+  Rückfrage, weil es den Prozessordner verschiebt. `Set-StrictMode` und Attributzeilen
+  zählen als Skript-Präambel. `[Environment]::CurrentDirectory` und
+  `[System.IO.Directory]::SetCurrentDirectory` bleiben Rückfrage, weil sie den
+  Prozessordner unverfolgbar verschieben. `test/test.mjs` 1063/1063 mit 30 neuen
+  Fällen und Fixtures unter `test/fixtures/skripte/`.
 - **`start-reviewer.ps1` startet nicht doppelt (21.11.2026):** Vor dem Start wird
   geprüft, ob bereits ein `llama-server` mit demselben Modellpfad und Port läuft
   (Kommandozeile). Wenn ja, wartet das Skript bis zu 120 s auf `/health` und
@@ -646,6 +679,16 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Behoben
 
+- **MCP-Bench an G-01 angeglichen (27.11.2026):** Der G-01-Commit (`99fe108`,
+  24.11.2026) hat Schreib- und Löschaufrufe auf `deny` gestellt und `test/test.mjs`
+  sowie `SECURITY.md` angepasst, aber `test/mcp-cases.jsonl` und die Zählung im
+  Bench nicht. Zehn Fälle erwarteten weiterhin `ask`; `node test/bench-mcp.mjs`
+  stand bei 30/40 und wäre in der CI rot geworden. Die Erwartungen sind jetzt
+  `deny` (Verteilung 8 `allow` / 5 `ask` / 25 `deny` / 2 `model`), `EXPECTED`
+  und der Kopfkommentar nennen 40 Fälle, die Schrittnamen in `ci.yml`/`guard.yml`
+  sowie die Zahlen in README und METHODOLOGY sind nachgezogen; die
+  MCP-Policy-Absätze beschreiben wieder das tatsächliche G-01-Verhalten.
+  `bench-mcp` 40/40, `--change` Exit 0.
 - **Codex-Hook fail-closed und Reviewer nur localhost (23.11.2026):**
   `codex_guard.py` ergibt bei unlesbarer Eingabe, fehlerhafter Eingabeform
   und inneren Ausnahmen ein `deny` (`REASON_HOOK_ERROR`) statt stiller
@@ -903,6 +946,21 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Dokumentiert
 
+- **SECURITY.md ohne Zeilennummern (27.11.2026):** Verweise auf Codezeilen
+  durch Funktionsnamen ersetzt (`evaluate()`, `scopeEdit()`, `scopeWebfetch()`,
+  `guardOptions()`, `review()`, `neverAutoApprove()`, `decide()`, `main()`,
+  `hashRecord()`, `appendRecord()`, `checkAnchor()`, `verifyChain()`); bei
+  Konfigurationswerten stehen die Schlüssel (`apiKeyEnv`, `resultShield`,
+  `gitShadow`). Die Zeilen waren seit dem Wachstum von `guard.js` verschoben.
+- **Kaltstart über den Plugin-Pfad belegt (24.11.2026):** `ensureRunning` aus
+  dem deployten `reviewer.js` aufgerufen, nachdem Watchdog und Server aus
+  waren: `started` nach 26 ms, `/health` ok nach 5059 ms, `/v1/models` nennt
+  `Kev-4B-Q4_K_M.gguf`, Start-Log „Reviewer bereit", genau ein Prozess
+  (PID 17984). Gegenprobe bei laufendem Server: `already` nach 21 ms, kein
+  zweiter Prozess. Die 5,1 s sind Dateicache, kein Kaltstart von der Platte;
+  `warmupTimeoutMs` 90 s deckt den gemessenen Worst Case (~34 s). Die Zeile
+  `setup: Server gestartet` aus `index.js` braucht den nächsten
+  OpenCode-Neustart. Kein Code geändert; Details in `PLANUNG.md`.
 - **G2 im Betrieb ausgezählt (21.11.2026):** `guard.log` enthält 181
   `shield annotate`-Zeilen, davon 48 mit `verdacht=` (47 × `rollenzeile`,
   1 × `chat-marker`). Ob das echte Fälle sind, ist offen — das Audit-Log

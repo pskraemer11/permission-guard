@@ -7,7 +7,7 @@ Arbeitsregeln für Agenten in diesem Repository.
 ```powershell
 node test/test.mjs             # vollständige Suite, Exitcode 1 bei Abweichung
 node test/test-wiring.mjs      # Fake-git: deny verhindert Ausführung
-node test/bench-mcp.mjs        # 40 feste Fälle, 15 Verbote
+node test/bench-mcp.mjs        # 40 feste Fälle, 25 Verbote
 python -m pytest tests -q # Codex-Guard, inkl. test/shared-cases.jsonl
 python -m ruff check .    # Python-Lint
 python -m pyright         # Python-Typprüfung
@@ -20,8 +20,8 @@ laufendes Modell messen.
 
 ## Deploy
 
-Nur über `deploy.ps1` (Windows) oder `deploy.sh`. Das Skript prüft die Tests,
-kopiert und vergleicht SHA256. Es gibt zwei Ziele:
+Nur über `deploy.ps1` (Windows) oder `deploy.sh`. Das Skript prüft `test.mjs`,
+`bench-mcp.mjs` und die Python-Tests, kopiert und vergleicht SHA256. Es gibt zwei Ziele:
 `~/.config/opencode/plugins/permission-guard` (OpenCode-Plugin) und
 `~/.codex/hooks` (Codex-Guard). Beide Laufzeitkopien sind schreibgeschützt;
 einzelne Dateien werden nicht dorthin geschrieben.

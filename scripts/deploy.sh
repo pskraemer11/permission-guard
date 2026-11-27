@@ -69,6 +69,7 @@ if [ "$MODE" = "deploy" ] && [ "${SKIP_TESTS:-0}" != "1" ]; then
   echo "== Tests =="
   if command -v node >/dev/null 2>&1; then
     node "$SCRIPT_DIR/test.mjs"
+    node "$SCRIPT_DIR/bench-mcp.mjs"
   else
     echo "FEHLER: node nicht gefunden" >&2
     exit 1

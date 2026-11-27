@@ -7,15 +7,16 @@
 // Alles Unbekannte bleibt "ask" (fail closed). Ein "deny" der statischen
 // Regeln wird nie angefasst.
 //
-// Reine Funktionen bis auf eine Ausnahme: die Urteilsdatei fuer Skill-Skripte
-// (Nutzerentscheid 05.11.2026) wird gelesen, nie geschrieben. Fehlt sie oder
-// ist sie unlesbar, gilt die eingebaute Liste - der Fehlerfall oeffnet nichts.
+// Reine Funktionen bis auf zwei Ausnahmen: die Urteilsdatei fuer Skill-Skripte
+// (Nutzerentscheid 05.11.2026) und die Skriptdatei hinter "pwsh -File" (Weg 2,
+// 27.11.2026) werden gelesen, nie geschrieben. Fehlt eine Datei oder ist sie
+// unlesbar, gilt der sichere Zustand - der Fehlerfall oeffnet nichts.
 // Dadurch ohne OpenCode testbar. Der Import von node:crypto rechnet nur; er
 // liefert den Argument-Hash fuer MCP-Freigabe-Schluessel (Schritt A, 29.10.2026)
 // und den Datei-Hash fuer die Urteilsdatei.
 
 import { createHash } from "node:crypto"
-import { existsSync, readFileSync, realpathSync } from "node:fs"
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs"
 
 // Umgebungsvariablen, die kein Geheimnis sind. Alles andere ($env:TOKEN) gilt
 // als verdaechtig und bleibt bei "ask".
@@ -179,6 +180,8 @@ const READ_CMDLETS = new Set([
   // Ablaufsteuerung im Skript
   "return", "break", "continue", "throw", "exit", "trap",
   "test-json",
+  // Skript-Praeambel: aendert nur das Fehlerverhalten des laufenden Prozesses.
+  "set-strictmode",
 ])
 
 const READ_BINARIES = new Set([
@@ -362,6 +365,14 @@ function classifyDotNet(statement, ctx) {
   if (m) {
     const type = m[1].trim()
     const method = m[2].toLowerCase()
+    // Prozessweiter Arbeitsordner: Der Guard fuehrt nur cd/Set-Location nach.
+    // Aendert .NET den Ordner, waeren alle relativen Ziele danach am falschen
+    // Ort geprueft. Deshalb Rueckfrage statt einer scheinbar lesenden Zeile
+    // (fail closed; gilt auch fuer sichtbare Befehle).
+    if (
+      /^(?:system\.)?(?:environment|io\.directory)$/i.test(type)
+      && (method === "currentdirectory" || method === "setcurrentdirectory")
+    ) return "unknown"
     if (WRITE_METHODS.has(method)) {
       if (FILE_WRITE_METHODS.has(method) && /^(?:system\.)?io\.(?:file|directory)$/i.test(type)) return "filewrite"
       // "replace" ist typabhaengig ein Lesezugriff: [regex]::Replace arbeitet
@@ -773,6 +784,9 @@ function classifyStatement(raw, ctx = {}) {
     if (results.some((r) => r === "block")) return "block"
     if (results.some((r) => r === "unknown" || r === "write")) return "unknown"
     if (results.some((r) => r === "filewrite")) return "filewrite"
+    // Ein Skriptaufruf im Block traegt seinen eigenen Grund in ctx; er darf
+    // nicht als harmloser Kontrollblock durchgehen.
+    if (results.some((r) => r === "script")) return "script"
     if (results.some((r) => r === "localwrite")) return "localwrite"
     return "read"
   }
@@ -854,6 +868,11 @@ function classifyStatement(raw, ctx = {}) {
   // danach wie die eigentliche Anweisung bewerten.
   s = s.replace(/^\[(?:void)\]\s*/i, "").trim()
 
+  // Attributzeile ([CmdletBinding()], [Parameter(...)]): deklariert nur
+  // Metadaten. Ein Typ mit :: oder Code hinter der Klammer bleibt davon
+  // unberuehrt und laeuft in die normale Einordnung.
+  if (s.startsWith("[") && s.endsWith("]") && !s.includes("::")) return "noop"
+
   // .NET-Statikaufruf
   if (s.startsWith("[")) return classifyDotNet(s, ctx)
 
@@ -888,8 +907,9 @@ function classifyStatement(raw, ctx = {}) {
   if (FILE_WRITE_CMDLETS.has(lower)) return "filewrite"
 
   const kind = classifyCommand(s, lower, ctx)
-  // Ausgabe in eine Datei: nur wenn der Befehl selbst nachweislich nur liest.
-  if (kind === "read" && hasRedirection(s)) return "filewrite"
+  // Ausgabe in eine Datei: nur wenn der Befehl selbst nachweislich nur liest
+  // oder ein Skript ausfuehrt, dessen Umleitung sonst ungeprueft bliebe.
+  if ((kind === "read" || kind === "script") && hasRedirection(s)) return "filewrite"
   return kind
 }
 
@@ -902,6 +922,50 @@ function classifyStatement(raw, ctx = {}) {
 const HELP_VERSION_ARGS = new Set(["--help", "-h", "-?", "/?", "--version", "-V"])
 const PROGRAM_NAME = /^[A-Za-z][\w.-]*$/
 const SCRIPT_NAME = /\.(?:ps1|psm1|sh|bash|bat|cmd|py|pyw|js|mjs|cjs|ts|rb|pl|vbs)$/i
+
+// Interpreter mit Skriptdatei (-File). Der Inhalt wird gelesen und wie ein
+// sichtbarer Befehl bewertet (Weg 2, Nutzerentscheid 27.11.2026). Nur .ps1 und
+// .psm1: .cmd, .bat, .sh und .py haben eine andere Syntax; sie werden nicht
+// stillschweigend mit PowerShell-Regeln gelesen, sondern bleiben Rueckfrage.
+// Getrennt von "-Command", weil dort der Code sichtbar im Befehl steht und
+// verschachtelt geprueft wird.
+const SCRIPT_CONTENT_EXT = /\.(?:ps1|psm1)$/i
+const SCRIPT_CONTENT_LIMIT = 256 * 1024
+const SCRIPT_CONTENT_DEPTH = 3
+const SCRIPT_COMMAND_FLAGS = /^-(?:c|command|e|ec|encodedcommand)$/i
+// -WorkingDirectory (eindeutige Abkuerzung ab -Wo) verschiebt den
+// Prozessordner. Relative Ziele waeren dann am falschen Ort geprueft.
+const SCRIPT_WORKDIR_FLAG = /^-wo/i
+
+// Liefert den Skriptpfad aus einer pwsh/powershell-Anweisung, sonst null.
+// tokenizeCli trennt Zitate: der Inhalt eines zitierten -Command-Arguments ist
+// genau ein Token, ein "-File" darin zaehlt also nicht. Nach -Command oder
+// -EncodedCommand ist der Rest Programmtext und kein Parameter mehr.
+function scriptFileArg(statement) {
+  const tokens = tokenizeCli(statement)
+  for (let i = 1; i < tokens.length; i++) {
+    const token = tokens[i]
+    if (SCRIPT_COMMAND_FLAGS.test(token)) return null
+    const inline = /^-(?:file|fi):(.*)$/i.exec(token)
+    if (inline) return inline[1] || null
+    if (/^-(?:file|fi)$/i.test(token)) return tokens[i + 1] ?? null
+  }
+  return null
+}
+
+// Meldet, ob vor -File ein -WorkingDirectory steht. Dann ist der
+// Prozessordner verschoben, und weder der Skriptpfad noch relative Ziele im
+// Skript lassen sich gegen ctx.cwd aufloesen (fail closed).
+function scriptWorkingDirectory(statement) {
+  const tokens = tokenizeCli(statement)
+  for (let i = 1; i < tokens.length; i++) {
+    const token = tokens[i]
+    if (SCRIPT_COMMAND_FLAGS.test(token)) return false
+    if (/^-(?:file|fi)(?::|$)/i.test(token)) return false
+    if (SCRIPT_WORKDIR_FLAG.test(token)) return true
+  }
+  return false
+}
 
 function isHelpVersionOnly(s) {
   const tokens = tokenizeCli(s)
@@ -936,8 +1000,16 @@ function classifyCommand(s, lower, ctx) {
     const parts = s.split(/\s+/).filter(Boolean)
     return classifyGit(parts.slice(1))
   }
-  if (lower === "pwsh" || lower === "powershell" || lower === "pwsh.exe" || lower === "powershell.exe" || lower === "cmd" || lower === "cmd.exe" || lower === "bash" || lower === "sh") {
-    // -NoProfile -Command <script> wird vom Aufrufer nicht verschachtelt geprueft
+  if (lower === "pwsh" || lower === "powershell" || lower === "pwsh.exe" || lower === "powershell.exe") {
+    // -File: Skriptdatei lesen und den Inhalt bewerten. -Command bleibt
+    // "unknown": Der Code steht im Befehl und wird dort nicht verschachtelt
+    // geprueft.
+    if (scriptFileArg(s) !== null) return evaluateScriptFile(s, ctx)
+    return "unknown"
+  }
+  if (lower === "cmd" || lower === "cmd.exe" || lower === "bash" || lower === "sh") {
+    // cmd- und Shell-Skripte werden nicht gelesen (andere Syntax, siehe
+    // SCRIPT_CONTENT_EXT); der Aufruf bleibt Rueckfrage.
     return "unknown"
   }
   // Externe CLIs: nur lesende Unterbefehle, und nur ohne Schreib-/Sende-Flags.
@@ -961,6 +1033,94 @@ function classifyCommand(s, lower, ctx) {
   if (lower === "node" || lower === "node.exe") return classifyNode(s, ctx)
   if (lower === "deno" || lower === "ruby" || lower === "perl") return "unknown"
   return "unknown"
+}
+
+// Bewertet die Datei hinter -File (Weg 2). Rueckgabe ist der kind-Wert fuer
+// classifyStatement: "script" (Inhalt erlaubt oder Rueckfrage) oder "deny".
+// Die Gruende sammeln sich in ctx.scriptAsk/ctx.scriptDeny, damit auch ein
+// verschachtelter Block sie behaelt.
+function evaluateScriptFile(statement, ctx = {}) {
+  const opts = ctx.opts ?? {}
+  const ask = (reason) => {
+    ctx.scriptAsk ??= `skriptausfuehrung: ${reason}`
+    return "script"
+  }
+  const token = scriptFileArg(statement)
+  if (!token) return ask("Pfad unklar")
+  if (scriptWorkingDirectory(statement)) return ask("Arbeitsordner unklar")
+  // Relative Angaben gelten fuer den aufrufenden Prozess, nicht fuer das
+  // Skriptverzeichnis; $PSScriptRoot ist beim Aufruf ein eigener Ausdruck und
+  // bleibt unaufloesbar (fail closed).
+  const logical = resolveTarget(token, opts, ctx.cwd ?? null, ctx.vars)
+  if (!logical) return ask("Pfad unklar")
+  if (!SCRIPT_CONTENT_EXT.test(logical)) return ask("Dateityp nicht bewertet")
+
+  // Tiefe und Zyklus vor dem Lesen: ein Skript darf sich nicht selbst
+  // ausloesen, und eine Kette ueber das Limit bleibt Rueckfrage.
+  const depth = opts.scriptDepth ?? 0
+  if (depth >= SCRIPT_CONTENT_DEPTH) return ask("Tiefenlimit")
+  const abs = physicalPath(logical)
+  if (!abs) return ask("Pfad unklar")
+  let real
+  try {
+    real = normPath(realpathSync.native(abs))
+  } catch {
+    return ask("nicht lesbar")
+  }
+  const chain = opts.scriptChain ?? []
+  if (chain.includes(real)) return ask("Zyklus")
+
+  let text
+  try {
+    const info = statSync(abs)
+    if (!info.isFile()) return ask("keine regulaere Datei")
+    if (info.size > SCRIPT_CONTENT_LIMIT) return ask("zu gross")
+    const bytes = readFileSync(abs)
+    if (bytes.includes(0)) return ask("Binaerinhalt")
+    // PowerShell liest .ps1 ohne BOM als ANSI, der Guard als UTF-8. Ist die
+    // Datei kein gueltiges UTF-8, laesst sich der ausgefuehrte Text nicht
+    // sicher bestimmen; dann bleibt es bei der Rueckfrage statt bei U+FFFD
+    // weiterzurechnen. Ein BOM entfernt der Decoder.
+    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes)
+  } catch {
+    return ask("nicht lesbar")
+  }
+
+  let inner
+  try {
+    // Relative Ziele im Skript gelten fuer den Prozess, also fuer den
+    // Arbeitsordner des Aufrufs (ctx.cwd), nicht fuer das Skriptverzeichnis.
+    // Liegt dieser Ordner ausserhalb des Projekts, ist ein relativer Pfad
+    // nicht mehr verankert und bleibt Rueckfrage. Das Skriptverzeichnis wird
+    // nie zur Wurzel; die Projektgrenze bleibt ueber protectedBase erhalten.
+    const projectBase = opts.base ? normPath(opts.base) : null
+    let innerBase = opts.base
+    if (projectBase && ctx.cwd) {
+      if (!isUnder(normPath(ctx.cwd), projectBase)) return ask("Arbeitsordner unklar")
+      innerBase = ctx.cwd
+    }
+    inner = evaluate(text, {
+      ...opts,
+      base: innerBase,
+      protectedBase: opts.protectedBase ?? projectBase,
+      scriptDepth: depth + 1,
+      scriptChain: [...chain, real],
+    })
+  } catch {
+    return ask("Inhalt nicht bewertet")
+  }
+  if (inner.decision === "deny") {
+    ctx.scriptDeny ??= `skriptausfuehrung: ${inner.reason}`
+    return "deny"
+  }
+  if (inner.decision !== "allow") {
+    // Eigene Skript-Gruende (Zyklus, Tiefe, Pfad) sind ohne Befehlsinhalt und
+    // duerfen weitergegeben werden; fremde Gruende bleiben allgemein, damit
+    // kein Skripttext im Diagnose-Log landet.
+    const own = /^skriptausfuehrung: (.+)$/.exec(inner.reason)
+    return ask(own ? own[1] : "Inhalt nicht bewertet")
+  }
+  return "script"
 }
 
 function findSecrets(script) {
@@ -1511,22 +1671,23 @@ export function mcpVerdict(criteria, input, scope = {}) {
     return { decision: "allow", layer: 1, reason: `nur lesend (${criteria.action?.verb || "read"})` }
   }
   if (intent === "write") {
-    // Schreiben ausserhalb von Projekt und Temp ist in der Shell ein "deny";
-    // fuer MCP gilt dieselbe Grenze (Entscheidung 20.11.2026). Innerhalb
-    // bleibt es bei "ask": ein MCP-Schreibwerkzeug kann mehr tun als eine
-    // Datei anzulegen, deshalb wird daraus keine stille Freigabe.
+    // G-01 (24.11.2026): Echte Schreibzugriffe werden verboten, nicht nur
+    // gefragt. Ein ask ist keine Schutzmassnahme, weil es bei Gewöhnung
+    // weggeklickt wird. Schreiben ausserhalb von Projekt und Temp bleiben
+    // ohnehin deny; auch innerhalb der Grenzen gilt jetzt deny. Lesen
+    // (intent read oben) bleibt erlaubt.
     const outside = mcpOutsidePaths(input, scope)
     if (outside.length) {
       return { decision: "deny", layer: 1, reason: `schreibend ausserhalb des Projekts (${outside.length})` }
     }
-    return { decision: "ask", layer: 1, reason: `schreibend oder oeffentlich (${criteria.action?.verb || "write"})` }
+    return { decision: "deny", layer: 1, reason: `schreibend verboten (${criteria.action?.verb || "write"})` }
   }
   if (intent === "destructive") {
     const outside = mcpOutsidePaths(input, scope)
     if (outside.length) {
       return { decision: "deny", layer: 1, reason: `loeschend ausserhalb des Projekts (${outside.length})` }
     }
-    return { decision: "ask", layer: 1, reason: `loeschend (${criteria.action?.verb || "delete"})` }
+    return { decision: "deny", layer: 1, reason: `loeschend verboten (${criteria.action?.verb || "delete"})` }
   }
   return { decision: "model", layer: 3, reason: "Absicht nicht einordenbar" }
 }
@@ -3297,6 +3458,9 @@ export function evaluate(script, options = {}) {
       return { decision: "ask", reason: `schreibend: ${write}`, ...(message ? { message } : {}) }
     }
     if (subexpressionAsk) return subexpressionAsk
+    // Ein Skript, dessen Inhalt nicht bewertet werden konnte, bleibt
+    // Rueckfrage - auch wenn die uebrige Anweisung freigegeben waere.
+    if (ctx.scriptAsk) return { decision: "ask", reason: ctx.scriptAsk }
     if (secrets.length) return { decision: "ask", reason: `Geheimnis: ${secrets.slice(0, 3).join(", ")}` }
     return { decision: "allow", reason }
   }
@@ -3390,8 +3554,9 @@ export function evaluate(script, options = {}) {
   // Verweigerung schlaegt die Geheimnis-Rueckfrage, weil jede Form von
   // Nachfragen ohne lesbaren Inhalt unbrauchbar bleibt.
   if (kinds.has("deny")) {
-    // Ein Block meldet seinen eigenen Grund; sonst bleibt es beim Aufruf &/.
-    return { decision: "deny", reason: ctx.blockDeny ?? "unpruefbar: Aufruf ueber & oder ." }
+    // Ein Block oder ein Skript meldet seinen eigenen Grund; sonst bleibt es
+    // beim Aufruf &/.
+    return { decision: "deny", reason: ctx.scriptDeny ?? ctx.blockDeny ?? "unpruefbar: Aufruf ueber & oder ." }
   }
 
   secrets = findSecrets(raw)
@@ -3459,5 +3624,6 @@ export function evaluate(script, options = {}) {
   if (!kinds.size || [...kinds].every((k) => k === "noop")) {
     return allowUnlessSubexpressionAsk("nur Ausgabe")
   }
+  if (kinds.has("script")) return allowUnlessSubexpressionAsk("skriptausfuehrung: Inhalt geprueft")
   return allowUnlessSubexpressionAsk("nur lesend")
 }

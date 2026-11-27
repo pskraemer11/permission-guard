@@ -18,8 +18,8 @@ param(
   [string]$ModelPath = "D:\LLM-Modelle\Llama-GGUF\ggml-org\Kev-4B-GGUF\Kev-4B-Q4_K_M.gguf",
   [string]$Server = "C:\Program Files\llama.cpp\llama-server.exe",
   [string]$DraftPath = "",
-  # Stapelgroesse fuer den Prompt. Entscheidungsmodelle laufen im
-  # Embedding-Modus; dort erzwingt llama.cpp n_batch = n_ubatch, und Frage samt
+  # Stapelgroesse fuer den Prompt. WICHTIG: Entscheidungsmodelle laufen im
+  # Embedding-Modus; dort erzwingt llama.cpp: n_batch = n_ubatch, und Frage samt
   # Antwortoptionen muss in EINEN Stapel passen. 2048 deckt gemessen 48000
   # Zeichen (21.11.2026, Kev-4B) und halbiert den Compute-Puffer gegenueber
   # 4096 (2149 statt 4297 MiB). Die Werte hier uebersteuern die
@@ -32,10 +32,10 @@ param(
   # mit einem Slot gegen 159 ms mit fuenf. Bei -np 1 teilt sich nichts.
   [int]$Np = 5,
   # Unified KV: ein gemeinsamer KV-Puffer fuer alle Slots, -c bleibt dann ein
-  # Pool statt 32768/Np je Slot. Die Vorgabe von llama-server greift nur, wenn
-  # die Slotzahl "auto" ist; bei ausdruecklichem -np ist Unified aus. Deshalb
-  # setzt das Skript es bei mehr als einem Slot selbst (llama-server --help,
-  # gemessen).
+  # Pool statt 16384 bzw. 32768/Np je Slot.
+  # Die Vorgabe von llama-server greift nur, wenn die Slotzahl "auto" ist;
+  # bei ausdruecklichem -np ist Unified aus. Deshalb setzt das Skript es
+  # bei mehr als einem Slot selbst (llama-server --help, gemessen).
   [switch]$KvUnified,
   [switch]$Cpu,
   [switch]$Stop
@@ -174,8 +174,9 @@ if (-not $logFree) {
 # Standard bleibt CUDA/GPU. -Cpu ist fuer einen separaten CPU-Build ohne CUDA
 # gedacht. --no-op-offload gehoert nicht dazu: Er bremst auch den reinen
 # CPU-Build (Smoke 17.11.2026, zwei Aufrufe ueber 6000 ms).
+# -cram, --cache-ram N 	set the maximum cache size in MiB (default: 8192, 0 for decision models ...)
 $gpuLayers = $Cpu ? '0' : 'all'
-$serverArgs = @('-m', $ModelPath, '-c', '32768', '-np', "$Np", '-b', "$Batch", '-ub', "$Ubatch", '--port', "$Port", '--no-webui', '-ngl', $gpuLayers, '--jinja')
+$serverArgs = @('-m', $ModelPath, '-c', '16384', '-np', "$Np", '-b', "$Batch", '-ub', "$Ubatch", '-cram', '0', '--port', "$Port", '--no-webui', '-ngl', $gpuLayers, '--jinja')
 if ($KvUnified -or $Np -gt 1) { $serverArgs += @('--kv-unified') }
 if ($DraftPath) { $serverArgs += @('--model-draft', $DraftPath) }
 # Start. Die Log-Dateien sind oben geprueft; damit blockiert Start-Process

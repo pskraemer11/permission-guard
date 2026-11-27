@@ -3981,3 +3981,51 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
   die Laufzeitkonfiguration aus `src/`. Vorlagen-Aenderungen brauchen
   deshalb keinen Redeploy, aber einen Commit.
 
+## Compaction 24.11.2026: Kaltstart ueber den Plugin-Pfad belegt
+
+### Objective
+- Den letzten offenen Beleg schliessen: Startet das Plugin den Reviewer
+  wirklich selbst, ohne Watchdog und ohne dass der Server schon laeuft?
+
+### Important Details
+- **Aufbau:** Watchdog-Task `permission-guard reviewer watchdog` deaktiviert,
+  `llama-server` (PID 7280) beendet, dann `staging/kaltstart-proof.mjs`:
+  importiert `ensureRunning` und `loadConfig` aus dem *deployten*
+  `reviewer.js` und fragt `/health` sowie `/v1/models` ab. Danach den
+  Watchdog wieder aktiviert (State `Ready`).
+- **Messung:** `ensureRunning` meldet `{"ok":true,"started":true,"port":"8080"}`
+  nach 26 ms; `/health` ok nach 5059 ms; `/v1/models` nennt
+  `Kev-4B-Q4_K_M.gguf`; Start-Log `Reviewer bereit: http://127.0.0.1:8080/v1`;
+  genau ein Prozess (PID 17984), Elternprozess beendet, `.pid` = 17984.
+- **Gegenprobe Doppelstart:** zweiter Aufruf bei laufendem Server meldet
+  `{"ok":true,"already":true}` nach 21 ms, weiterhin ein Prozess. Damit ist
+  auch der offene Punkt "verfeinerter Doppelstart-Test" erledigt.
+- **Deutung der 5,1 s:** kein Kaltstart von der Platte; die GGUF lag aus dem
+  vorherigen Lauf im Windows-Dateicache. Der gemessene Worst Case (~34 s)
+  bleibt gueltig und ist von `warmupTimeoutMs` 90 s gedeckt.
+- **Nicht belegt:** die Zeile `setup: Server gestartet` aus `index.js`. Sie
+  entsteht nur beim Plugin-Start, also beim naechsten OpenCode-Neustart. Der
+  Pfad dahinter ist bewiesen, die Logzeile selbst nicht.
+
+### Work State
+- Geaendert: PLANUNG.md (Nachtrag 24.11.2026), CHANGELOG.md (Abschnitt
+  Dokumentiert), COMPACTIONS.md (dieser Block).
+- Neu, unversioniert: staging/kaltstart-proof.mjs, staging/doppelstart-check.mjs
+  (`staging/` ist ignoriert).
+- Belegt: Plugin-Startpfad inklusive Startskript, Bereitschaft und
+  Doppelstart-Schutz; `node test/test.mjs` 1025/1025 am selben Tag.
+
+### Next Move
+1. Beim naechsten OpenCode-Neustart im `guard.log` auf
+   `setup: Server gestartet (Port 8080)` und `setup: Aufwaermlauf ok <ms>`
+   achten; damit waere auch die letzte Logzeile live gesehen.
+2. Offene Punkte aus PLANUNG.md: Dateiwerkzeuge, Smoke-Warmup, MMProj,
+   Weg B Sandbox-ADR, P1-03 Shell-Pfad.
+
+### Important Context
+- Fuer Startbelege den Watchdog vorher deaktivieren: Er prueft alle fuenf
+  Minuten und wuerde den Server sonst vor dem Test starten.
+- `ensureRunning` importiert `start-reviewer.ps1` ueber `HERE`; ein Import aus
+  dem Repo findet das Skript nicht, nur das deployte flache Ziel hat es.
+
+

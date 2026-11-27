@@ -2142,3 +2142,178 @@ Sie waren Teil der Historie und gehören nicht in einen Einstiegstext.
 `npm run test:index`" stand in der README zwischen den datierten Ständen und
 wäre mit ihnen fast verschwunden. Sie steht jetzt in der README unter
 Installation — ohne `npm ci` schlägt das Test-Gate beim Commit fehl.
+
+## Nachtrag 24.11.2026: Kaltstart über den Plugin-Pfad belegt
+
+Der am 21.11. offen gebliebene Punkt ist geschlossen. Belegt wurde nicht mehr
+das Startskript allein, sondern `ensureRunning` aus dem **deployten**
+`reviewer.js` — genau der Pfad, den `index.js` beim Plugin-Start aufruft.
+
+**Aufbau.** Watchdog-Task `permission-guard reviewer watchdog` deaktiviert,
+damit er den Start nicht vorwegnimmt; `llama-server` (PID 7280) beendet;
+`staging/kaltstart-proof.mjs` importiert `ensureRunning` und `loadConfig` aus
+`~/.config/opencode/plugins/permission-guard/reviewer.js`, ruft
+`ensureRunning` auf und fragt `/health` und `/v1/models` ab. Danach den
+Watchdog wieder aktiviert.
+
+**Messung** (24.11.2026, 17:09):
+
+| Prüfung         | Ergebnis                     |
+| --------------- | ---------------------------- |
+| `ensureRunning` | `started` in 26 ms           |
+| `/health`       | `ok` nach 5059 ms            |
+| `/v1/models`    | `Kev-4B-Q4_K_M.gguf`         |
+| Start-Log       | `Reviewer bereit: …:8080/v1` |
+| Prozesse        | ein Prozess, PID 17984       |
+| `.pid`          | 17984                        |
+
+Gegenprobe Doppelstart: Der zweite Aufruf bei laufendem Server meldet
+`{"ok":true,"already":true}` nach 21 ms, danach läuft weiterhin genau ein
+Prozess.
+
+**Schluss.** `spawn` ohne `detached` startet `start-reviewer.ps1`, das Skript
+startet den Server und beendet sich nach der Bereitschaft; `ensureRunning`
+kehrt vorher zurück. Für den Start braucht es den Watchdog nicht mehr; er
+bleibt als Absicherung gegen Abstürze sinnvoll.
+
+**Grenzen.**
+- Die 5,1 s bis `/health` sind kein Kaltstart von der Platte: Die GGUF lag aus
+  dem vorherigen Lauf im Windows-Dateicache. Der früher gemessene Kaltstart
+  (~34 s) bleibt der Worst Case und ist von `warmupTimeoutMs` (90 s) gedeckt.
+- Die Zeile `setup: Server gestartet` aus `index.js` ist noch nicht live
+  gesehen; sie entsteht nur beim Plugin-Start und damit beim nächsten
+  OpenCode-Neustart. Der Pfad dahinter ist belegt, die Logzeile selbst nicht.
+- `staging/kaltstart-proof.mjs` und `staging/doppelstart-check.mjs` sind
+  Hilfsskripte und bleiben unversioniert (`staging/` ist ignoriert).
+
+## Nachtrag 27.11.2026: `pwsh -File` lief ohne Rückfrage durch
+
+**Befund.** Eine Sitzung löschte drei Dateien außerhalb des Projekts. Der
+direkte `Remove-Item` wurde mit `ausserhalb des Projekts` verweigert; derselbe
+Vorgang als `pwsh -File staging/remove-cuda-dlls.ps1` lief ohne Rückfrage.
+
+**Ursache.** Zwei Schichten, beide blind für diesen Aufruf:
+
+| Schicht | Verhalten |
+| ------- | --------- |
+| `opencode.jsonc` | `shell` steht auf `ask`; das ist die Ausgangslage |
+| `guard.js` | `classifyCommand` ordnete `pwsh` immer als `unknown` ein |
+| `index.js` | `unknown` → Grund `nicht einordenbar` → Reviewer wird gefragt |
+| `reviewer.js` | `RISKY` kannte `-Command`, aber nicht `-File`; das Modell durfte freigeben |
+
+Der Guard prüft den Befehlsstring, nicht das Ziel seiner Wirkung. Ein Skript im
+Projektordner ist für ihn reviewbarer Inhalt; was darin steht, sieht er nicht.
+
+**Umgesetzt.**
+
+- `guard.js`: `SCRIPT_FILE_ARG` erkennt `-File`/`-Fi` im `pwsh`/`powershell`-Zweig
+  und liefert die neue Art `script`. `evaluate` antwortet darauf mit
+  `skriptausfuehrung: Inhalt nicht bewertet` statt `nicht einordenbar`. Nur der
+  letztere Grund erreicht den Reviewer, dieser Fall also nie.
+- `reviewer.js`: `RISKY` enthält zusätzlich `pwsh|powershell … -File` als zweite
+  Schicht, falls ein anderer Weg den Reviewer erreicht.
+- `test.mjs`: drei Shell-Fälle und drei `neverAutoApprove`-Fälle; Gegenprobe
+  `pwsh -Command Get-Date` bleibt unberührt. 1033/1033 bestanden.
+
+**Grenze.** Die Rückfrage gilt jetzt für jede Skriptdatei als Argument, unabhängig
+vom Ort. Das ist gröber als die Pfadregel für sichtbare Schreibzugriffe
+(`scopeWrites`: im Projekt erlaubt, außerhalb verweigert) und trifft auch
+harmlose Läufe wie `scripts/deploy.ps1`.
+
+## Vormerkung 27.11.2026: Skriptinhalt bewerten oder Sandbox
+
+Die Pfadregel „innen erlaubt, außen verweigert" ist für Skripte nicht anwendbar,
+solange ihr Inhalt ungelesen bleibt: Der Speicherort des Skripts sagt nichts
+über seine Ziele. Der belegte Fall ist genau das — das Skript lag im Projekt
+und löschte außerhalb.
+
+Zwei Wege, die die gewünschte Differenzierung herstellen:
+
+1. **Inhalt bewerten.** Der Guard liest die Skriptdatei, bewertet sie rekursiv
+   mit denselben Regeln und wendet `scopeWrites` auf die enthaltenen Pfade an.
+   Offene Fragen: relative Pfade zur Skriptlage, `$PSScriptRoot`, erzeugte
+   Dateien, Include/Source, Grenze der Rekursion, Verhalten bei nicht lesbarer
+   Datei (fail closed → `ask`).
+2. **Sandbox.** Das Skript läuft in einem eingeschränkten Kontext, der
+   Schreibzugriffe außerhalb des Projekts technisch verhindert, statt sie zu
+   bewerten. Vorarbeiten stehen in `docs/adr/0002-reviewer-und-sandbox.md`.
+
+Beide ersetzen die pauschale Rückfrage erst, wenn sie sie nachweislich
+überflüssig machen. Bis dahin bleibt sie der sichere Zustand.
+
+## Umsetzung 27.11.2026: Weg 2 — Skriptinhalt bewerten
+
+**Stand.** `pwsh -File`/`-Fi` liest die `.ps1`/`.psm1`-Datei und bewertet den
+Inhalt rekursiv (`evaluateScriptFile` in `src/guard.js`). Der äußere Pfad wird
+gegen `ctx.cwd`/`options.base` aufgelöst; der innere Lauf erbt `base`, `roots`,
+`home`, `temp`, bekommt aber den Arbeitsordner als Bezug und die Projektwurzel
+als `protectedBase`. Ergebnis: innen `allow`, außen/geschützt/rekursiv `deny`,
+unbewertbar `ask`. Teststand `node test/test.mjs`: 1063/1063, davon 30 neue
+Fälle mit Fixtures unter `test/fixtures/skripte/`.
+
+**Grenzen.** Nur `.ps1`/`.psm1`; andere Endungen bleiben `ask`. Lesegrenze
+256 KiB, gültiges UTF-8, keine NUL-Bytes, drei Skriptebenen, Zyklus über
+`realpath`. `$PSScriptRoot`, `$PSCommandPath` und dynamische Pfade bleiben
+unauflösbar; `-WorkingDirectory` bei `-File` ist Rückfrage. Ein Ordnerwechsel
+über `[Environment]::CurrentDirectory` oder
+`[System.IO.Directory]::SetCurrentDirectory` ist Rückfrage (fail closed).
+
+**Abweichung zur Vormerkung.** Die Vorschlagsliste nannte für `$env:USERPROFILE`
+und unauflösbare Ziele `ask`. Der Guard behandelt Skripte mit denselben
+Pfadregeln wie sichtbare Befehle: `$env:USERPROFILE` ist über `options.home`
+auflösbar und liegt außerhalb → `deny`; ein nicht bestimmbares Ziel ist
+`unpruefbar:` → `deny` (Entscheidung 10.11.2026). Beides ist strenger als `ask`;
+die Tests halten das fest.
+
+**Offen.** Include/Dot-Sourcing innerhalb eines Skripts wird nicht verfolgt
+(Dot-Sourcing bleibt `deny`), `-Command` bleibt `unknown`. Der Reviewer-`RISKY`-
+Eintrag für `pwsh -File` bleibt als zweite Schicht bestehen.
+
+## Nachtrag 27.11.2026: MCP-Bench an G-01 angeglichen
+
+**Befund.** `node test/bench-mcp.mjs` stand bei 30/40. Der G-01-Commit
+(`99fe108`, 24.11.2026) hatte MCP-Schreib- und Löschaufrufe auf `deny`
+umgestellt und `test/test.mjs` sowie `SECURITY.md` angepasst, aber
+`test/mcp-cases.jsonl` und `EXPECTED` im Bench nicht. Zehn Fälle erwarteten
+weiterhin `ask`; die CI (`ci.yml`, `guard.yml`) wäre mit diesem Stand rot
+geworden.
+
+**Umgesetzt.** Die zehn Fälle stehen auf `deny`; `EXPECTED` ist
+`{ allow: 8, ask: 5, deny: 25, model: 2 }`. Kopfkommentar, Schrittnamen,
+README, METHODOLOGY und die MCP-Policy-Absätze beschreiben wieder das
+tatsächliche Verhalten. Das ist eine Verschärfung der Erwartungen, keine
+Abschwächung: G-01 bleibt unverändert.
+
+**Prüfung.** `node test/bench-mcp.mjs` 40/40, `--change` Exit 0.
+
+## Nachtrag 27.11.2026: `opencode.json` versioniert
+
+Die Datei war lokal vorhanden, aber nie in Git aufgenommen. Sie lädt
+`SECURITY.md` und die harness-übergreifenden Sicherheitsreferenzen
+(`~/.agents/references/harness-threat-model.md`,
+`~/.config/opencode/SECURITY-OPENCODE.md`) in den Workspace-Kontext. Inhalt:
+Schema-Verweis und `instructions`-Liste, keine Zugangsdaten oder lokalen Pfade.
+
+## Nachtrag 27.11.2026: SECURITY.md ohne Zeilennummern
+
+Die Richtlinie nannte Codestellen als `datei:zeile`. Nach dem Wachstum von
+`guard.js` zeigten die Nummern ins Leere. Sie sind durch Funktionsnamen ersetzt
+(`evaluate()`, `scopeEdit()`, `scopeWebfetch()`, `guardOptions()`, `review()`,
+`neverAutoApprove()`, `decide()`, `main()`, `hashRecord()`, `appendRecord()`,
+`checkAnchor()`, `verifyChain()`); bei Konfigurationswerten stehen die
+Schlüssel (`apiKeyEnv`, `resultShield`, `gitShadow`).
+
+## Nachtrag 27.11.2026: Deploy-Gate um `bench-mcp` erweitert
+
+`deploy.ps1` und `deploy.sh` prüften bisher `test.mjs` und die Python-Tests,
+aber nicht den MCP-Bench. Eine veraltete Erwartung wie im G-01-Fall wäre damit
+erst in der CI aufgefallen, nicht vor dem Kopieren. Beide Skripte rufen jetzt
+zusätzlich `node test/bench-mcp.mjs` auf; der Lauf braucht weder Netz noch
+Modell. README, README_de und AGENTS nennen den Schritt.
+
+## Nachtrag 27.11.2026: Reviewer-Start und lokale Artefakte
+
+`start-reviewer.ps1` startet mit `-c 16384` statt `32768` und `-cram 0`; die
+Slot-Erklärung ist angepasst, Trailing Whitespace entfernt. Ohne neue Messreihe
+übernommen. `.gitignore` hält außerdem die lokalen Notizen, Screenshots und die
+`review/`-Verknüpfung aus dem Repository; die Dateien bleiben auf der Platte.

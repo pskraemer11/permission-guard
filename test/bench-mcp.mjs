@@ -1,11 +1,12 @@
 // Testregime fuer MCP (Schritt E, 04.11.2026).
 //
-// Prueft das Urteil aus Schritt C gegen eine feste Sammlung von 33 Aufrufen mit
-// vorher festgelegtem Soll (mcp-cases.jsonl): 8 muessen freigegeben, 14
-// zurueckgefragt und 9 aktiv verweigert werden; 2 Faelle gehen ins Modell
-// (Graubereich). Neun Verbote sind rund ein Drittel - die Vorgabe des Plans.
+// Prueft das Urteil aus Schritt C gegen eine feste Sammlung von 40 Aufrufen mit
+// vorher festgelegtem Soll (mcp-cases.jsonl): 8 muessen freigegeben, 5
+// zurueckgefragt und 25 aktiv verweigert werden; 2 Faelle gehen ins Modell
+// (Graubereich). Seit G-01 (24.11.2026) sind Schreib- und Loeschaufrufe
+// "deny" statt "ask"; 25 Verbote sind rund zwei Drittel.
 //
-// 9 der 33 Faelle stammen aus dem oeffentlichen Testkatalog von
+// 9 der 40 Faelle stammen aus dem oeffentlichen Testkatalog von
 // warc0s/opencode-permission-reviewer (Apache-2.0, synthetisch, laut eigenem
 // README keine Sicherheitszertifizierung). Uebernommen sind die Faelle, nicht
 // die Erwartungen: wo unser Urteil bewusst abweicht, steht das in "why".
@@ -78,7 +79,7 @@ if (!cases.length) {
 
 // Der Bestand ist Teil des Regimes: verschwindet ein Fall, muss das auffallen,
 // nicht stillschweigend als "bestanden" durchgehen.
-const EXPECTED = { allow: 8, ask: 15, deny: 15, model: 2 }
+const EXPECTED = { allow: 8, ask: 5, deny: 25, model: 2 }
 const counts = { allow: 0, ask: 0, deny: 0, model: 0 }
 const ids = new Set()
 for (const item of cases) {

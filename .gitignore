@@ -38,3 +38,11 @@ desktop.ini
 docs/Codex vs. OpenCode Vergleich bzgl Sicherheit.md
 docs/permission-guard Statistik 20261101.md
 tests/artifacts/
+
+# Weitere lokale Arbeitsstaende und Bildschirmfotos (27.11.2026): ebenfalls
+# nur auf der Platte.
+docs/Anfangsprompt*.md
+docs/Screenshot*.png
+docs/llamacpp-decision-models_ai.satyajit.si.jpg
+docs/model size vs Decision Index*.png
+review/
