@@ -52,7 +52,7 @@ jobs:
       - name: Verdrahtung index.js (Plugin)
         run: node test/test-index.mjs
 
-      - name: MCP-Weiterleitung (33 Faelle)
+      - name: MCP-Weiterleitung (40 Faelle)
         run: node test/bench-mcp.mjs
 
       - name: Fallbestand unveraendert
