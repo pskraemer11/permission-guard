@@ -933,6 +933,9 @@ const SCRIPT_CONTENT_EXT = /\.(?:ps1|psm1)$/i
 const SCRIPT_CONTENT_LIMIT = 256 * 1024
 const SCRIPT_CONTENT_DEPTH = 3
 const SCRIPT_COMMAND_FLAGS = /^-(?:c|command|e|ec|encodedcommand)$/i
+// -WorkingDirectory (eindeutige Abkuerzung ab -Wo) verschiebt den
+// Prozessordner. Relative Ziele waeren dann am falschen Ort geprueft.
+const SCRIPT_WORKDIR_FLAG = /^-wo/i
 
 // Liefert den Skriptpfad aus einer pwsh/powershell-Anweisung, sonst null.
 // tokenizeCli trennt Zitate: der Inhalt eines zitierten -Command-Arguments ist
@@ -948,6 +951,20 @@ function scriptFileArg(statement) {
     if (/^-(?:file|fi)$/i.test(token)) return tokens[i + 1] ?? null
   }
   return null
+}
+
+// Meldet, ob vor -File ein -WorkingDirectory steht. Dann ist der
+// Prozessordner verschoben, und weder der Skriptpfad noch relative Ziele im
+// Skript lassen sich gegen ctx.cwd aufloesen (fail closed).
+function scriptWorkingDirectory(statement) {
+  const tokens = tokenizeCli(statement)
+  for (let i = 1; i < tokens.length; i++) {
+    const token = tokens[i]
+    if (SCRIPT_COMMAND_FLAGS.test(token)) return false
+    if (/^-(?:file|fi)(?::|$)/i.test(token)) return false
+    if (SCRIPT_WORKDIR_FLAG.test(token)) return true
+  }
+  return false
 }
 
 function isHelpVersionOnly(s) {
@@ -1030,6 +1047,7 @@ function evaluateScriptFile(statement, ctx = {}) {
   }
   const token = scriptFileArg(statement)
   if (!token) return ask("Pfad unklar")
+  if (scriptWorkingDirectory(statement)) return ask("Arbeitsordner unklar")
   // Relative Angaben gelten fuer den aufrufenden Prozess, nicht fuer das
   // Skriptverzeichnis; $PSScriptRoot ist beim Aufruf ein eigener Ausdruck und
   // bleibt unaufloesbar (fail closed).

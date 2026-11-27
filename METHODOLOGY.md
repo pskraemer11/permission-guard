@@ -177,6 +177,8 @@ with the same rules as a visible command:
 - Recursion up to three scripts; a cycle (via `realpath`) or a deeper chain →
   `ask`. Unreadable, oversized (>256 KiB), binary or non-UTF-8 files → `ask`.
 - `.cmd`, `.bat`, `.sh` and `.py` have a different syntax and stay `ask`.
+- `-WorkingDirectory` with `-File` stays `ask`: the parameter moves the process
+  folder, so relative targets would be checked at the wrong place.
 - `[Environment]::CurrentDirectory` and
   `[System.IO.Directory]::SetCurrentDirectory` prompt: the guard only follows
   `cd`/`Set-Location`, so a relative path afterwards would be checked at the

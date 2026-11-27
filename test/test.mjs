@@ -810,6 +810,10 @@ if (process.platform === "win32") {
     ["cmd /c falscher-typ.cmd", "ask", ""],
     ["pwsh -File fehlt.ps1", "ask", "nicht lesbar"],
     ["pwsh -File $PSScriptRoot\\liest.ps1", "ask", "Pfad unklar"],
+    // -WorkingDirectory verschiebt den Prozessordner; relative Ziele waeren
+    // am falschen Ort geprueft. Auch die Abkuerzung -Wo zaehlt.
+    ["pwsh -WorkingDirectory C:\\Windows\\Temp -File liest.ps1", "ask", "Arbeitsordner unklar"],
+    ["pwsh -Wo C:\\Windows\\Temp -File liest.ps1", "ask", "Arbeitsordner unklar"],
     // Gegenproben: -Command bleibt der sichtbare, nicht verschachtelte Weg;
     // ein "-File" in einem zitierten -Command-Argument zaehlt nicht.
     ["pwsh -Command Get-Date", "ask", ""],

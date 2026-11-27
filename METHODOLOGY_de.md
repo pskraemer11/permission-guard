@@ -180,6 +180,8 @@ Inhalt mit denselben Regeln wie einen sichtbaren Befehl:
   `ask`. Unlesbare, zu große (>256 KiB), binäre oder nicht gültig
   UTF-8-kodierte Dateien → `ask`.
 - `.cmd`, `.bat`, `.sh` und `.py` haben eine andere Syntax und bleiben `ask`.
+- `-WorkingDirectory` bei `-File` bleibt `ask`: Der Parameter verschiebt den
+  Prozessordner, relative Ziele wären dann am falschen Ort geprüft.
 - `[Environment]::CurrentDirectory` und
   `[System.IO.Directory]::SetCurrentDirectory` sind Rückfrage: Der Guard führt
   nur `cd`/`Set-Location` nach, ein relativer Pfad danach wäre am falschen Ort

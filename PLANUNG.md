@@ -2248,13 +2248,14 @@ Inhalt rekursiv (`evaluateScriptFile` in `src/guard.js`). Der äußere Pfad wird
 gegen `ctx.cwd`/`options.base` aufgelöst; der innere Lauf erbt `base`, `roots`,
 `home`, `temp`, bekommt aber den Arbeitsordner als Bezug und die Projektwurzel
 als `protectedBase`. Ergebnis: innen `allow`, außen/geschützt/rekursiv `deny`,
-unbewertbar `ask`. Teststand `node test/test.mjs`: 1061/1061, davon 28 neue
+unbewertbar `ask`. Teststand `node test/test.mjs`: 1063/1063, davon 30 neue
 Fälle mit Fixtures unter `test/fixtures/skripte/`.
 
 **Grenzen.** Nur `.ps1`/`.psm1`; andere Endungen bleiben `ask`. Lesegrenze
 256 KiB, gültiges UTF-8, keine NUL-Bytes, drei Skriptebenen, Zyklus über
 `realpath`. `$PSScriptRoot`, `$PSCommandPath` und dynamische Pfade bleiben
-unauflösbar. Ein Ordnerwechsel über `[Environment]::CurrentDirectory` oder
+unauflösbar; `-WorkingDirectory` bei `-File` ist Rückfrage. Ein Ordnerwechsel
+über `[Environment]::CurrentDirectory` oder
 `[System.IO.Directory]::SetCurrentDirectory` ist Rückfrage (fail closed).
 
 **Abweichung zur Vormerkung.** Die Vorschlagsliste nannte für `$env:USERPROFILE`

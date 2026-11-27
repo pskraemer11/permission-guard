@@ -180,9 +180,10 @@ als „nur lesend".
 `.ps1`/`.psm1`-Datei (bis 256 KiB, gültiges UTF-8, keine NUL-Bytes) und bewertet
 ihren Inhalt mit denselben Regeln wie einen sichtbaren Befehl. Relative Pfade
 gelten für den Arbeitsordner des Aufrufs, nie für das Skriptverzeichnis;
-`$PSScriptRoot` bleibt unauflösbar. Skriptaufrufe werden bis drei Ebenen tief
-verfolgt; ein Zyklus oder eine tiefere Kette bleibt `ask`. `.cmd`, `.bat`, `.sh`
-und `.py` haben eine andere Syntax und bleiben `ask`.
+`$PSScriptRoot` bleibt unauflösbar, `-WorkingDirectory` bleibt `ask`.
+Skriptaufrufe werden bis drei Ebenen tief verfolgt; ein Zyklus oder eine tiefere
+Kette bleibt `ask`. `.cmd`, `.bat`, `.sh` und `.py` haben eine andere Syntax und
+bleiben `ask`.
 
 **Schreibend im Projekt:** Erlaubt, wenn jedes Ziel auflösbar ist und innerhalb
 eines vertrauten Ordners liegt — `Set-Content`, `Add-Content`, `Out-File`,
@@ -286,7 +287,7 @@ stehen in `METHODOLOGY_de.md` unter „Zwei Implementierungen: OpenCode und Code
 ## Selbst prüfen
 
 ```powershell
-node test/test.mjs                  # 1061 Unit-Tests, Klassifizierer und Reviewer
+node test/test.mjs                  # 1063 Unit-Tests, Klassifizierer und Reviewer
 node test/test-wiring.mjs           # Fake-git: deny verhindert Ausführung
 node test/test-index.mjs            # Plugin-Verdrahtung, Fake-OpenCode
 node test/bench-mcp.mjs             # 40 feste MCP-Fälle, 25 davon Verbote

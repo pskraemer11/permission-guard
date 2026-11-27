@@ -171,10 +171,11 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   durchgereicht. Rekursion bis drei Skripte mit Zykluserkennung über
   `realpath`, danach `ask`; unlesbare, zu große, binäre oder nicht UTF-8-kodierte
   Dateien ebenfalls `ask`. `.cmd`, `.bat`, `.sh` und `.py` bleiben `ask`;
-  `pwsh -Command` bleibt unverändert. `Set-StrictMode` und Attributzeilen
+  `pwsh -Command` bleibt unverändert. `-WorkingDirectory` bei `-File` bleibt
+  Rückfrage, weil es den Prozessordner verschiebt. `Set-StrictMode` und Attributzeilen
   zählen als Skript-Präambel. `[Environment]::CurrentDirectory` und
   `[System.IO.Directory]::SetCurrentDirectory` bleiben Rückfrage, weil sie den
-  Prozessordner unverfolgbar verschieben. `test/test.mjs` 1061/1061 mit 28 neuen
+  Prozessordner unverfolgbar verschieben. `test/test.mjs` 1063/1063 mit 30 neuen
   Fällen und Fixtures unter `test/fixtures/skripte/`.
 - **`start-reviewer.ps1` startet nicht doppelt (21.11.2026):** Vor dem Start wird
   geprüft, ob bereits ein `llama-server` mit demselben Modellpfad und Port läuft

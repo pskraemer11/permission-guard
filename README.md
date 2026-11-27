@@ -180,9 +180,9 @@ counted as "read-only".
 the `.ps1`/`.psm1` file (up to 256 KiB, valid UTF-8, no NUL bytes) and judges
 its content with the same rules as a visible command. Relative paths resolve
 against the working folder of the call, never against the script's folder;
-`$PSScriptRoot` stays unresolvable. Nested script calls are followed up to three
-levels; a cycle or a deeper chain stays `ask`. `.cmd`, `.bat`, `.sh` and `.py`
-have a different syntax and stay `ask`.
+`$PSScriptRoot` stays unresolvable, and `-WorkingDirectory` stays `ask`. Nested
+script calls are followed up to three levels; a cycle or a deeper chain stays
+`ask`. `.cmd`, `.bat`, `.sh` and `.py` have a different syntax and stay `ask`.
 
 **Writing inside the project:** allowed when every target is resolvable and lies
 inside a trusted folder — `Set-Content`, `Add-Content`, `Out-File`, `New-Item`,
@@ -286,7 +286,7 @@ Details, the shared test cases and the differing deletion roots are in
 ## Checking it yourself
 
 ```powershell
-node test/test.mjs                  # 1061 unit tests, classifier and reviewer
+node test/test.mjs                  # 1063 unit tests, classifier and reviewer
 node test/test-wiring.mjs           # fake git: deny prevents execution
 node test/test-index.mjs            # plugin wiring, fake OpenCode
 node test/bench-mcp.mjs             # 40 fixed MCP cases, 25 of them denials
