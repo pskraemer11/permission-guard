@@ -283,7 +283,7 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 - **`pre-commit` blockiert Benutzerpfade und Schlüsselmuster (21.11.2026):**
   Die kanonische Vorlage `~/.agents/references/githooks/pre-commit` prüft die
   hinzugefügten Zeilen jetzt auf `C:\Users\<name>\…`, `/Users/<name>/…` und
-  Schlüsselmuster (`sk-…`, `oc_sk_`, `ghp_…`, `AKIA…`) — dieselben Ausdrücke
+  Schlüsselmuster (`sk-…`, `oc_sk…`, `ghp_…`, `AKIA…`) — dieselben Ausdrücke
   wie der CI-Schritt „Keine Benutzerpfade und keine Schlüssel". Ausgegeben wird
   nur der Dateiname. Anlass: Zwei Pfadzeilen passierten `add47fd` und fielen
   erst in der CI auf. Die Kopie in diesem Repo ist nachgezogen (byte-identisch),
@@ -679,6 +679,10 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Behoben
 
+- **Eigenes Secret-Muster im CHANGELOG maskiert (27.11.2026):** Das wörtliche
+  OpenCode-Schlüsselpräfix in der Beschreibung der `pre-commit`-Prüfung ist zu
+  `oc_sk…` gekürzt. Der Secret-Scan schlägt damit nicht mehr auf die eigene
+  Dokumentation an.
 - **MCP-Bench an G-01 angeglichen (27.11.2026):** Der G-01-Commit (`99fe108`,
   24.11.2026) hat Schreib- und Löschaufrufe auf `deny` gestellt und `test/test.mjs`
   sowie `SECURITY.md` angepasst, aber `test/mcp-cases.jsonl` und die Zählung im
@@ -946,6 +950,12 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Dokumentiert
 
+- **Actions-Pinning als hohe technische Schuld aufgenommen (27.11.2026):**
+  `zizmor 1.33.1` meldet 20 Befunde in `permission-guard`, davon 9 hohe
+  (`uses:` mit Tags statt Commit-SHAs) und 6 niedrige
+  (`persist-credentials`). Ein beweglicher Tag kann auf fremden Code zeigen.
+  Ziel: alle Actions auf SHAs pinnen, danach zizmor als Required Check. Details
+  und Reihenfolge in `PLANUNG.md`.
 - **SECURITY.md ohne Zeilennummern (27.11.2026):** Verweise auf Codezeilen
   durch Funktionsnamen ersetzt (`evaluate()`, `scopeEdit()`, `scopeWebfetch()`,
   `guardOptions()`, `review()`, `neverAutoApprove()`, `decide()`, `main()`,
