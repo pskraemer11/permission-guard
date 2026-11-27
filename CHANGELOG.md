@@ -172,6 +172,14 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
   Exitcode 1 ab. Eine veraltete MCP-Erwartung fällt damit vor dem Kopieren auf,
   nicht erst in der CI. Der Bench läuft ohne Netz und Modell in unter einer
   Sekunde; README und AGENTS nennen den Schritt.
+- **`start-reviewer.ps1` mit 16384 Kontext und ohne Cache (27.11.2026):**
+  `-c` sinkt von 32768 auf 16384, `-cram 0` begrenzt den Cache-RAM für
+  Entscheidungsmodelle auf 0 MiB. Die Slot-Erklärung nennt jetzt 16384;
+  Trailing Whitespace in den Kommentaren entfernt. Ohne neue Messreihe
+  übernommen.
+- **Lokale Notizen und Review-Artefakte ignoriert (27.11.2026):** `.gitignore`
+  nimmt `docs/Anfangsprompt*.md`, `docs/Screenshot*.png`, die
+  Satyajit-Abbildungen und `review/` auf; die Dateien bleiben auf der Platte.
 - **Skriptinhalt hinter `pwsh -File` (27.11.2026, Weg 2):** `src/guard.js`
   liest die `.ps1`/`.psm1`-Datei (bis 256 KiB, gültiges UTF-8, keine NUL-Bytes)
   und bewertet den Inhalt rekursiv mit denselben Pfadregeln wie einen sichtbaren

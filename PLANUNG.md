@@ -2310,3 +2310,10 @@ aber nicht den MCP-Bench. Eine veraltete Erwartung wie im G-01-Fall wäre damit
 erst in der CI aufgefallen, nicht vor dem Kopieren. Beide Skripte rufen jetzt
 zusätzlich `node test/bench-mcp.mjs` auf; der Lauf braucht weder Netz noch
 Modell. README, README_de und AGENTS nennen den Schritt.
+
+## Nachtrag 27.11.2026: Reviewer-Start und lokale Artefakte
+
+`start-reviewer.ps1` startet mit `-c 16384` statt `32768` und `-cram 0`; die
+Slot-Erklärung ist angepasst, Trailing Whitespace entfernt. Ohne neue Messreihe
+übernommen. `.gitignore` hält außerdem die lokalen Notizen, Screenshots und die
+`review/`-Verknüpfung aus dem Repository; die Dateien bleiben auf der Platte.
