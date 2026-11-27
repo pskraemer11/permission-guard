@@ -162,6 +162,20 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Skriptinhalt hinter `pwsh -File` (27.11.2026, Weg 2):** `src/guard.js`
+  liest die `.ps1`/`.psm1`-Datei (bis 256 KiB, gültiges UTF-8, keine NUL-Bytes)
+  und bewertet den Inhalt rekursiv mit denselben Pfadregeln wie einen sichtbaren
+  Befehl. Relativ gilt der Arbeitsordner des Aufrufs, nicht das
+  Skriptverzeichnis; `$PSScriptRoot` bleibt unauflösbar. Ein inneres `allow`
+  ergibt `skriptausfuehrung: Inhalt geprueft`, ein inneres `deny`/`ask` wird
+  durchgereicht. Rekursion bis drei Skripte mit Zykluserkennung über
+  `realpath`, danach `ask`; unlesbare, zu große, binäre oder nicht UTF-8-kodierte
+  Dateien ebenfalls `ask`. `.cmd`, `.bat`, `.sh` und `.py` bleiben `ask`;
+  `pwsh -Command` bleibt unverändert. `Set-StrictMode` und Attributzeilen
+  zählen als Skript-Präambel. `[Environment]::CurrentDirectory` und
+  `[System.IO.Directory]::SetCurrentDirectory` bleiben Rückfrage, weil sie den
+  Prozessordner unverfolgbar verschieben. `test/test.mjs` 1061/1061 mit 28 neuen
+  Fällen und Fixtures unter `test/fixtures/skripte/`.
 - **`start-reviewer.ps1` startet nicht doppelt (21.11.2026):** Vor dem Start wird
   geprüft, ob bereits ein `llama-server` mit demselben Modellpfad und Port läuft
   (Kommandozeile). Wenn ja, wartet das Skript bis zu 120 s auf `/health` und
@@ -646,6 +660,16 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Behoben
 
+- **MCP-Bench an G-01 angeglichen (27.11.2026):** Der G-01-Commit (`99fe108`,
+  24.11.2026) hat Schreib- und Löschaufrufe auf `deny` gestellt und `test/test.mjs`
+  sowie `SECURITY.md` angepasst, aber `test/mcp-cases.jsonl` und die Zählung im
+  Bench nicht. Zehn Fälle erwarteten weiterhin `ask`; `node test/bench-mcp.mjs`
+  stand bei 30/40 und wäre in der CI rot geworden. Die Erwartungen sind jetzt
+  `deny` (Verteilung 8 `allow` / 5 `ask` / 25 `deny` / 2 `model`), `EXPECTED`
+  und der Kopfkommentar nennen 40 Fälle, die Schrittnamen in `ci.yml`/`guard.yml`
+  sowie die Zahlen in README und METHODOLOGY sind nachgezogen; die
+  MCP-Policy-Absätze beschreiben wieder das tatsächliche G-01-Verhalten.
+  `bench-mcp` 40/40, `--change` Exit 0.
 - **Codex-Hook fail-closed und Reviewer nur localhost (23.11.2026):**
   `codex_guard.py` ergibt bei unlesbarer Eingabe, fehlerhafter Eingabeform
   und inneren Ausnahmen ein `deny` (`REASON_HOOK_ERROR`) statt stiller

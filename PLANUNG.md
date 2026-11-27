@@ -2185,3 +2185,102 @@ bleibt als Absicherung gegen Abstürze sinnvoll.
   OpenCode-Neustart. Der Pfad dahinter ist belegt, die Logzeile selbst nicht.
 - `staging/kaltstart-proof.mjs` und `staging/doppelstart-check.mjs` sind
   Hilfsskripte und bleiben unversioniert (`staging/` ist ignoriert).
+
+## Nachtrag 27.11.2026: `pwsh -File` lief ohne Rückfrage durch
+
+**Befund.** Eine Sitzung löschte drei Dateien außerhalb des Projekts. Der
+direkte `Remove-Item` wurde mit `ausserhalb des Projekts` verweigert; derselbe
+Vorgang als `pwsh -File staging/remove-cuda-dlls.ps1` lief ohne Rückfrage.
+
+**Ursache.** Zwei Schichten, beide blind für diesen Aufruf:
+
+| Schicht | Verhalten |
+| ------- | --------- |
+| `opencode.jsonc` | `shell` steht auf `ask`; das ist die Ausgangslage |
+| `guard.js` | `classifyCommand` ordnete `pwsh` immer als `unknown` ein |
+| `index.js` | `unknown` → Grund `nicht einordenbar` → Reviewer wird gefragt |
+| `reviewer.js` | `RISKY` kannte `-Command`, aber nicht `-File`; das Modell durfte freigeben |
+
+Der Guard prüft den Befehlsstring, nicht das Ziel seiner Wirkung. Ein Skript im
+Projektordner ist für ihn reviewbarer Inhalt; was darin steht, sieht er nicht.
+
+**Umgesetzt.**
+
+- `guard.js`: `SCRIPT_FILE_ARG` erkennt `-File`/`-Fi` im `pwsh`/`powershell`-Zweig
+  und liefert die neue Art `script`. `evaluate` antwortet darauf mit
+  `skriptausfuehrung: Inhalt nicht bewertet` statt `nicht einordenbar`. Nur der
+  letztere Grund erreicht den Reviewer, dieser Fall also nie.
+- `reviewer.js`: `RISKY` enthält zusätzlich `pwsh|powershell … -File` als zweite
+  Schicht, falls ein anderer Weg den Reviewer erreicht.
+- `test.mjs`: drei Shell-Fälle und drei `neverAutoApprove`-Fälle; Gegenprobe
+  `pwsh -Command Get-Date` bleibt unberührt. 1033/1033 bestanden.
+
+**Grenze.** Die Rückfrage gilt jetzt für jede Skriptdatei als Argument, unabhängig
+vom Ort. Das ist gröber als die Pfadregel für sichtbare Schreibzugriffe
+(`scopeWrites`: im Projekt erlaubt, außerhalb verweigert) und trifft auch
+harmlose Läufe wie `scripts/deploy.ps1`.
+
+## Vormerkung 27.11.2026: Skriptinhalt bewerten oder Sandbox
+
+Die Pfadregel „innen erlaubt, außen verweigert" ist für Skripte nicht anwendbar,
+solange ihr Inhalt ungelesen bleibt: Der Speicherort des Skripts sagt nichts
+über seine Ziele. Der belegte Fall ist genau das — das Skript lag im Projekt
+und löschte außerhalb.
+
+Zwei Wege, die die gewünschte Differenzierung herstellen:
+
+1. **Inhalt bewerten.** Der Guard liest die Skriptdatei, bewertet sie rekursiv
+   mit denselben Regeln und wendet `scopeWrites` auf die enthaltenen Pfade an.
+   Offene Fragen: relative Pfade zur Skriptlage, `$PSScriptRoot`, erzeugte
+   Dateien, Include/Source, Grenze der Rekursion, Verhalten bei nicht lesbarer
+   Datei (fail closed → `ask`).
+2. **Sandbox.** Das Skript läuft in einem eingeschränkten Kontext, der
+   Schreibzugriffe außerhalb des Projekts technisch verhindert, statt sie zu
+   bewerten. Vorarbeiten stehen in `docs/adr/0002-reviewer-und-sandbox.md`.
+
+Beide ersetzen die pauschale Rückfrage erst, wenn sie sie nachweislich
+überflüssig machen. Bis dahin bleibt sie der sichere Zustand.
+
+## Umsetzung 27.11.2026: Weg 2 — Skriptinhalt bewerten
+
+**Stand.** `pwsh -File`/`-Fi` liest die `.ps1`/`.psm1`-Datei und bewertet den
+Inhalt rekursiv (`evaluateScriptFile` in `src/guard.js`). Der äußere Pfad wird
+gegen `ctx.cwd`/`options.base` aufgelöst; der innere Lauf erbt `base`, `roots`,
+`home`, `temp`, bekommt aber den Arbeitsordner als Bezug und die Projektwurzel
+als `protectedBase`. Ergebnis: innen `allow`, außen/geschützt/rekursiv `deny`,
+unbewertbar `ask`. Teststand `node test/test.mjs`: 1061/1061, davon 28 neue
+Fälle mit Fixtures unter `test/fixtures/skripte/`.
+
+**Grenzen.** Nur `.ps1`/`.psm1`; andere Endungen bleiben `ask`. Lesegrenze
+256 KiB, gültiges UTF-8, keine NUL-Bytes, drei Skriptebenen, Zyklus über
+`realpath`. `$PSScriptRoot`, `$PSCommandPath` und dynamische Pfade bleiben
+unauflösbar. Ein Ordnerwechsel über `[Environment]::CurrentDirectory` oder
+`[System.IO.Directory]::SetCurrentDirectory` ist Rückfrage (fail closed).
+
+**Abweichung zur Vormerkung.** Die Vorschlagsliste nannte für `$env:USERPROFILE`
+und unauflösbare Ziele `ask`. Der Guard behandelt Skripte mit denselben
+Pfadregeln wie sichtbare Befehle: `$env:USERPROFILE` ist über `options.home`
+auflösbar und liegt außerhalb → `deny`; ein nicht bestimmbares Ziel ist
+`unpruefbar:` → `deny` (Entscheidung 10.11.2026). Beides ist strenger als `ask`;
+die Tests halten das fest.
+
+**Offen.** Include/Dot-Sourcing innerhalb eines Skripts wird nicht verfolgt
+(Dot-Sourcing bleibt `deny`), `-Command` bleibt `unknown`. Der Reviewer-`RISKY`-
+Eintrag für `pwsh -File` bleibt als zweite Schicht bestehen.
+
+## Nachtrag 27.11.2026: MCP-Bench an G-01 angeglichen
+
+**Befund.** `node test/bench-mcp.mjs` stand bei 30/40. Der G-01-Commit
+(`99fe108`, 24.11.2026) hatte MCP-Schreib- und Löschaufrufe auf `deny`
+umgestellt und `test/test.mjs` sowie `SECURITY.md` angepasst, aber
+`test/mcp-cases.jsonl` und `EXPECTED` im Bench nicht. Zehn Fälle erwarteten
+weiterhin `ask`; die CI (`ci.yml`, `guard.yml`) wäre mit diesem Stand rot
+geworden.
+
+**Umgesetzt.** Die zehn Fälle stehen auf `deny`; `EXPECTED` ist
+`{ allow: 8, ask: 5, deny: 25, model: 2 }`. Kopfkommentar, Schrittnamen,
+README, METHODOLOGY und die MCP-Policy-Absätze beschreiben wieder das
+tatsächliche Verhalten. Das ist eine Verschärfung der Erwartungen, keine
+Abschwächung: G-01 bleibt unverändert.
+
+**Prüfung.** `node test/bench-mcp.mjs` 40/40, `--change` Exit 0.

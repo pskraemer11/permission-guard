@@ -112,6 +112,11 @@ const base = [
   ["[System.IO.File]::WriteAllBytes($f, $b)", "ask"],
   ["[System.IO.File]::AppendAllText(\"CHANGELOG.md\", $row, $utf8)", "ask"],
   ["pwsh -NoProfile -File x.ps1", "ask"],
+  ["pwsh -File staging\\remove-cuda-dlls.ps1", "ask"],
+  ["powershell.exe -ExecutionPolicy Bypass -File C:\\temp\\x.ps1", "ask"],
+  // Gegenprobe: ein sichtbares -Command bleibt im verschachtelten Weg, die
+  // -File-Erkennung darf nicht auf beliebige pwsh-Aufrufe anschlagen.
+  ["pwsh -Command Get-Date", "ask"],
   ["$env:GITHUB_TOKEN", "ask"],
   ["$token = \"abc\"", "ask"],
   ["Format-Volume -DriveLetter D", "deny"],
@@ -151,6 +156,10 @@ const scoped = [
   // Schreiben im Projekt -> erlaubt
   ["Set-Content -Path \"C:\\p\\out.txt\" -Value \"x\"", "allow"],
   ["Set-Content out.txt \"x\"", "allow"],
+  // Prozessweiter Ordnerwechsel ist nicht nachverfolgbar: ein relatives Ziel
+  // danach waere am falschen Ort geprueft (fail closed).
+  ["[Environment]::CurrentDirectory = \"C:\\x\"\nSet-Content y.txt \"x\"", "ask"],
+  ["[System.IO.Directory]::SetCurrentDirectory(\"C:\\x\")\nSet-Content y.txt \"x\"", "ask"],
   // Nutzerentscheid 25.10.2026: Schreiben ausserhalb des Projekts wird
   // verweigert statt gefragt.
   ["Set-Content -Path \"C:\\other\\x.txt\" -Value \"x\"", "deny"],
@@ -694,6 +703,7 @@ const ruffConfigBootstrap = [
 ]
 
 let failed = 0
+let skriptChecks = 0
 function run(cases, opts, title) {
   for (const [script, expected] of cases) {
     const got = evaluate(script, opts)
@@ -743,6 +753,101 @@ run(net, undefined, "Netz-Lesen")
 run(denyForms, undefined, "Verweigerung & Geheimnis-Ersetzung")
 run(py, undefined, "python eng freigegeben")
 run(interp, interpOptions, "Interpreters: node-Selbstskripte, python im Projekt")
+
+// --- Skriptinhalt (Weg 2, 27.11.2026) -------------------------------------
+// Der Guard liest .ps1/.psm1 hinter "pwsh -File" und bewertet den Inhalt mit
+// denselben Regeln wie einen sichtbaren Befehl. Fixtures liegen unter
+// test/fixtures/skripte. Geprueft wird nur auf Windows: Die Fixtures sind ueber
+// Windows-Pfade (Laufwerksbuchstabe, Backslash) eingebunden; auf Linux wuerde
+// schon die Pfadaufloesung fail closed nach "ask" fallen.
+function printSkriptCheck(label, got, wantDecision, wantReason) {
+  skriptChecks++
+  const ok = got.decision === wantDecision
+    && (!wantReason || String(got.reason).includes(wantReason))
+  if (!ok) failed++
+  console.log(`${ok ? "ok  " : "FAIL"}  ${got.decision.padEnd(5)} (${wantDecision.padEnd(5)})  ${label}`)
+  if (!ok) console.log(`      Grund: ${got.reason}`)
+}
+if (process.platform === "win32") {
+  const skriptDir = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "skripte")
+  const skriptOpts = {
+    base: skriptDir,
+    roots: [skriptDir],
+    home: "C:\\Users\\u",
+    temp: "C:\\Users\\u\\AppData\\Local\\Temp",
+  }
+  const skriptCases = [
+    ["pwsh -NoProfile -File liest.ps1", "allow", "Inhalt geprueft"],
+    ["pwsh -File schreibt-innen.ps1", "allow", "Inhalt geprueft"],
+    ["pwsh -File schreibt-aussen.ps1", "deny", "ausserhalb des Projekts"],
+    // Ein .NET-Ordnerwechsel bleibt unaufloesbar; relative Ziele danach
+    // duerfen nicht als "im Projekt" gelten.
+    ["pwsh -File wechselt-ordner.ps1", "ask", "Inhalt nicht bewertet"],
+    ["pwsh -File wechselt-ordner-dotnet.ps1", "ask", "Inhalt nicht bewertet"],
+    // $env:USERPROFILE ist im Guard aufloesbar (opts.home). Ein Schreibziel
+    // dort liegt ausserhalb und wird deshalb verweigert, nicht gefragt.
+    ["pwsh -File schreibt-home.ps1", "deny", "ausserhalb des Projekts"],
+    ["pwsh -File loescht-arbeitsordner.ps1", "deny", "rekursiv auf"],
+    // Skriptaufruf in einem Kontrollblock behaelt sein Urteil.
+    ["if ($true) { pwsh -File liest.ps1 }", "allow", "Inhalt geprueft"],
+    ["if ($true) { pwsh -File schreibt-aussen.ps1 }", "deny", "ausserhalb des Projekts"],
+    // Relative Ziele gelten fuer den Prozess-Arbeitsordner. Liegt er
+    // ausserhalb des Projekts, ist die Aufloesung nicht verankert. Das
+    // Skript selbst wird absolut genannt, sonst waere schon sein Pfad
+    // relativ zum neuen Ordner (fail closed: nicht lesbar).
+    [`cd C:\\Windows\\Temp\npwsh -File "${join(skriptDir, "schreibt-innen.ps1")}"`, "ask", "Arbeitsordner unklar"],
+    // Rekursion: drei Dateien erlaubt, die vierte ueberschreitet das Limit.
+    ["pwsh -File kette-2.ps1", "allow", "Inhalt geprueft"],
+    ["pwsh -File kette-1.ps1", "ask", "Tiefenlimit"],
+    ["pwsh -File zyklus-a.ps1", "ask", "Zyklus"],
+    ["pwsh -File selbst.ps1", "ask", "Zyklus"],
+    // Andere Endungen werden nicht mit PowerShell-Regeln gelesen.
+    ["pwsh -File falscher-typ.cmd", "ask", "Dateityp nicht bewertet"],
+    // Die Umleitung des Aufrufs ist ein eigenes Schreibziel und wird
+    // mitgeprueft, auch wenn das Skript selbst nur liest.
+    ["pwsh -File liest.ps1 > C:\\ausserhalb\\out.txt", "deny", "ausserhalb des Projekts"],
+    ["pwsh -File liest.ps1 > innen.txt", "allow", ""],
+    ["cmd /c falscher-typ.cmd", "ask", ""],
+    ["pwsh -File fehlt.ps1", "ask", "nicht lesbar"],
+    ["pwsh -File $PSScriptRoot\\liest.ps1", "ask", "Pfad unklar"],
+    // Gegenproben: -Command bleibt der sichtbare, nicht verschachtelte Weg;
+    // ein "-File" in einem zitierten -Command-Argument zaehlt nicht.
+    ["pwsh -Command Get-Date", "ask", ""],
+    ['pwsh -Command "Get-Content -File x"', "ask", ""],
+  ]
+  for (const [script, want, reason] of skriptCases) {
+    printSkriptCheck(script.replace(/\s+/g, " ").slice(0, 76), evaluate(script, skriptOpts), want, reason)
+  }
+
+  // Nicht lesbare oder nicht sicher dekodierbare Dateien entstehen zur Laufzeit.
+  const skriptTemp = mkdtempSync(join(tmpdir(), "guard-skript-"))
+  try {
+    writeFileSync(join(skriptTemp, "binaer.ps1"), Buffer.from([0x47, 0x00, 0x01]))
+    writeFileSync(join(skriptTemp, "latin1.ps1"), Buffer.from("Write-Output 'ä'\n", "latin1"))
+    writeFileSync(join(skriptTemp, "gross.ps1"), "Get-Date\n".padEnd(256 * 1024 + 1, " "))
+    mkdirSync(join(skriptTemp, "ordner.ps1"))
+    const tempOpts = {
+      base: skriptTemp,
+      roots: [skriptTemp],
+      home: "C:\\Users\\u",
+      temp: "C:\\Users\\u\\AppData\\Local\\Temp",
+    }
+    const dateiCases = [
+      ["pwsh -File binaer.ps1", "Binaerinhalt"],
+      // PowerShell liest ANSI, der Guard UTF-8: ungueltige Bytes bleiben
+      // Rueckfrage statt mit Ersatzzeichen weiterzurechnen.
+      ["pwsh -File latin1.ps1", "nicht lesbar"],
+      ["pwsh -File gross.ps1", "zu gross"],
+      ["pwsh -File ordner.ps1", "keine regulaere Datei"],
+    ]
+    for (const [script, reason] of dateiCases) {
+      printSkriptCheck(script, evaluate(script, tempOpts), "ask", reason)
+    }
+  } finally {
+    rmSync(skriptTemp, { recursive: true, force: true })
+  }
+}
+console.log("-- Skriptinhalt (Weg 2)\n")
 
 // Workspace ist der Guard-Ordner selbst (Arbeit im Unter-Repo): Die eigenen
 // Skripte liegen dann direkt im Workspace, nicht unter tools/permission-guard.
@@ -914,6 +1019,12 @@ const reviewerRisky = [
   ["Get-Content $HOME/.ssh/id_rsa", true],
   ["Invoke-Expression $cmd", true],
   ["node -e \"require('fs').rmSync('x')\"", true],
+  // Skriptdatei statt Inline-Code (Befund 27.11.2026): der Inhalt steht nicht
+  // im Befehl. Der Reviewer darf hier nicht freigeben, erst recht nicht, wenn
+  // -NoProfile oder -ExecutionPolicy vorausgehen.
+  ["pwsh -NoProfile -File x.ps1", true],
+  ["pwsh -File staging/remove-cuda-dlls.ps1", true],
+  ["powershell.exe -ExecutionPolicy Bypass -File C:\\temp\\x.ps1", true],
   ["Get-Content a.txt; Remove-Item b.txt", true],
   ["echo `whoami`", true],
   ["docker run --rm -v C:\\:/host alpine rm -rf /host/data", true],
@@ -2543,6 +2654,6 @@ const total =
   mcpLayer1Checks.length + mcpLayer2Checks.length + mcpPriorityChecks.length +
   mcpActionChecks.length + mcpPromptChecks.length + mcpAnswerChecks.length + mcpReviewChecks.length +
   mcpArgIntentChecks.length + mcpExfilChecks.length + mcpUnresolvedChecks.length + localhostChecks.length + aclChecks.length +
-  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + thresholdChecks.length + warmupChecks.length + abortWarmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + reviewBlock.length + pipelineBlocks.length + blockReasons.length + 1 + secretsChecks.length + fourAxesChecks.length + editCases.length + injectionChecks.length + 2 + 11 + 3 + 3 + 1
+  reviewerRisky.length + reviewerGit.length + reviewerNoise.length + reviewerParsing.length + scopeChecks.length + statsChecks.length + verdictChecks.length + auditChecks.length + reportChecks.length + systemoneChecks.length + thresholdChecks.length + warmupChecks.length + abortWarmupChecks.length + diagnosticsChecks.length + 3 + reviewFixes.length + reviewFixesScoped.length + reviewBlock.length + pipelineBlocks.length + blockReasons.length + 1 + secretsChecks.length + fourAxesChecks.length + editCases.length + injectionChecks.length + 2 + 11 + 3 + 3 + 1 + skriptChecks
 console.log(`${total - failed}/${total} bestanden`)
 process.exit(failed ? 1 : 0)

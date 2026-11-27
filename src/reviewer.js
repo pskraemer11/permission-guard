@@ -137,6 +137,10 @@ export const RISKY = [
   // Segment; frueher zerfiel es und der innere Befehl wurde einzeln geprueft.
   /^cmd(\.exe)?\s+.*\/[ck]\b/i,
   /^(node|bun|deno|python3?|py|perl|ruby|pwsh|powershell)\s+(-\S+\s+)*(-c|-e|--eval|-Command|-EncodedCommand)\b/i,
+  // Skriptdatei statt Inline-Code: der Inhalt steht nicht im Befehl und wird
+  // nirgends geprueft. Zweite Schicht zu guard.js "skriptausfuehrung";
+  // verhindert, dass ein Modellurteil die Rueckfrage aufhebt (27.11.2026).
+  /^(?:pwsh|powershell)(\.exe)?\b[^\n]*\s-(?:file|fi)\b/i,
   // Dieselbe Form hinter einem Environment-Wrapper (Befund 26.10.2026:
   // "conda run -n env python -c \"import ...\""). Inline-Code bleibt inline
   // Code, auch wenn er nicht ganz vorne steht.

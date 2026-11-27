@@ -2,7 +2,7 @@
 
 ## System and Scope
 
-`opencode-permission-guard` v0.1.0 (`package.json:2`, `package.json:3`) is a fail-closed permission classifier for OpenCode. It registers a `permission.evaluate` hook (`src/index.js:111`, `src/index.js:257`), elevates a static-rule `ask` to `allow` only when a shell script provably only reads or only writes into trusted folders, and never overrides a static `allow`/`deny` (`src/index.js:439`, `src/guard.js:3267`). It is **not a sandbox** and not an isolation boundary: an allowed command runs with the rights of the logged-in user.
+`opencode-permission-guard` v0.1.0 (`package.json:2`, `package.json:3`) is a fail-closed permission classifier for OpenCode. It registers a `permission.evaluate` hook (`src/index.js:111`, `src/index.js:257`), elevates a static-rule `ask` to `allow` only when a shell script provably only reads or only writes into trusted folders, and never overrides a static `allow`/`deny` (`src/index.js:439`, `src/guard.js:3267`). Since 27.11.2026 the classifier also reads the `.ps1`/`.psm1` file named by `pwsh -File` and judges its content with the same path rules (max 256 KiB, strict UTF-8, no NUL bytes, max three nested scripts, cycle detection). It is **not a sandbox** and not an isolation boundary: an allowed command runs with the rights of the logged-in user.
 
 Verification: Scope confirmed as the selected component only; tests and offline reporting CLIs are not production decision paths. The Codex runtime below is inside the selected component scope, but whether it is intended to be covered by this policy is unresolved (see Open Decisions).
 
@@ -26,7 +26,7 @@ Caller/operator obligations: the host must supply the static permission rules an
 - No raw command text, argument values, URLs, or results in logs/audit; only names, hashes, and field names (`src/audit.js:8`).
 - Audit integrity (implemented design): SHA256 hash chain plus HMAC-SHA256 (`mac`) plus an anchor file detecting tail truncation while the anchor is intact (`src/audit.js:11`, `src/audit.js:76`, `src/audit.js:95`, `src/audit.js:103`). Whoever can write chain, anchor, and key can forge records; the chain is not a signature (`src/audit.js:18`).
 - Credentials are referenced only by environment-variable name (`apiKeyEnv`); no key is read from a file in the plugin (`src/shell-reviewer.config.json:14`).
-- MCP gating mode is `active` in code (`src/guard.js:1545`); any shadow-by-default comment is stale and must be corrected regardless of the policy decision.
+- MCP gating mode is `active` in code (`src/guard.js:1545`); the code comment states `active` as the default (corrected; verified 24.11.2026).
 
 ## Reportable Findings and Severity Context
 
@@ -34,11 +34,12 @@ Reportable: a bypass that lets a writing/destructive call run as `allow` without
 
 ## Out of Scope, Exclusions, and Accepted Risk
 
-No exclusions, accepted risks, or severity context have been owner-confirmed in the supplied material. None are encoded here. Tests, benchmarks, fixtures, and offline reporting CLIs are not production decision paths; that is a scope observation, not an owner-confirmed exclusion, and must not be used to suppress a finding in a production path.
+Accepted risk (owner-confirmed 24.11.2026, G-02): the audit chain is not a signature - whoever can write chain, anchor, and key can forge records; accepted for single-user/loopback operation. No other exclusions or severity context have been owner-confirmed. None are encoded here. Tests, benchmarks, fixtures, and offline reporting CLIs are not production decision paths; that is a scope observation, not an owner-confirmed exclusion, and must not be used to suppress a finding in a production path.
 
 ## Known Limitations and Compensating Controls
 
 - Not a sandbox: allowed commands run with user rights (`src/index.js:439`).
+- Script content is judged once at permission time. A script changed between the check and its execution is not re-checked (TOCTOU); the guard is no isolation boundary. Files that are unreadable, over 256 KiB, binary, not valid UTF-8, cyclic, or nested deeper than three scripts stay `ask`.
 - `[ud-…]`/`[verdacht: …]` marking is a model hint, not a boundary (existing `SECURITY.md` guidance, preserved).
 - Oversized/unverifiable MCP arguments (>32000 characters as JSON) produce `deny` with reason `unpruefbar` except proven read intent without secret suspicion; a model-server "input too large" response produces `deny` for that call; an MCP `write`/`destructive` call produces `deny` both outside and inside project and temp since 24.11.2026 (G-01); read-only calls stay `allow`, unknown stays `ask`/`model`.
 - Webfetch to non-localhost targets prompts (`ask`) rather than blocking; localhost runs without a prompt (`src/guard.js:2375`).
