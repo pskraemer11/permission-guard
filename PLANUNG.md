@@ -2293,3 +2293,12 @@ Die Datei war lokal vorhanden, aber nie in Git aufgenommen. Sie lädt
 (`~/.agents/references/harness-threat-model.md`,
 `~/.config/opencode/SECURITY-OPENCODE.md`) in den Workspace-Kontext. Inhalt:
 Schema-Verweis und `instructions`-Liste, keine Zugangsdaten oder lokalen Pfade.
+
+## Nachtrag 27.11.2026: SECURITY.md ohne Zeilennummern
+
+Die Richtlinie nannte Codestellen als `datei:zeile`. Nach dem Wachstum von
+`guard.js` zeigten die Nummern ins Leere. Sie sind durch Funktionsnamen ersetzt
+(`evaluate()`, `scopeEdit()`, `scopeWebfetch()`, `guardOptions()`, `review()`,
+`neverAutoApprove()`, `decide()`, `main()`, `hashRecord()`, `appendRecord()`,
+`checkAnchor()`, `verifyChain()`); bei Konfigurationswerten stehen die
+Schlüssel (`apiKeyEnv`, `resultShield`, `gitShadow`).

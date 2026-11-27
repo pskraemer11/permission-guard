@@ -933,6 +933,12 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Dokumentiert
 
+- **SECURITY.md ohne Zeilennummern (27.11.2026):** Verweise auf Codezeilen
+  durch Funktionsnamen ersetzt (`evaluate()`, `scopeEdit()`, `scopeWebfetch()`,
+  `guardOptions()`, `review()`, `neverAutoApprove()`, `decide()`, `main()`,
+  `hashRecord()`, `appendRecord()`, `checkAnchor()`, `verifyChain()`); bei
+  Konfigurationswerten stehen die Schlüssel (`apiKeyEnv`, `resultShield`,
+  `gitShadow`). Die Zeilen waren seit dem Wachstum von `guard.js` verschoben.
 - **Kaltstart über den Plugin-Pfad belegt (24.11.2026):** `ensureRunning` aus
   dem deployten `reviewer.js` aufgerufen, nachdem Watchdog und Server aus
   waren: `started` nach 26 ms, `/health` ok nach 5059 ms, `/v1/models` nennt
