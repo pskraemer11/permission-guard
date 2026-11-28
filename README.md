@@ -296,6 +296,11 @@ python -m ruff check .              # Python lint
 python -m pyright                   # Python type check
 ```
 
+The CI pins every action to a full commit SHA and sets
+`persist-credentials: false`. In this repository and in the template,
+`zizmor` and `dependency-review` are required checks in addition to the test
+matrix; the ruleset requires a pull request with 0 approvals.
+
 The Codex guard tests use a repo-local `tests/conftest.py` fixture instead of
 Pytest's `tmp_path` (the Codex Windows sandbox cannot use Pytest's `0o700`
 temp directories). Test artifacts land in the git-ignored `tests/artifacts/`.

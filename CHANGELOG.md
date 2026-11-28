@@ -167,6 +167,12 @@ Alle wichtigen Änderungen an diesem Projekt. Format nach
 
 ### Geändert
 
+- **Supply-Chain-Härtung (28.11.2026):** In `permission-guard` und
+  `python-project-template` sind alle Actions auf volle Commit-SHAs gepinnt,
+  `persist-credentials: false` ist gesetzt, Dependabot nutzt
+  `cooldown.default-days: 7`, und der zizmor-Advisory-Schalter ist entfernt.
+  `uvx zizmor` meldet keine Befunde. `zizmor` und `dependency-review` sind in
+  beiden Rulesets Required Checks; PRs `#33` und `#5` sind gemergt.
 - **Deploy-Gate um `bench-mcp` erweitert (27.11.2026):** `deploy.ps1` und
   `deploy.sh` führen nach `test.mjs` auch `bench-mcp.mjs` aus und brechen bei
   Exitcode 1 ab. Eine veraltete MCP-Erwartung fällt damit vor dem Kopieren auf,
