@@ -1032,6 +1032,12 @@ gewachsen; seit G-01 (24.11.2026) sind Schreib- und Löschaufrufe `deny`, also
 Code; sonst prüfte das
 Regime sich selbst.
 
+In diesem Repository und im Template sind `zizmor` und `dependency-review`
+zusätzlich zur Testmatrix Required Checks. Alle Workflow-Actions sind auf volle
+Commit-SHAs gepinnt, zizmor läuft ohne `continue-on-error`, und die
+Dependabot-Einträge setzen `cooldown.default-days: 7`. Das Ruleset verlangt
+einen Pull Request mit 0 Approvals (Solo-Maintainer).
+
 Neun Fälle stammen aus dem öffentlichen Testkatalog von
 `warc0s/opencode-permission-reviewer` (Apache-2.0, synthetisch, laut eigenem
 README keine Sicherheitszertifizierung). Übernommen sind die **Fälle**, nicht

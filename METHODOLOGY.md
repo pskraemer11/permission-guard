@@ -1011,6 +1011,12 @@ thirds. The
 expectation sits in the case line, not in the code; otherwise the regime would
 test itself.
 
+In this repository and in the template, `zizmor` and `dependency-review` are
+required checks in addition to the test matrix. All workflow actions are pinned
+to full commit SHAs, and `zizmor` runs without `continue-on-error`; Dependabot
+entries set `cooldown.default-days: 7`. The ruleset requires a pull request with
+0 approvals (solo maintainer).
+
 Nine cases come from the public test catalogue of
 `warc0s/opencode-permission-reviewer` (Apache-2.0, synthetic, per its own
 README not a security certification). What was adopted are the **cases**, not

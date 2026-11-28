@@ -4029,3 +4029,50 @@ Dort bleibt es bei `ask`; ob das reicht, ist eine eigene Frage.
   dem Repo findet das Skript nicht, nur das deployte flache Ziel hat es.
 
 
+=============== Compaction 28.11.2026 / 11:48 / Automatischer Review und Supply-Chain-Haertung ================
+## Objective
+- **Current:** Review-Pflicht fuer Solo-Repos praktikabel machen: deterministische Checks statt unerfuellbarer 1-Approval-Protection; Actions auf Commit-SHAs pinnen.
+- **Completed:** Weg 2 (Skriptinhalt), MCP-Bench G-01, Deploy-Gate, 0-Approval-Rulesets, CodeQL/dependency-review/zizmor in 12 Repos, Pinning in permission-guard und Template, Required Checks.
+
+## Important Details
+- **Entscheidung 0 Approvals:** GitHub erlaubt keine Selbstfreigabe; klassische 1-Approval-Protection ist im Solo-Repo unerfuellbar. Rulesets nutzen `pull_request` mit 0 Approvals, `bypass_actors: []`; Administratoren sind gebunden.
+- **Kein Copilot-Review:** Kosten pro Review, kann keinen Merge blockieren. Das lokale `/review` bleibt der menschliche Schritt.
+- **Reusable Guard:** Consumer rufen `permission-guard/.github/workflows/guard.yml@<SHA>`; `python-project-template`, `pareto-llm-picker` und `SimpleNote2Joplin` sind auf `eeecc973...` gepinnt. `permission-guard` ist im Template nicht mehr Required Check. `@main` koppelt sonst alle Repos an jeden Guard-Commit.
+- **Free/Privat:** Rulesets und Branch-Protection gibt es nur oeffentlich; private Repos haben nur zizmor, CodeQL/dependency-review sind dort lizenzgebunden.
+- **Pinning:** checkout v7.0.1 `3d3c...`, setup-node v7 `949f...`, setup-python v7 `6d4f...`; `persist-credentials: false`; Dependabot `cooldown.default-days: 7`; zizmor ohne Advisory.
+- **Befund/Fix:** Das woertliche `oc_sk_` im Guard-CHANGELOG liess den Linux-Grep des Reusable-Workflows in allen Consumern rot werden; maskiert zu `oc_sk…` (PR #32).
+
+## Work State
+### Completed
+- permission-guard: Weg 2, MCP-Bench, Deploy-Gate, SECURITY-Referenzen, opencode.json, Pinning; 12 PRs in 12 Repos gemergt.
+- Rulesets permission-guard (26777642) und Template (26777465): zizmor und dependency-review Required Checks.
+- Skill `python-project-init` um Workflows, Kostenmatrix und 0-Approval-Regel ergaenzt; Commit `95864a8` in `~/.agents`.
+
+### Active
+- Doku in permission-guard (PLANUNG, CHANGELOG, README, METHODOLOGY) aktualisiert; Commit folgt.
+
+### Blocked
+- Kein Push durch den Agenten; `git push` bleibt beim Nutzer.
+- Der laufende Guard hat Limit 10; Config 50 und Umgebungsvariable wirken erst nach einem OpenCode-Neustart.
+- `../codex-picker` (pareto-llm-picker) wird parallel bearbeitet und darf nicht angefasst werden.
+
+## Next Move
+1. Doku-Commit in permission-guard per Branch/PR veroeffentlichen; `~/.agents` pushen.
+2. Template lokal mit origin synchronisieren (dirty/behind, nicht ohne Sicherung resetten).
+3. Optional: AI-Prompt-Manager, pdf2xlsx-Parser, Local-LLM-Benchmark-Tool und die privaten Repos pinnen; danach zizmor dort required.
+4. Guard-Limit nach der Bulk-Arbeit wieder auf 10 setzen und OpenCode neu starten.
+
+## Relevant Files
+- `src/guard.js`, `test/test.mjs`: Weg 2 (Skriptinhalt hinter `pwsh -File`).
+- `.github/workflows/*`, `.github/dependabot.yml`: Pinning, persist-credentials, Cooldown.
+- `PLANUNG.md`, `CHANGELOG.md`, `README.md`, `README_de.md`, `METHODOLOGY.md`, `METHODOLOGY_de.md`: Stand und Regeln.
+- `~/.agents/skills/python-project-init/SKILL.md` und Assets: 0-Approval, dependency-review, zizmor.
+- `../python-project-template/README.md` und Workflows: Pin auf `eeecc973...`.
+
+## Important Context
+- Consumer-Pin: `eeecc973d6d6d11ea12578efcad6eb330e5f50ca`; der Tag `v0.1.0` zeigt auf einen anderen Commit, daher Kommentar `# commit eeecc973`.
+- Der Secret-Grep des Guard-Workflows laeuft nur auf Linux; der Windows-Job ist kein Ersatz.
+- zizmor-Befunde `dependabot-cooldown` und `ref-version-mismatch` sind in PRs #33/#5 behoben.
+
+
+

@@ -2318,21 +2318,22 @@ Slot-Erklärung ist angepasst, Trailing Whitespace entfernt. Ohne neue Messreihe
 übernommen. `.gitignore` hält außerdem die lokalen Notizen, Screenshots und die
 `review/`-Verknüpfung aus dem Repository; die Dateien bleiben auf der Platte.
 
-## Technische Schuld 27.11.2026: Actions nicht SHA-gepinnt (hohe Priorität)
+## Technische Schuld 27.11.2026: Actions nicht SHA-gepinnt (erledigt 28.11.2026)
 
-**Priorität: hoch.** `zizmor 1.33.1` meldet für `permission-guard` 20 Befunde,
-davon 9 hohe: `actions/checkout@v7`, `actions/setup-node@v7`,
-`actions/setup-python@v7` und weitere Actions sind mit beweglichen Tags statt
-mit einem Commit-SHA gepinnt. 6 niedrige Befunde betreffen fehlendes
-`persist-credentials: false` in `hook-regeln.yml`. Ein beweglicher Tag kann
-nachträglich auf fremden Code zeigen; SHA-Pinning ist die im Skill geforderte
-Gegenmaßnahme.
+**Befund (27.11.2026).** `zizmor 1.33.1` meldete für `permission-guard` 20
+Befunde, davon 9 hohe: `actions/checkout@v7`, `actions/setup-node@v7`,
+`actions/setup-python@v7` und weitere Actions waren mit beweglichen Tags statt
+mit einem Commit-SHA gepinnt. 6 niedrige Befunde betrafen fehlendes
+`persist-credentials: false`.
 
-**Folge.** zizmor kann erst Required Check werden, wenn die Actions gepinnt
-sind; vorher blockiert der Check jeden PR oder rauscht. Bis dahin läuft er
-beratend (`continue-on-error`).
+**Erledigt (28.11.2026).** In `permission-guard` und
+`python-project-template` sind alle Actions auf volle Commit-SHAs gepinnt,
+`persist-credentials: false` ist gesetzt, die Dependabot-Einträge haben
+`cooldown.default-days: 7`, und der Advisory-Schalter bei zizmor ist entfernt.
+`uvx zizmor` meldet für beide Repos keine Befunde. `zizmor` und
+`dependency-review` sind dort Required Checks; PRs `#33` (Guard) und `#5`
+(Template) sind gemergt.
 
-**Nächster Schritt.** Alle `uses:` in `.github/workflows/` auf volle
-Commit-SHAs ziehen (`checkout`, `setup-node`, `setup-python`, `codeql-action`,
-…), `persist-credentials: false` setzen, danach zizmor required schalten. Gilt
-für dieses Repo, das Template und die übrigen Repositories.
+**Offen.** In `AI-Prompt-Manager`, `pdf2xlsx-Parser`,
+`Local-LLM-Benchmark-Tool` und den privaten Repos stehen die Actions noch auf
+Tags; dort bleibt zizmor beratend, bis dieselbe Pinning-Runde folgt.
